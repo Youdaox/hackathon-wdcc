@@ -13,6 +13,9 @@ declare global {
     overlayAPI?: {
       setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
       ready: () => void;
+      onDiscordTarget: (handler: (position: { x: number; y: number }) => void) => () => void;
+      onDiscordBlurred: (handler: () => void) => () => void;
+      discordReached: () => void;
     };
   }
 }
@@ -20,6 +23,8 @@ declare global {
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
 const DRAG_SPEECH_DELAY_MS = 600;
+const LOCK_IN_LINE = "LOCK IN";
+const LOCK_IN_WINDUP_MS = 800;
 const SPEECH_EVERY_N_IDLES = 3;
 const SPEECH_DURATION_MS = 3000;
 
@@ -35,12 +40,14 @@ export default function OverlayPage() {
   const idleCountRef = useRef(0);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lockInTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bubbleText, setBubbleText] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
       clearTimeout(speechTimeoutRef.current);
       clearTimeout(dragSpeechTimeoutRef.current);
+      clearTimeout(lockInTimeoutRef.current);
     };
   }, []);
 
@@ -72,7 +79,7 @@ export default function OverlayPage() {
     };
   }, []);
 
-  useWander(
+  const { goTo, cancel } = useWander(
     petRef,
     PET_SIZE,
     true,
@@ -107,6 +114,36 @@ export default function OverlayPage() {
     },
     bubbleRef,
   );
+
+  // The main process watches for Discord becoming the focused app and sends
+  // its close button's screen position — wind up (shake + "LOCK IN"), then
+  // walk the pet's center there, then let main run the actual quit once it
+  // arrives (see electron/closeApp.js).
+  useEffect(() => {
+    return window.overlayAPI?.onDiscordTarget((position) => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+      clearTimeout(lockInTimeoutRef.current);
+      setBubbleText(LOCK_IN_LINE);
+      lockInTimeoutRef.current = setTimeout(() => setBubbleText(null), LOCK_IN_WINDUP_MS);
+      goTo(
+        position.x - PET_SIZE / 2,
+        position.y - PET_SIZE / 2,
+        () => window.overlayAPI?.discordReached(),
+        LOCK_IN_WINDUP_MS,
+      );
+    });
+  }, [goTo]);
+
+  // Tabbed away before the pet reached it — call off the whole pursuit and
+  // drop straight back to normal idle/wandering, without closing anything.
+  useEffect(() => {
+    return window.overlayAPI?.onDiscordBlurred(() => {
+      clearTimeout(lockInTimeoutRef.current);
+      setBubbleText(null);
+      cancel();
+    });
+  }, [cancel]);
 
   // Hit-testing: the Electron window ignores the mouse by default (click-through
   // to whatever's underneath). We forward mousemove events into this page, check

@@ -30,7 +30,7 @@ const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
 const DRAG_SPEECH_DELAY_MS = 600;
 const SPEECH_EVERY_N_IDLES = 3;
-const SPEECH_DURATION_MS = 3000;
+const SPEECH_DURATION_MS = 3000;  
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running

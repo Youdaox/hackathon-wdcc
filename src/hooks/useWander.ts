@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 
 const SPEED = 0.8; // px per animation frame
+const GOTO_SPEED = 2.5; // faster than idle wandering — this is a deliberate errand
+const ARRIVE_DISTANCE = GOTO_SPEED; // close enough to snap to the target and stop
 const MIN_IDLE_MS = 4000;
 const MAX_IDLE_MS = 9000;
 const MIN_WALK_MS = 3000;
@@ -53,6 +55,17 @@ function clamp(value: number, min: number, max: number) {
  * position (minus the jitter and facing flip) written to it every frame, so
  * a speech bubble element can float above the sprite and follow it exactly
  * — including mid-drag — without needing its own React state updates.
+ *
+ * The returned `goTo(x, y, onArrive, windUpMs)` interrupts idle/walking and
+ * steers the sprite directly toward a specific point instead — e.g. "walk
+ * over to Discord's close button" — calling `onArrive` once it's close
+ * enough, then falling back to normal wandering from there. A drag still
+ * takes priority and pauses it mid-route. With `windUpMs` > 0, it first
+ * shakes in place (translate-only, same jitter as a drag) for that long
+ * before actually moving — a little wind-up before charging off.
+ *
+ * `cancel()` aborts a pending wind-up or an in-progress `goTo` and returns
+ * immediately to normal idle/wandering, without ever calling `onArrive`.
  */
 export function useWander(
   elRef: RefObject<HTMLElement | null>,
@@ -67,10 +80,12 @@ export function useWander(
   const posRef = useRef({ x: 0, y: 0 });
   const velRef = useRef({ x: 0, y: 0 });
   const facingRef = useRef(1);
-  const modeRef = useRef<"idle" | "walking">("idle");
+  const modeRef = useRef<"idle" | "walking" | "goto" | "windup">("idle");
   const modeUntilRef = useRef(0);
   const idleStartRef = useRef(0);
   const walkStartRef = useRef(0);
+  const windUpUntilRef = useRef(0);
+  const targetRef = useRef<{ x: number; y: number; onArrive?: () => void } | null>(null);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const shakeOffsetRef = useRef({ x: 0, y: 0 });
@@ -82,6 +97,32 @@ export function useWander(
   onDragStateChangeRef.current = onDragStateChange;
   const onEnterIdleRef = useRef(onEnterIdle);
   onEnterIdleRef.current = onEnterIdle;
+
+  const goTo = useCallback(
+    (x: number, y: number, onArrive?: () => void, windUpMs = 0) => {
+      const { width, height } = getBoundsRef.current();
+      const maxX = Math.max(0, width - size);
+      const maxY = Math.max(0, height - size);
+      targetRef.current = { x: clamp(x, 0, maxX), y: clamp(y, 0, maxY), onArrive };
+      if (windUpMs > 0) {
+        velRef.current = { x: 0, y: 0 };
+        windUpUntilRef.current = performance.now() + windUpMs;
+        modeRef.current = "windup";
+      } else {
+        modeRef.current = "goto";
+      }
+    },
+    [size],
+  );
+
+  const cancel = useCallback(() => {
+    targetRef.current = null;
+    velRef.current = { x: 0, y: 0 };
+    modeRef.current = "idle";
+    const now = performance.now();
+    idleStartRef.current = now;
+    modeUntilRef.current = now + randRange(MIN_IDLE_MS, MAX_IDLE_MS);
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -152,40 +193,71 @@ export function useWander(
       const el = elRef.current;
       if (el) {
         if (!draggingRef.current) {
-          if (now >= modeUntilRef.current) {
-            if (modeRef.current === "idle") enterWalk(now);
-            else enterIdle(now);
+          if (modeRef.current === "windup") {
+            if (now >= windUpUntilRef.current) modeRef.current = "goto";
+          } else if (modeRef.current === "goto") {
+            const dest = targetRef.current;
+            if (dest) {
+              const pos = posRef.current;
+              const dx = dest.x - pos.x;
+              const dy = dest.y - pos.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist <= ARRIVE_DISTANCE) {
+                pos.x = dest.x;
+                pos.y = dest.y;
+                targetRef.current = null;
+                const onArrive = dest.onArrive;
+                enterIdle(now);
+                onArrive?.();
+              } else {
+                const vel = velRef.current;
+                vel.x = (dx / dist) * GOTO_SPEED;
+                vel.y = (dy / dist) * GOTO_SPEED;
+                pos.x += vel.x;
+                pos.y += vel.y;
+                // The artwork's neutral pose faces left, so scaleX(1) reads as
+                // "facing left" — moving right needs a mirror flip, not left.
+                if (vel.x !== 0) facingRef.current = vel.x > 0 ? -1 : 1;
+              }
+            } else {
+              enterIdle(now);
+            }
+          } else {
+            if (now >= modeUntilRef.current) {
+              if (modeRef.current === "idle") enterWalk(now);
+              else enterIdle(now);
+            }
+
+            const { width, height } = getBoundsRef.current();
+            const maxX = Math.max(0, width - size);
+            const maxY = Math.max(0, height - size);
+            const vel = velRef.current;
+            const pos = posRef.current;
+
+            let nextX = pos.x + vel.x;
+            let nextY = pos.y + vel.y;
+
+            if (nextX < 0) {
+              nextX = 0;
+              vel.x *= -1;
+            } else if (nextX > maxX) {
+              nextX = maxX;
+              vel.x *= -1;
+            }
+            if (nextY < 0) {
+              nextY = 0;
+              vel.y *= -1;
+            } else if (nextY > maxY) {
+              nextY = maxY;
+              vel.y *= -1;
+            }
+
+            pos.x = nextX;
+            pos.y = nextY;
+            // The artwork's neutral pose faces left, so scaleX(1) reads as
+            // "facing left" — moving right needs a mirror flip, not left.
+            if (vel.x !== 0) facingRef.current = vel.x > 0 ? -1 : 1;
           }
-
-          const { width, height } = getBoundsRef.current();
-          const maxX = Math.max(0, width - size);
-          const maxY = Math.max(0, height - size);
-          const vel = velRef.current;
-          const pos = posRef.current;
-
-          let nextX = pos.x + vel.x;
-          let nextY = pos.y + vel.y;
-
-          if (nextX < 0) {
-            nextX = 0;
-            vel.x *= -1;
-          } else if (nextX > maxX) {
-            nextX = maxX;
-            vel.x *= -1;
-          }
-          if (nextY < 0) {
-            nextY = 0;
-            vel.y *= -1;
-          } else if (nextY > maxY) {
-            nextY = maxY;
-            vel.y *= -1;
-          }
-
-          pos.x = nextX;
-          pos.y = nextY;
-          // The artwork's neutral pose faces left, so scaleX(1) reads as
-          // "facing left" — moving right needs a mirror flip, not left.
-          if (vel.x !== 0) facingRef.current = vel.x > 0 ? -1 : 1;
         }
 
         const pos = posRef.current;
@@ -198,7 +270,7 @@ export function useWander(
               const phase = (elapsed / IDLE_SQUISH_PERIOD_MS) * Math.PI * 2;
               squishY = 1 - Math.sin(phase) * IDLE_SQUISH_AMOUNT;
             }
-          } else {
+          } else if (modeRef.current !== "windup") {
             const elapsed = now - walkStartRef.current;
             const hop = Math.abs(Math.sin((elapsed / WALK_STEP_MS) * Math.PI));
             bobY = -hop * WALK_BOB_HEIGHT;
@@ -208,7 +280,7 @@ export function useWander(
 
         let shakeX = 0;
         let shakeY = 0;
-        if (draggingRef.current) {
+        if (draggingRef.current || modeRef.current === "windup") {
           if (now >= nextShakeAtRef.current) {
             shakeOffsetRef.current = {
               x: (Math.random() - 0.5) * 2 * SHAKE_AMOUNT,
@@ -239,4 +311,6 @@ export function useWander(
       el.removeEventListener("pointercancel", handlePointerUp);
     };
   }, [active, elRef, size, enableSquish]);
+
+  return { goTo, cancel };
 }
