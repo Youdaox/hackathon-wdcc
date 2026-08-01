@@ -88,6 +88,33 @@ src/components/   FocusPanel, SchedulePanel, CompanionCard, TodaySummary,
                   LocationCard, RecallCheck, SessionSummary
 ```
 
+## Social leaderboard API
+
+The backend exposes an encouragement economy and UTC weekly/monthly leaderboards:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/encouragements` | Read the authenticated user's encouragement inbox. |
+| `POST` | `/api/encouragements` | Send one generated heartwarming message to `recipientId`. |
+| `GET` | `/api/encouragements/balance` | Read today's base, earned, used, and available sends. |
+| `POST` | `/api/tasks/complete` | Reward a unique `taskId` with an extra daily send and ranking points. |
+| `GET` | `/api/leaderboards?period=week` | Read the weekly or monthly ranking (`limit` is optional). |
+| `GET`, `PUT` | `/api/leaderboards/rules` | Read rules or replace them as an administrator. |
+
+Until the project has authentication, authenticated endpoints use `x-user-id` and optional
+`x-user-name` request headers. Rule updates require `Authorization: Bearer <secret>`, where the
+secret is configured as `LEADERBOARD_ADMIN_SECRET`.
+
+The daily allowance is derived from the UTC date, so it resets without a scheduled job. A sender
+can encourage a recipient only once per UTC day. Task rewards are idempotent by `(userId, taskId)`.
+Weekly rankings start on Monday; monthly rankings start on the first day of the month. Ties are
+resolved by encouragements received, then display name.
+
+Data currently uses the `LeaderboardRepository` interface with a process-memory adapter for local
+demo use. Before production deployment, replace it with a transactional database adapter and add
+unique constraints for `(senderId, recipientId, dayKey)` and `(userId, taskId)`. Serverless
+instances do not share process memory.
+
 ## Not built yet
 
 - **Canvas import** — `StudyBlock` already carries `source` and `externalId`; see the data model above.
