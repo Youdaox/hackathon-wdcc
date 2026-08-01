@@ -16,6 +16,10 @@ declare global {
     electronAPI?: {
       isElectron: boolean;
       toggleOverlay: () => Promise<boolean>;
+      setBackgroundTracking: (active: boolean) => void;
+    };
+    statusAPI?: {
+      ready: () => void;
     };
   }
 }

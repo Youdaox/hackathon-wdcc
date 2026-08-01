@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { GazeCalibrationOverlay } from "@/components/GazeCalibration";
+import { FocusTimeline } from "@/components/FocusTimeline";
 import { useIncline } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
@@ -237,6 +238,21 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
           </span>
         </div>
       </div>
+
+      {/* Held back until there's something to say — a timeline of the first ten
+          seconds of a session is noise, and "no lapses in the whole 12s" reads
+          as faint praise. */}
+      {(active.distractions.length > 0 || elapsedMs >= 120_000) && (
+        <div className="mt-7 border-t border-line-soft pt-6">
+          <FocusTimeline
+            startedAt={active.startedAt}
+            endedAt={active.startedAt + elapsedMs}
+            distractions={active.distractions}
+            openAwaySince={active.awaySince}
+            openAwayReason={active.awayReason}
+          />
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col items-center gap-1.5">
         {currentZone && (
