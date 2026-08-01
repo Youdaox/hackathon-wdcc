@@ -5,7 +5,8 @@
 A companion creature that only grows on **verified, undistracted study time**, tied to your real class schedule.
 
 ```bash
-npm run dev     # http://localhost:3000
+pnpm install    # installs the web app and mobile/ in one pass
+pnpm dev        # http://localhost:3000
 
 cp .env.example .env.local   # optional — only needed for AI recall checks
 ```
@@ -76,10 +77,76 @@ Every failure path — no key configured, rate limit, network error, malformed r
 
 Model: `claude-opus-5` with `effort: "low"` (it's one short question and the user is waiting) and structured outputs pinning the JSON shape, plus server-side validation of whatever comes back.
 
+## Mobile app (Expo Go, SDK 54)
+
+`mobile/` is an Expo Go app on SDK 54 (React Native 0.81.5). Two terminals:
+
+```bash
+pnpm dev -H 0.0.0.0            # repo root — backend on your LAN
+cd mobile && pnpm start        # Expo, then scan the QR
+```
+
+Scan the QR with Expo Go. Set `expo.extra.apiBaseUrl` in [mobile/app.json](mobile/app.json) to your machine's LAN address — it's read at runtime, so changing it is a reload, not a rebuild.
+
+**Use plain `http://` for the phone.** React Native's networking rejects the repo's self-signed dev cert outright, with no way to click through the way a browser does.
+
+### Expo Go can't block apps
+
+Expo Go is a fixed binary — you can't add native modules to it. That rules out `UsageStatsManager` and the overlay on Android, and the whole Screen Time family on iOS. There is no block screen and no "5 more minutes" bypass.
+
+What remains is honest *detection*. React Native's `AppState` is the same signal as the web app's Page Visibility API: leave Incline and the clock keeps running, but that time stops earning XP. So the phone and the browser measure exactly the same thing, and [mobile/src/useFocusSession.ts](mobile/src/useFocusSession.ts) is a direct port of the web engine.
+
+This also means the mobile client fits the existing contract with no changes: it posts `app_identifier: null` and `bypassed: false` — the case the server's penalty rule was already written for.
+
+Timing is timestamp-based rather than tick-based, which matters more here than on the web: a backgrounded React Native app has its timers suspended outright, so counting ticks would under-report distraction to near zero.
+
+## Mobile sync API
+
+The Android and iOS companion apps sync against this app. Setup:
+
+```bash
+pnpm db:setup    # migrate + seed the campus study spots into incline.db
+pnpm dev         # phones point at http://<your-lan-ip>:3000
+```
+
+SQLite via Drizzle, file-based at `incline.db` (override with `INCLINE_DB_PATH`). Venue wifi shouldn't sit between a phone and its own pet.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/companion?user_id=` | Current pet — level, xp, hp, derived mood |
+| `POST /api/sessions` | Record a finished session, grow the companion, return `pet_growth_delta` |
+| `POST /api/distraction-events` | Log one distraction live, mid-session |
+| `GET /api/distraction-list?user_id=` | Android package names to watch (`PUT` to replace) |
+| `GET /api/study-spots?user_id=` | Verified locations for the session-start check-in |
+
+**Growth is computed server-side.** `POST /api/sessions` loads the companion, runs [`applySession()`](src/lib/companion.ts) — the same pure function the web app runs, imported not reimplemented — and returns the delta. Three clients each growing their own local pet would produce three different pets, and `pet_growth_delta` would just echo whatever the device already decided.
+
+The server also refuses to take a client's word on two things: `verified_minutes` can't exceed the session's wall-clock length, and the location multiplier is re-read from `study_spots` rather than trusted from the payload.
+
+Spots are seeded from `BONUS_ZONES` in [`src/lib/zones.ts`](src/lib/zones.ts), so all three platforms measure against the same building centres. Recalibrating on site means editing that file and re-running `db:setup`.
+
+### The two distraction models
+
+Android and iOS report genuinely different events under the same name, and [`src/lib/api/contract.ts`](src/lib/api/contract.ts) is the one place they're reconciled:
+
+| | Web | Android | iOS |
+| --- | --- | --- | --- |
+| What "distraction" means | tab hidden | restricted app foregrounded | *a* restricted app opened |
+| `app_identifier` | n/a | package name | **always null** — Apple never says which |
+| `bypassed` | n/a | user tapped "5 more minutes" | always false — Apple owns the shield |
+
+A distraction is penalised if **it was bypassed, or it lasted past the 5s grace window**. The second clause matters: without it iOS would be strictly easier than Android, since an iOS user *cannot* press bypass and would never lose HP at all.
+
+### Not production-ready
+
+There is no auth. `user_id` is any string the client sends, and user rows are created on first sight — so anyone can read or grow anyone's pet by guessing an id. Fine for a demo, and the first thing to fix if this ships.
+
 ## Structure
 
 ```
-src/app/api/      recall route handler (the only server-side code)
+src/app/api/      recall + the four mobile sync route handlers
+src/lib/db/       Drizzle schema and SQLite client
+src/lib/api/      wire contract, validators, distraction adapter
 src/lib/          types, storage, time/schedule helpers, growth rules, zones,
                   recall questions, store (context)
 src/hooks/        useFocusSession (the verification engine), useGeolocation,

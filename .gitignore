@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# sqlite (local dev database)
+*.db
+*.db-wal
+*.db-shm
+
+# mkcert dev certificates
+certificates/
