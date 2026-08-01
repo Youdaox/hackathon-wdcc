@@ -119,6 +119,7 @@ export function postSession(params: {
   focusedMs: number;
   locationName: string | null;
   pledgeMinutes: number;
+  bonusXp: number;
   distractions: DistractionRecord[];
 }): Promise<SessionResult> {
   return request<SessionResult>("/api/sessions", {
@@ -132,6 +133,7 @@ export function postSession(params: {
       location_name: params.locationName,
       platform: PLATFORM,
       committed_minutes: params.pledgeMinutes,
+      bonus_xp: params.bonusXp,
       distraction_events: params.distractions.map((d) => ({
         timestamp: new Date(d.startedAt).toISOString(),
         duration_seconds: d.durationMs / 1000,
@@ -206,4 +208,38 @@ export function patchCompanion(patch: {
 
 export function fetchRecap(): Promise<Recap> {
   return request<Recap>(`/api/recap?user_id=${encodeURIComponent(USER_ID)}`);
+}
+
+export interface RecallQuestion {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  /** "offline" means no API key was configured — the question is a built-in. */
+  source: "ai" | "offline";
+}
+
+export function fetchRecallQuestion(course: string): Promise<RecallQuestion> {
+  return request<RecallQuestion>("/api/recall", {
+    method: "POST",
+    body: JSON.stringify({ course }),
+  });
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  displayName: string;
+  points: number;
+  rank: number;
+  tasksCompleted?: number;
+  encouragementsReceived?: number;
+}
+
+export interface Leaderboard {
+  period: "week" | "month";
+  entries: LeaderboardEntry[];
+}
+
+export function fetchLeaderboard(period: "week" | "month" = "week"): Promise<Leaderboard> {
+  return request<Leaderboard>(`/api/leaderboards?period=${period}&limit=20`);
 }

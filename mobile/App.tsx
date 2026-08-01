@@ -9,9 +9,11 @@ import {
   type Companion,
   type PigAccessory,
   type PigColor,
+  type Leaderboard,
   type Recap,
   type StudySpot,
   fetchCompanion,
+  fetchLeaderboard,
   fetchRecap,
   fetchStudySpots,
   logDistractionEvent,
@@ -29,12 +31,15 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
 import { colors } from "./src/theme";
 import { useFocusSession } from "./src/useFocusSession";
+import { useRecallCheck } from "./src/useRecallCheck";
 
 export default function App() {
-  const { state, start, stop, resolveCheckpoint, recordIntercept } = useFocusSession();
+  const { state, start, stop, resolveCheckpoint, recordIntercept, addBonusXp } =
+    useFocusSession();
   const [tab, setTab] = useState<TabName>("home");
   const [companion, setCompanion] = useState<Companion | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
+  const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [spots, setSpots] = useState<StudySpot[]>([]);
   const [match, setMatch] = useState<SpotMatch | null>(null);
   const [checking, setChecking] = useState(false);
@@ -42,19 +47,33 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pledge, setPledge] = useState(0);
+
+  // The recall check needs a course to ask about. Until the schedule lands on
+  // mobile there's no linked block, so it falls back to general study skills —
+  // which the route already handles for an unrecognised course.
+  const recall = useRecallCheck({
+    running: state.running,
+    focusedMs: state.focusedMs,
+    course: "your current course",
+    onCorrect: addBonusXp,
+  });
   /** Set when a Shortcuts automation deep-links us mid-session. */
   const [intercept, setIntercept] = useState<{ appLabel: string | null } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [nextCompanion, nextSpots, nextRecap] = await Promise.all([
+      const [nextCompanion, nextSpots, nextRecap, nextBoard] = await Promise.all([
         fetchCompanion(),
         fetchStudySpots(),
         fetchRecap(),
+        // Non-fatal: the board is a nice-to-have, and a friendless demo
+        // account shouldn't blank the whole screen.
+        fetchLeaderboard().catch(() => null),
       ]);
       setCompanion(nextCompanion);
       setSpots(nextSpots);
       setRecap(nextRecap);
+      setLeaderboard(nextBoard);
       setNotice(null);
     } catch (error) {
       setNotice(error instanceof Error ? `Can't reach the server — ${error.message}` : "Can't reach the server.");
@@ -157,6 +176,7 @@ export default function App() {
         focusedMs: finished.focusedMs,
         locationName: insideSpot?.name ?? null,
         pledgeMinutes: finished.pledgeMinutes,
+        bonusXp: finished.bonusXp,
         distractions: finished.distractions,
       });
       setNotice(
@@ -261,6 +281,7 @@ export default function App() {
               refreshing={refreshing}
               onRefresh={onRefresh}
               onCheckIn={checkIn}
+              recall={recall}
               pledge={pledge}
               onCustomise={handleCustomise}
               onPledgeChange={setPledge}
@@ -276,7 +297,9 @@ export default function App() {
               onRefresh={onRefresh}
             />
           )}
-          {tab === "ranks" && <RanksScreen />}
+          {tab === "ranks" && (
+            <RanksScreen leaderboard={leaderboard} refreshing={refreshing} onRefresh={onRefresh} />
+          )}
           {tab === "settings" && <SettingsScreen />}
         </View>
         <SafeAreaView edges={["bottom"]} style={styles.navSafe}>

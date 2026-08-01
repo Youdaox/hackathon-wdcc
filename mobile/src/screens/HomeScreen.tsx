@@ -3,6 +3,7 @@ import type { Companion, StudySpot } from "../api";
 import type { SpotMatch } from "../location";
 import type { FocusState } from "../useFocusSession";
 import { CompanionCard } from "../components/CompanionCard";
+import { RecallCheck } from "../components/RecallCheck";
 import { FocusPanel } from "../components/FocusPanel";
 import { LocationCard } from "../components/LocationCard";
 import { colors, roundedFont } from "../theme";
@@ -16,6 +17,11 @@ type HomeScreenProps = {
   multiplier: number;
   busy: boolean;
   pledge: number;
+  recall: {
+    state: import("../useRecallCheck").RecallState;
+    answer: (index: number) => void;
+    dismiss: () => void;
+  };
   onCustomise: (patch: { color?: import("../api").PigColor; accessory?: import("../api").PigAccessory }) => void;
   onPledgeChange: (minutes: number) => void;
   notice: string | null;
@@ -65,6 +71,12 @@ export function HomeScreen(props: HomeScreenProps) {
         match={props.match}
         checking={props.checking}
         onCheckIn={props.onCheckIn}
+      />
+
+      <RecallCheck
+        state={props.recall.state}
+        onAnswer={props.recall.answer}
+        onDismiss={props.recall.dismiss}
       />
 
       <FocusPanel

@@ -68,6 +68,8 @@ export async function POST(request: Request) {
       {
         focusedMs: pledge.voided ? 0 : req.verified_minutes * 60_000,
         distractions,
+        // Flat, and forfeited along with everything else on a broken pledge.
+        bonusXp: pledge.voided ? 0 : (req.bonus_xp ?? 0),
       },
       xpMultiplier,
     );

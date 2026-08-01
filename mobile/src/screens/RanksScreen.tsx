@@ -1,43 +1,62 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { Leaderboard } from "../api";
+import { USER_ID } from "../config";
 import { Pig, type PigColor } from "../components/Pig";
-
-/** Rotates coats so the leaderboard reads as different pigs, not one repeated. */
-const COATS: PigColor[] = ["pink", "purple", "blue"];
 import { colors, roundedFont } from "../theme";
 
-const RANKS = [
-  { rank: 1, name: "Priya N.", streak: 11, minutes: 301, stage: 3 as const, flower: true, emotion: "excited" as const },
-  { rank: 2, name: "Marcus T.", streak: 8, minutes: 260, stage: 2 as const, emotion: "calm" as const },
-  { rank: 3, name: "You", streak: 6, minutes: 243, stage: 2 as const, you: true, emotion: "happy" as const },
-  { rank: 4, name: "Sofia R.", streak: 3, minutes: 150, stage: 1 as const, emotion: "sad" as const },
-  { rank: 5, name: "Devon K.", streak: 2, minutes: 120, stage: 2 as const, emotion: "angry" as const },
-];
+/** Rotates coats so the board reads as different pigs, not one repeated. */
+const COATS: PigColor[] = ["pink", "purple", "blue"];
 
-export function RanksScreen() {
+
+export function RanksScreen({
+  leaderboard,
+  refreshing,
+  onRefresh,
+}: {
+  leaderboard: Leaderboard | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const entries = leaderboard?.entries ?? [];
+
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
+    >
       <Text style={styles.pageTitle}>Leaderboard</Text>
-      <Text style={styles.subtitle}>Verified minutes this week · COMPSCI 316 group</Text>
+      <Text style={styles.subtitle}>Points this week</Text>
+
+      {entries.length === 0 && (
+        <Text style={styles.empty}>
+          Nobody on the board yet. Points come from completed tasks and encouragements.
+        </Text>
+      )}
 
       <View style={styles.board}>
-        {RANKS.map((entry, index) => (
+        {entries.map((entry, index) => (
           <View
-            key={entry.rank}
+            key={entry.userId}
             style={[
               styles.row,
-              entry.you && styles.youRow,
-              index < RANKS.length - 1 && styles.divider,
+              entry.userId === USER_ID && styles.youRow,
+              index < entries.length - 1 && styles.divider,
             ]}
           >
             <Text style={[styles.rank, entry.rank === 1 && styles.first]}>{entry.rank}</Text>
-            <Pig mood="happy" level={entry.stage * 3} size={40} color={COATS[entry.rank % 3]} />
+            <Pig mood="happy" level={Math.min(9, 1 + entry.rank)} size={40} color={COATS[entry.rank % 3]} />
             <View style={styles.person}>
-              <Text style={styles.name}>{entry.name}</Text>
-              <Text style={styles.streak}>{entry.streak} day streak · {entry.emotion}</Text>
+              <Text style={styles.name}>
+                {entry.userId === USER_ID ? "You" : entry.displayName}
+              </Text>
+              <Text style={styles.streak}>
+                {entry.tasksCompleted ?? 0} tasks · {entry.encouragementsReceived ?? 0} cheers
+              </Text>
             </View>
             <View style={styles.minutesRow}>
-              <Text style={styles.minutes}>{entry.minutes}</Text>
-              <Text style={styles.unit}>min</Text>
+              <Text style={styles.minutes}>{entry.points}</Text>
+              <Text style={styles.unit}>pts</Text>
             </View>
           </View>
         ))}
@@ -48,6 +67,13 @@ export function RanksScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 34 },
+  empty: {
+    color: colors.muted,
+    fontFamily: roundedFont,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 6,
+  },
   pageTitle: { color: colors.text, fontFamily: roundedFont, fontSize: 28, fontWeight: "900" },
   subtitle: {
     color: colors.muted,

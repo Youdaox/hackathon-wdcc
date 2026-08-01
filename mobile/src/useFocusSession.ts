@@ -50,6 +50,8 @@ export interface FocusState {
   endsAt: number | null;
   /** Minutes pledged at start, or 0 for an open-ended session. */
   pledgeMinutes: number;
+  /** Flat XP from a correct recall check. Not scaled by the location bonus. */
+  bonusXp: number;
   focusedMs: number;
   distractedMs: number;
   distractions: DistractionRecord[];
@@ -69,6 +71,7 @@ export interface FinishedSession {
   endedAt: number;
   focusedMs: number;
   pledgeMinutes: number;
+  bonusXp: number;
   distractions: DistractionRecord[];
 }
 
@@ -78,6 +81,7 @@ function idle(): FocusState {
     startedAt: null,
     endsAt: null,
     pledgeMinutes: 0,
+    bonusXp: 0,
     focusedMs: 0,
     distractedMs: 0,
     distractions: [],
@@ -204,6 +208,17 @@ export function useFocusSession() {
    * concept, so one payload carries both what happened and whether the pledge
    * survived it. The server decides the forfeit.
    */
+  /** Adds flat XP from a correct recall answer. */
+  const addBonusXp = useCallback(
+    (amount: number) => {
+      const session = ref.current;
+      if (!session.running) return;
+      session.bonusXp += amount;
+      publish();
+    },
+    [publish],
+  );
+
   const recordIntercept = useCallback(
     (appLabel: string | null, bypassed: boolean) => {
       const session = ref.current;
@@ -261,6 +276,7 @@ export function useFocusSession() {
       endedAt: now,
       focusedMs: session.focusedMs,
       pledgeMinutes: session.pledgeMinutes,
+      bonusXp: session.bonusXp,
       // Sub-grace blips cost focus time but shouldn't reach the server as
       // penalties, matching the web app's forgiveness for a stray tap.
       // Intercepts are kept regardless of length: a zero-duration row still
@@ -275,5 +291,5 @@ export function useFocusSession() {
     return finished;
   }, [flush, publish]);
 
-  return { state, start, stop, resolveCheckpoint, recordIntercept };
+  return { state, start, stop, resolveCheckpoint, recordIntercept, addBonusXp };
 }

@@ -84,6 +84,8 @@ export interface SessionRequest {
   platform: Platform;
   /** Minutes pledged up front, or 0 for an open-ended session. */
   committed_minutes?: number;
+  /** Flat XP from a correct recall check. Never scaled by the location bonus. */
+  bonus_xp?: number;
   distraction_events: WireDistractionEvent[];
 }
 
@@ -248,6 +250,13 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
     }
     committedMinutes = b.committed_minutes;
   }
+  let bonusXp = 0;
+  if (b.bonus_xp !== undefined && b.bonus_xp !== null) {
+    if (!isFiniteNumber(b.bonus_xp) || b.bonus_xp < 0 || b.bonus_xp > 100) {
+      return { ok: false, error: "bonus_xp must be a number between 0 and 100" };
+    }
+    bonusXp = b.bonus_xp;
+  }
 
   const rawEvents = b.distraction_events ?? [];
   if (!Array.isArray(rawEvents)) {
@@ -271,6 +280,7 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
       location_name: locationName,
       platform: b.platform as Platform,
       committed_minutes: committedMinutes,
+      bonus_xp: bonusXp,
       distraction_events: events,
     },
   };
