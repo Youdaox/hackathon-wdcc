@@ -148,6 +148,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           ? loadedCompanion.checkInEmotion
           : null,
         checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
+        nextCheckInAt:
+          typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
       }),
     );
     setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
@@ -409,7 +411,15 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkInWithCompanion = useCallback((emotion: AvatarEmotion) => {
-    setCompanion((prev) => ({ ...prev, checkInEmotion: emotion, checkInAt: Date.now() }));
+    const checkedInAt = Date.now();
+    // A varied delay keeps the prompt from feeling like a rigid notification.
+    const delayMs = (5 + Math.floor(Math.random() * 56)) * 60_000;
+    setCompanion((prev) => ({
+      ...prev,
+      checkInEmotion: emotion,
+      checkInAt: checkedInAt,
+      nextCheckInAt: checkedInAt + delayMs,
+    }));
   }, []);
 
   const resetEverything = useCallback(() => {

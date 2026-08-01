@@ -53,6 +53,8 @@ export interface Companion {
   accessory: PigAccessory;
   checkInEmotion: AvatarEmotion | null;
   checkInAt: number | null;
+  /** When to ask again. Null means the check-in is ready to be shown. */
+  nextCheckInAt: number | null;
   level: number;
   /** XP accumulated toward the *current* level only. */
   xp: number;

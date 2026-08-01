@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useIncline } from "@/lib/store";
 import { avatarStateFor, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
+import { useNow } from "@/hooks/useNow";
 import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
 import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
 
@@ -39,10 +40,12 @@ export function CompanionCard() {
   const { companion, active, renameCompanion, setCompanionColor, setCompanionAccessory, checkInWithCompanion } =
     useIncline();
   const [editing, setEditing] = useState(false);
+  const now = useNow(30_000);
   const mood = moodFor(companion.hp);
   const progress = levelProgress(companion);
   const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
   const avatarState = avatarStateFor(companion.hp, companion.checkInEmotion);
+  const checkInDue = companion.nextCheckInAt === null || (now !== null && now.getTime() >= companion.nextCheckInAt);
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">
@@ -98,7 +101,7 @@ export function CompanionCard() {
         </button>
       )}
 
-      <div className="mt-5 w-full rounded-xl bg-surface-2/60 px-3 py-3">
+      {checkInDue && <div className="mt-5 w-full rounded-xl bg-surface-2/60 px-3 py-3">
         <div className="flex items-center justify-between gap-3">
           <span className="eyebrow">Quick check-in</span>
           <span className="text-xs text-faint">How are you feeling?</span>
@@ -117,9 +120,9 @@ export function CompanionCard() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <p className={`mt-2 text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
+      <p className={`${checkInDue ? "mt-2" : "mt-5"} text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
         Level {companion.level} · {MOOD_LABEL[mood]}
       </p>
 

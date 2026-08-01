@@ -50,6 +50,7 @@ export function createCompanion(name = "Oinky", color: PigColor = "pink"): Compa
     accessory: "none",
     checkInEmotion: null,
     checkInAt: null,
+    nextCheckInAt: null,
     level: 1,
     xp: 0,
     hp: 100,

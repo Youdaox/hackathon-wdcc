@@ -58,6 +58,7 @@ export function ensureCompanion(userId: string): Companion {
     // does not yet include a profile-preference mutation.
     checkInEmotion: null,
     checkInAt: null,
+    nextCheckInAt: null,
     level: existing.level,
     xp: existing.xp,
     hp: existing.hp,
