@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CanvasCard } from "@/components/CanvasCard";
-import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
+import { FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
 import { DesktopBuddy } from "@/components/DesktopBuddy";
 import { LocationCard } from "@/components/LocationCard";
@@ -21,6 +21,11 @@ import { DemoLogin } from "@/components/DemoLogin";
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
   const { currentUser, logout } = useDemoAuth();
+
+  useEffect(() => {
+    window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
+    return () => window.electronAPI?.setBackgroundTracking(false);
+  }, [active, eyeEnabled]);
 
   if (!currentUser) return <DemoLogin />;
 
@@ -76,7 +81,6 @@ export default function Dashboard() {
       <RecallCheck />
       <SessionSummary />
       <DesktopBuddy />
-      {eyeEnabled && active && <CameraOverlay />}
     </main>
   );
 }

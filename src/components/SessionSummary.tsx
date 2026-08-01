@@ -6,6 +6,7 @@ import { useIncline } from "@/lib/store";
 import { MOOD_LABEL, levelProgress, moodFor, reactionFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { Pig } from "@/components/Pig";
+import { FocusTimeline } from "@/components/FocusTimeline";
 
 export function SessionSummary() {
   const { outcome, dismissOutcome } = useIncline();
@@ -68,6 +69,14 @@ export function SessionSummary() {
           <Stat label="Focused" value={formatCompact(session.focusedMs)} accent="text-moss" />
           <Stat label="Away" value={formatCompact(session.distractedMs)} accent="text-clay" />
           <Stat label="XP gained" value={`+${session.xpEarned}`} accent="text-citrus" />
+        </div>
+
+        <div className="mt-6 text-left">
+          <FocusTimeline
+            startedAt={session.startedAt}
+            endedAt={session.endedAt}
+            distractions={session.distractions}
+          />
         </div>
 
         <div className="mt-6 space-y-3 rounded-xl bg-surface-2/60 px-4 py-4 text-left">
