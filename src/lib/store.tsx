@@ -23,6 +23,16 @@ export interface SessionOutcome {
   growth: GrowthResult;
 }
 
+/** A block as it arrives from Canvas — no local id yet. */
+export type CanvasImportBlock = Omit<StudyBlock, "id" | "createdAt" | "source" | "externalId"> & {
+  externalId: string;
+};
+
+export interface ImportResult {
+  added: number;
+  updated: number;
+}
+
 interface InclineContextValue {
   /** False until localStorage has been read, so we never render mismatched HTML. */
   hydrated: boolean;
@@ -30,6 +40,8 @@ interface InclineContextValue {
   addBlock: (input: Omit<StudyBlock, "id" | "createdAt" | "source">) => void;
   updateBlock: (id: string, patch: Partial<StudyBlock>) => void;
   removeBlock: (id: string) => void;
+  /** Upserts Canvas-imported blocks by `externalId`. Returns what changed. */
+  importCanvasBlocks: (incoming: CanvasImportBlock[]) => ImportResult;
   companion: Companion;
   renameCompanion: (name: string) => void;
   sessions: FocusSession[];
@@ -169,6 +181,56 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  // Import reports back how many blocks it touched, so it reads the current
+  // schedule through a ref rather than a state updater — an updater has to stay
+  // pure, and this one needs to return a count to the caller.
+  const blocksRef = useRef(blocks);
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
+
+  const importCanvasBlocks = useCallback((incoming: CanvasImportBlock[]): ImportResult => {
+    const current = blocksRef.current;
+    let added = 0;
+    let updated = 0;
+
+    const merged = [...current];
+    for (const block of incoming) {
+      // Matching on externalId is what makes re-importing safe: a changed
+      // lecture time updates the row instead of adding a second one.
+      const index = merged.findIndex(
+        (existing) => existing.source === "canvas" && existing.externalId === block.externalId,
+      );
+
+      if (index === -1) {
+        merged.push({
+          ...block,
+          id: uid(),
+          createdAt: Date.now(),
+          source: "canvas",
+        });
+        added += 1;
+        continue;
+      }
+
+      const existing = merged[index];
+      const changed =
+        existing.title !== block.title ||
+        existing.course !== block.course ||
+        existing.startMin !== block.startMin ||
+        existing.endMin !== block.endMin ||
+        existing.days.join() !== block.days.join();
+
+      if (changed) {
+        merged[index] = { ...existing, ...block };
+        updated += 1;
+      }
+    }
+
+    setBlocks(merged.sort((a, b) => a.startMin - b.startMin));
+    return { added, updated };
+  }, []);
+
   const removeBlock = useCallback((id: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   }, []);
@@ -199,6 +261,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       addBlock,
       updateBlock,
       removeBlock,
+      importCanvasBlocks,
       companion,
       renameCompanion,
       sessions,
@@ -226,6 +289,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       addBlock,
       updateBlock,
       removeBlock,
+      importCanvasBlocks,
       companion,
       renameCompanion,
       sessions,

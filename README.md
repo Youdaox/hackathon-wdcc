@@ -7,7 +7,7 @@ A companion creature that only grows on **verified, undistracted study time**, t
 ```bash
 npm run dev     # http://localhost:3000
 
-cp .env.example .env.local   # optional — only needed for AI recall checks
+cp .env.example .env.local   # optional — AI recall checks and a real Canvas instance
 ```
 
 ## The mechanic
@@ -79,15 +79,59 @@ Model: `claude-opus-5` with `effort: "low"` (it's one short question and the use
 ## Structure
 
 ```
-src/app/api/      recall route handler (the only server-side code)
+src/app/api/      recall, graphql, canvas/session route handlers (all server-side code)
 src/lib/          types, storage, time/schedule helpers, growth rules, zones,
                   recall questions, store (context)
+src/lib/canvas/   Canvas LMS GraphQL backend — schema, REST client, fixtures
 src/hooks/        useFocusSession (the verification engine), useGeolocation,
-                  useRecallCheck, useNow
-src/components/   FocusPanel, SchedulePanel, CompanionCard, TodaySummary,
+                  useCanvas, useRecallCheck, useNow
+src/components/   FocusPanel, SchedulePanel, CanvasCard, CompanionCard, TodaySummary,
                   LocationCard, RecallCheck, SessionSummary
 ```
 
+## Canvas GraphQL backend
+
+`POST /api/graphql` is a GraphQL layer over the **Canvas LMS API**. Open `http://localhost:3000/api/graphql` in a browser for GraphiQL (dev only).
+
+It exists because Canvas' REST API is one request *per course per resource* — three courses' assignments is four round trips from the browser, and the access token would have to be there to make them. One query here does the fan-out server-side instead:
+
+```graphql
+{
+  courses {
+    courseCode
+    enrollments { currentScore currentGrade }
+    assignments(bucket: UPCOMING) { name dueAt isOutstanding }
+  }
+}
+```
+
+**Schedule import.** `studyBlocks` is the query the schedule table wants. Canvas materialises a recurring lecture as one calendar event *per occurrence*; [`schedule.ts`](src/lib/canvas/schedule.ts) collapses occurrences sharing a title, course, and time-of-day back into one recurring block, so the result drops straight into `StudyBlock` — minutes-from-midnight, `days` as `0–6`, `source: "canvas"`, `externalId` set from the first occurrence so a re-import updates rather than duplicates.
+
+```graphql
+{ studyBlocks { externalId title course startMin endMin days source } }
+```
+
+**Import is idempotent.** [`importCanvasBlocks`](src/lib/store.tsx) upserts on `externalId`, so pressing Import twice reports *"already up to date"* rather than doubling the schedule, and a changed lecture time updates the existing row. Imported blocks are tagged **Canvas** in the schedule and behave like any other block — you can start a session from one, edit it, or delete it.
+
+Also available: `self`, `course(id:)`, `assignments(bucket:, limit:)` across all courses, `calendarEvents`, and per-course `modules`.
+
+**Logging in.** The **Canvas** card on the dashboard takes an instance URL and a personal access token. [`/api/canvas/session`](src/app/api/canvas/session/route.ts) verifies the token against that instance *before* storing it, so a typo surfaces on the form rather than as a broken dashboard later.
+
+**The token never touches client JavaScript.** It goes into an `httpOnly` session cookie, which the browser attaches to `/api/graphql` automatically — an XSS bug can't read it back out the way it could read `localStorage`. No `maxAge`, so closing the browser ends the connection; that matters on a shared lab machine. Disconnecting clears the cookie but *keeps* imported blocks — that's a credential being revoked, not a timetable being deleted.
+
+**Credentials resolve per request, most specific first:**
+
+| Source | Use |
+| --- | --- |
+| `X-Canvas-Token` + `X-Canvas-Base-Url` headers | Scripts and other non-browser callers |
+| The `incline_canvas` httpOnly cookie | The dashboard login |
+| `CANVAS_BASE_URL` + `CANVAS_ACCESS_TOKEN` env | A single account |
+| None of the above | In-memory fixtures |
+
+With no credentials at all it serves [fixtures](src/lib/canvas/mock.ts) — three real-looking UoA courses, a full weekly timetable, assignments and submissions — so the API is fully explorable with no Canvas account, and the demo can't be broken by a campus SSO outage. Fixture dates are generated relative to the current week, so "upcoming" work stays upcoming. `{ dataSource }` reports which backend answered.
+
+Both paths go through the same [`CanvasSource`](src/lib/canvas/source.ts) interface, so the resolvers never branch on which one they got. Tokens are read off the request, used for that request, and never stored or sent to the browser. Canvas errors (401/403/404) pass through with their status under `extensions.code: CANVAS_API_ERROR` rather than being masked, since the caller can act on them.
+
 ## Not built yet
 
-- **Canvas import** — `StudyBlock` already carries `source` and `externalId`; see the data model above.
+- **Canvas OAuth** — login is by personal access token, which is the right call for a hackathon (no developer key to register with the university). A real deployment would want the OAuth2 flow so students never handle a token.
