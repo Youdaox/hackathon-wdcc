@@ -1,5 +1,7 @@
 # Incline
 
+**WDCC x SESA Hackathon 2026** — Youdao Xing, Jason Lim, Ethan Siao, Catherine Luo, Jonas Liwanag, Nicholas Torres, Cylia Niu
+
 A companion creature that only grows on **verified, undistracted study time**, tied to your real class schedule.
 
 ```bash
