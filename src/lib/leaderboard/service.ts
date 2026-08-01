@@ -16,6 +16,8 @@ const MESSAGES = [
   "You do not have to be perfect to make meaningful progress.",
 ] as const;
 
+const MAX_TASK_POINTS = 15;
+
 export class DomainError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
     super(message);
@@ -37,7 +39,10 @@ function balance(snapshot: Readonly<LeaderboardSnapshot>, userId: string, now: D
   const date = dayKey(now);
   const earned = snapshot.taskCompletions.filter(
     (completion) => completion.userId === userId && completion.dayKey === date,
-  ).length * snapshot.rules.encouragementsPerTask;
+  ).reduce((total, completion) => total + (completion.encouragementPointsAwarded ?? 0), 0);
+  const taskPoints = Math.min(MAX_TASK_POINTS, snapshot.taskCompletions
+    .filter((completion) => completion.userId === userId)
+    .reduce((total, completion) => total + (completion.encouragementPointsAwarded ?? 0), 0));
   const used = snapshot.encouragements.filter(
     (encouragement) => encouragement.senderId === userId && encouragement.dayKey === date,
   ).length;
@@ -47,6 +52,8 @@ function balance(snapshot: Readonly<LeaderboardSnapshot>, userId: string, now: D
     earned,
     used,
     available: Math.max(0, snapshot.rules.dailyBaseEncouragements + earned - used),
+    taskPoints,
+    maxTaskPoints: MAX_TASK_POINTS,
   };
 }
 
@@ -75,12 +82,23 @@ export class LeaderboardService {
       if (snapshot.taskCompletions.some((item) => item.userId === userId && item.taskId === taskId)) {
         throw new DomainError("TASK_ALREADY_REWARDED", "This task has already been rewarded.", 409);
       }
+      const pointsBefore = balance(snapshot, userId, now).taskPoints;
+      const encouragementPointsAwarded = Math.min(
+        snapshot.rules.encouragementsPerTask,
+        MAX_TASK_POINTS - pointsBefore,
+      );
       const completion = {
         id: crypto.randomUUID(), userId, taskId,
         completedAt: now.toISOString(), dayKey: dayKey(now),
+        encouragementPointsAwarded,
       };
       snapshot.taskCompletions.push(completion);
-      return { completion, balance: balance(snapshot, userId, now) };
+      return {
+        completion,
+        encouragementPointsAwarded,
+        challengeCompleted: pointsBefore + encouragementPointsAwarded >= MAX_TASK_POINTS,
+        balance: balance(snapshot, userId, now),
+      };
     });
   }
 
@@ -179,6 +197,7 @@ export class LeaderboardService {
             taskId: `demo-seed-${userId}-${index}`,
             completedAt: at.toISOString(),
             dayKey: "demo-seed",
+            encouragementPointsAwarded: 0,
           });
         }
       });

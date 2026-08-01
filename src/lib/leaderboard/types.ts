@@ -33,6 +33,7 @@ export interface TaskCompletion {
   taskId: string;
   completedAt: string;
   dayKey: string;
+  encouragementPointsAwarded: number;
 }
 
 export interface LeaderboardEntry {
@@ -50,4 +51,6 @@ export interface EncouragementBalance {
   earned: number;
   used: number;
   available: number;
+  taskPoints: number;
+  maxTaskPoints: number;
 }
