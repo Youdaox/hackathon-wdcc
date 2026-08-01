@@ -21,9 +21,15 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Incline — grow through focus",
+  title: "Incline - Grow Through Focus",
   description:
     "A companion that only grows on verified, undistracted study time, tied to your real class schedule.",
+  applicationName: "Incline - Grow Through Focus",
+  appleWebApp: {
+    capable: true,
+    title: "Incline - Grow Through Focus",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({
