@@ -33,6 +33,13 @@ function clamp(value: number, min: number, max: number) {
  * Electron overlay, which otherwise re-evaluates hover on every mousemove)
  * suppress that logic while a drag is in progress — pointer capture keeps
  * events routed to the element even once the cursor leaves its bounds.
+ *
+ * `enableSquish` (default true) can be turned off for content that's
+ * expensive to rescale every frame — e.g. the Pig sprite is a ~1000-layer
+ * CSS `box-shadow` pixel grid, and continuously changing `scaleY` on an
+ * ancestor forces the browser to re-rasterize it on every animation frame,
+ * which is enough to freeze the tab. Position (translate) and the hop bounce
+ * stay on regardless, since pure translate is compositor-only and cheap.
  */
 export function useWander(
   elRef: RefObject<HTMLElement | null>,
@@ -40,6 +47,7 @@ export function useWander(
   active: boolean,
   getBounds: () => { width: number; height: number },
   onDragStateChange?: (dragging: boolean) => void,
+  enableSquish = true,
 ) {
   const posRef = useRef({ x: 0, y: 0 });
   const velRef = useRef({ x: 0, y: 0 });
@@ -165,14 +173,16 @@ export function useWander(
         let bobY = 0;
         if (!draggingRef.current) {
           if (modeRef.current === "idle") {
-            const elapsed = now - idleStartRef.current;
-            const phase = (elapsed / IDLE_SQUISH_PERIOD_MS) * Math.PI * 2;
-            squishY = 1 - Math.sin(phase) * IDLE_SQUISH_AMOUNT;
+            if (enableSquish) {
+              const elapsed = now - idleStartRef.current;
+              const phase = (elapsed / IDLE_SQUISH_PERIOD_MS) * Math.PI * 2;
+              squishY = 1 - Math.sin(phase) * IDLE_SQUISH_AMOUNT;
+            }
           } else {
             const elapsed = now - walkStartRef.current;
             const hop = Math.abs(Math.sin((elapsed / WALK_STEP_MS) * Math.PI));
             bobY = -hop * WALK_BOB_HEIGHT;
-            squishY = 1 - (1 - hop) * WALK_SQUISH_AMOUNT;
+            if (enableSquish) squishY = 1 - (1 - hop) * WALK_SQUISH_AMOUNT;
           }
         }
 
@@ -189,5 +199,5 @@ export function useWander(
       el.removeEventListener("pointerup", handlePointerUp);
       el.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [active, elRef, size]);
+  }, [active, elRef, size, enableSquish]);
 }

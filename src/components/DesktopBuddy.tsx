@@ -100,10 +100,19 @@ export function DesktopBuddy() {
     }
   }
 
-  useWander(petRef, PET_SIZE, Boolean(pipWindow), () => ({
-    width: pipWindow?.innerWidth ?? 0,
-    height: pipWindow?.innerHeight ?? 0,
-  }));
+  useWander(
+    petRef,
+    PET_SIZE,
+    Boolean(pipWindow),
+    () => ({
+      width: pipWindow?.innerWidth ?? 0,
+      height: pipWindow?.innerHeight ?? 0,
+    }),
+    undefined,
+    // The Pig sprite's box-shadow pixel art is too expensive to rescale every
+    // frame — see useWander's enableSquish doc comment.
+    false,
+  );
 
   useEffect(() => {
     return () => {

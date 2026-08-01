@@ -69,6 +69,9 @@ export default function OverlayPage() {
       // click-through-ing the window mid-drag.
       if (dragging) window.overlayAPI?.setIgnoreMouseEvents(false);
     },
+    // The Pig sprite's box-shadow pixel art is too expensive to rescale every
+    // frame — see useWander's enableSquish doc comment.
+    false,
   );
 
   // Hit-testing: the Electron window ignores the mouse by default (click-through
