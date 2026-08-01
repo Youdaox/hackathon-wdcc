@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { recordCalibrationPoint } from "@/hooks/useFocusTracking";
 import { GAZE_RULES } from "@/lib/gaze";
 import { useIncline } from "@/lib/store";
 
@@ -10,10 +11,11 @@ const TOTAL_CLICKS = calibrationPoints.length * clicksPerPoint;
 /**
  * One-time calibration for the eye tracker.
  *
- * WebGazer trains itself on clicks — it pairs the eye features of the moment
- * with the coordinates you clicked — so this overlay does no tracking work at
- * all. It just puts targets in known screen positions and counts the clicks.
- * That's why there's no WebGazer import here.
+ * WebGazer trains by pairing the eye features of the moment with a screen
+ * coordinate, so every click here is one training sample. The coordinate we
+ * hand it is the dot's *centre*, not the click position: the eyes are on the
+ * centre, while the pointer lands anywhere inside a 44px target, and that gap
+ * is pure labelling error in every sample it would otherwise learn from.
  */
 export function GazeCalibrationOverlay() {
   const { gazeStatus, setGazeCalibration } = useIncline();
@@ -24,7 +26,10 @@ export function GazeCalibrationOverlay() {
 
   // Computed outside the updater rather than inside it: finishing calibration
   // is a side effect, and state updaters have to stay pure.
-  const record = (index: number) => {
+  const record = (index: number, element: HTMLElement) => {
+    const box = element.getBoundingClientRect();
+    recordCalibrationPoint(box.left + box.width / 2, box.top + box.height / 2);
+
     const next = [...clicks];
     next[index] = Math.min(clicksPerPoint, next[index] + 1);
     setClicks(next);
@@ -58,7 +63,7 @@ export function GazeCalibrationOverlay() {
               type="button"
               aria-label={`Calibration point ${index + 1}, ${hits} of ${clicksPerPoint} clicks`}
               disabled={complete}
-              onClick={() => record(index)}
+              onClick={(event) => record(index, event.currentTarget)}
               // Positioned as viewport fractions so the trained points span the
               // whole screen the user will actually be studying on.
               style={{ left: `${fx * 100}%`, top: `${fy * 100}%` }}

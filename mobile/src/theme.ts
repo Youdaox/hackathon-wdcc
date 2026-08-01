@@ -1,25 +1,29 @@
+import { Platform } from "react-native";
 import type { Companion } from "./api";
 
 export const colors = {
-  bg: "#0f1511",
-  surface: "#18211b",
-  surfaceAlt: "#1f2a23",
-  border: "#2b3a30",
-  text: "#e8f0ea",
-  muted: "#8ea396",
-  accent: "#7bd88f",
-  warn: "#e0b155",
-  bad: "#e07a5f",
+  bg: "#fbf7f0",
+  surface: "#ffffff",
+  surfaceAlt: "#f2f7f3",
+  border: "#e5e7e5",
+  text: "#373128",
+  muted: "#918a79",
+  accent: "#56ad70",
+  accentSoft: "#84c695",
+  accentPale: "#c0dfc5",
+  peach: "#ef8c66",
+  peachPale: "#f9d9c5",
+  sand: "#dbc9b1",
+  nav: "#b7ad96",
+  warn: "#d5aa58",
+  bad: "#d67262",
 } as const;
 
-/** Emoji stand-in for real art, matching the web app's faceFor(). */
-export function faceFor(mood: Companion["mood"], level: number): string {
-  if (mood === "sick") return "🥀";
-  if (mood === "sad") return "🌱";
-  if (level >= 8) return mood === "happy" ? "🌳" : "🪴";
-  if (level >= 4) return mood === "happy" ? "🪴" : "🌿";
-  return mood === "happy" ? "🌿" : "🌱";
-}
+export const roundedFont = Platform.select({
+  ios: "Arial Rounded MT Bold",
+  android: "sans-serif-rounded",
+  default: undefined,
+});
 
 export const MOOD_LABEL: Record<Companion["mood"], string> = {
   happy: "Thriving",

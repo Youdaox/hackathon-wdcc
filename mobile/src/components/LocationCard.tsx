@@ -1,16 +1,9 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import type { StudySpot } from "../api";
-import { type SpotMatch, formatDistance } from "../location";
-import { colors } from "../theme";
+import type { SpotMatch } from "../location";
+import { colors, roundedFont } from "../theme";
 
-/**
- * Study-spot check-in.
- *
- * Nothing here prompts for location until the user taps — the permission
- * dialog is never the first thing the app does. A denied or failed reading
- * leaves the session at 1x rather than showing an error, because location is
- * a bonus and must never look like a blocker.
- */
+/** The next-session card doubles as the explicit, user-triggered location check-in. */
 export function LocationCard({
   spots,
   match,
@@ -22,69 +15,57 @@ export function LocationCard({
   checking: boolean;
   onCheckIn: () => void;
 }) {
+  const defaultSpot = spots.find((spot) => /kate/i.test(spot.name)) ?? spots[0];
+  const place = match?.inside ? match.spot.name : defaultSpot?.name ?? "Kate Edger";
+
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Study spots</Text>
-        <Pressable onPress={onCheckIn} disabled={checking} hitSlop={8}>
-          {checking ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : (
-            <Text style={styles.action}>{match ? "Recheck" : "Check in"}</Text>
-          )}
-        </Pressable>
+    <Pressable
+      onPress={onCheckIn}
+      disabled={checking}
+      accessibilityLabel="Check in to the upcoming COMPSCI 316 study block"
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
+      <View style={styles.iconTile}>
+        {checking ? (
+          <ActivityIndicator size="small" color={colors.peach} />
+        ) : (
+          <View style={styles.calendarGlyph} />
+        )}
       </View>
-
-      {match ? (
-        <Text style={styles.status}>
-          {match.inside ? (
-            <>
-              At <Text style={styles.strong}>{match.spot.name}</Text> —{" "}
-              <Text style={styles.bonus}>{match.spot.multiplier}x XP</Text>
-            </>
-          ) : (
-            <>
-              {formatDistance(match.distanceM)} from {match.spot.name} — no bonus
-            </>
-          )}
+      <View style={styles.copy}>
+        <Text style={styles.title}>COMPSCI 316 study block</Text>
+        <Text style={styles.subtitle} numberOfLines={1}>
+          {match?.inside ? `${match.spot.multiplier}x check-in ready` : "Starts in 20 min"} · {place}
         </Text>
-      ) : (
-        <Text style={styles.status}>
-          Not checked in. Sessions still count, just at 1x.
-        </Text>
-      )}
-
-      <View style={styles.list}>
-        {spots.map((spot) => (
-          <View key={spot.name} style={styles.spotRow}>
-            <Text style={styles.spotName} numberOfLines={1}>
-              {spot.name}
-            </Text>
-            <Text style={styles.spotMult}>{spot.multiplier}x</Text>
-          </View>
-        ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
+    minHeight: 66,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
-    gap: 10,
+    borderColor: "#f3cbb5",
+    backgroundColor: "#fff5e9",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { color: colors.text, fontSize: 16, fontWeight: "600" },
-  action: { color: colors.accent, fontSize: 14, fontWeight: "600" },
-  status: { color: colors.muted, fontSize: 13, lineHeight: 19 },
-  strong: { color: colors.text, fontWeight: "600" },
-  bonus: { color: colors.accent, fontWeight: "700" },
-  list: { gap: 6, marginTop: 4 },
-  spotRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  spotName: { color: colors.muted, fontSize: 13, flex: 1 },
-  spotMult: { color: colors.muted, fontSize: 13, fontVariant: ["tabular-nums"] },
+  pressed: { opacity: 0.7 },
+  iconTile: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: colors.peachPale,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarGlyph: { width: 18, height: 17, borderRadius: 4, backgroundColor: colors.peach },
+  copy: { flex: 1, gap: 2 },
+  title: { color: colors.text, fontFamily: roundedFont, fontSize: 16, fontWeight: "800" },
+  subtitle: { color: colors.muted, fontFamily: roundedFont, fontSize: 14, fontWeight: "600" },
 });

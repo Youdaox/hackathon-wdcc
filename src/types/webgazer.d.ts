@@ -17,6 +17,11 @@ declare module "webgazer" {
     faceMeshSolutionPath: string;
     /** Milliseconds between gaze-listener callbacks. */
     dataTimestep: number;
+    /**
+     * Minimum milliseconds between mousemove training samples. Raise it to
+     * effectively disable cursor-as-ground-truth training.
+     */
+    moveTickSize: number;
     videoViewerWidth: number;
     videoViewerHeight: number;
     showVideo: boolean;
@@ -26,8 +31,21 @@ declare module "webgazer" {
     camConstraints: MediaStreamConstraints;
   }
 
+  /** The face-mesh tracker behind the gaze regression. */
+  export interface FaceTracker {
+    name: string;
+    /**
+     * The 468 mesh landmarks as `[x, y, z]` in video pixels, from the most
+     * recent frame *in which a face was found* — the array is only reassigned
+     * on a successful detection, so an unchanged reference means no face this
+     * frame. Null before the first detection.
+     */
+    getPositions(): number[][] | null;
+  }
+
   export interface WebGazer {
     params: WebGazerParams;
+    getTracker(): FaceTracker;
     /** Resolves once the camera is live; rejects if access is refused. */
     begin(onFail?: () => void): Promise<WebGazer>;
     end(): WebGazer;
@@ -40,7 +58,12 @@ declare module "webgazer" {
     setGazeListener(listener: (data: GazePrediction | null, elapsedTime: number) => void): WebGazer;
     clearGazeListener(): WebGazer;
     setRegression(name: "ridge" | "weightedRidge" | "threadedRidge"): WebGazer;
-    setTracker(name: string): WebGazer;
+    /** `TFFacemesh` is the only tracker WebGazer 3.x ships; others log and no-op. */
+    setTracker(name: "TFFacemesh"): WebGazer;
+    /** Trains the model: pairs the current eye features with a known screen point. */
+    recordScreenPosition(x: number, y: number, eventType?: "click" | "move"): WebGazer;
+    addMouseEventListeners(): WebGazer;
+    removeMouseEventListeners(): WebGazer;
     saveDataAcrossSessions(val: boolean): WebGazer;
     applyKalmanFilter(val: boolean): WebGazer;
     showVideoPreview(val: boolean): WebGazer;

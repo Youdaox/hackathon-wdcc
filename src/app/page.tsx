@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { CanvasCard } from "@/components/CanvasCard";
+import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
-import { FocusPanel } from "@/components/FocusPanel";
 import { LocationCard } from "@/components/LocationCard";
 import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
@@ -14,7 +14,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
 
 export default function Dashboard() {
-  const { hydrated, active } = useIncline();
+  const { hydrated, active, eyeEnabled } = useIncline();
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
@@ -64,6 +64,7 @@ export default function Dashboard() {
       <Footer />
       <RecallCheck />
       <SessionSummary />
+      {eyeEnabled && active && <CameraOverlay />}
     </main>
   );
 }
