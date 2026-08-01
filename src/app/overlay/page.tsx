@@ -8,14 +8,7 @@ import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
 
-declare global {
-  interface Window {
-    overlayAPI?: {
-      setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
-      ready: () => void;
-    };
-  }
-}
+// Window bridges are declared once in `src/types/electron.d.ts`.
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";

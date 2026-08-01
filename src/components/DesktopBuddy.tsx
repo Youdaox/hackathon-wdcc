@@ -9,22 +9,7 @@ import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
 
-declare global {
-  interface Window {
-    documentPictureInPicture?: {
-      requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
-      window: Window | null;
-    };
-    electronAPI?: {
-      isElectron: boolean;
-      toggleOverlay: () => Promise<boolean>;
-      setBackgroundTracking: (active: boolean) => void;
-    };
-    statusAPI?: {
-      ready: () => void;
-    };
-  }
-}
+// Window bridges are declared once in `src/types/electron.d.ts`.
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
@@ -59,10 +44,14 @@ export function DesktopBuddy() {
     };
   }, []);
 
+  // Neither capability can be detected during render without breaking SSR —
+  // the same reason `store.tsx` and `useFocusTracking.ts` carry this exemption.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setIsElectron(Boolean(window.electronAPI?.isElectron));
     setPipSupported("documentPictureInPicture" in window);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function openPip() {
     if (!window.documentPictureInPicture) return;
