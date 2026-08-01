@@ -22,7 +22,11 @@ import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
 import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from "./companion";
 import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
-import { useFocusTracking, type GazeStatus } from "@/hooks/useFocusTracking";
+import {
+  useFocusTracking,
+  type GazeAwayReason,
+  type GazeStatus,
+} from "@/hooks/useFocusTracking";
 import type { GazePrediction } from "webgazer";
 import type { GazeCalibration } from "./gaze";
 import { activeZone, nearestZone, type BonusZone, type ZoneMatch } from "./zones";
@@ -92,6 +96,8 @@ interface InclineContextValue {
   gazeEpisodes: number;
   /** Latest gaze prediction in viewport coordinates. */
   gazePoint: GazePrediction | null;
+  /** Live, undebounced reason the user reads as away — for describing, not scoring. */
+  gazeReason: GazeAwayReason | null;
   /** How far the user got through the calibration dots. */
   gazeCalibration: GazeCalibration;
   setGazeCalibration: (state: GazeCalibration) => void;
@@ -363,6 +369,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       gazeWandering: gazeAway,
       gazeEpisodes: gaze.episodes,
       gazePoint: gaze.point,
+      gazeReason: gaze.reason,
       gazeCalibration,
       setGazeCalibration,
     }),
@@ -397,6 +404,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       gaze.status,
       gaze.episodes,
       gaze.point,
+      gaze.reason,
       gazeAway,
       gazeCalibration,
     ],

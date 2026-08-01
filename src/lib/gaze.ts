@@ -264,39 +264,114 @@ export class AttentionWindow {
   }
 }
 
+// --- Notification chimes ----------------------------------------------------
+//
+// Two cues, deliberately mirror images of each other: a falling pair when
+// attention drifts, a rising pair when it comes back. Direction is the whole
+// design — you can tell which one fired from the next room without learning
+// what either sounds like, so the "you're back" tone can never be mistaken for
+// a second telling-off.
+//
+// The return cue is quieter and shorter than the warning. It's an
+// acknowledgement, not an alert, and it fires at the moment the user has just
+// done the right thing.
+
+/** A single tone in a cue. */
+interface Tone {
+  hz: number;
+  /** Seconds from the start of the cue. */
+  at: number;
+  seconds: number;
+  gain: number;
+}
+
+const WANDER_CUE: Tone[] = [
+  { hz: 880, at: 0, seconds: 0.16, gain: 0.09 },
+  { hz: 660, at: 0.16, seconds: 0.16, gain: 0.09 },
+];
+
+const RETURN_CUE: Tone[] = [
+  { hz: 660, at: 0, seconds: 0.12, gain: 0.055 },
+  { hz: 990, at: 0.1, seconds: 0.16, gain: 0.055 },
+];
+
 /**
- * Two short tones, played when a wander is first detected.
+ * One shared context rather than one per chime.
  *
- * Built on a throwaway AudioContext so there's nothing to keep alive between
- * warnings, and every failure (no WebAudio, autoplay blocked) is swallowed —
- * the visual warning is the real signal, this is just the nudge.
+ * Browsers cap how many AudioContexts a page may create and will start refusing
+ * new ones, so a long session that churned a fresh context per warning would go
+ * silent partway through — exactly when the feature is doing its job most.
  */
-export function playWanderChime(): void {
+let audio: AudioContext | null = null;
+
+function context(): AudioContext | null {
   try {
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return;
-    const ctx = new Ctor();
-    const now = ctx.currentTime;
+    if (!Ctor) return null;
+    audio ??= new Ctor();
+    // Autoplay policy suspends a context created outside a gesture, and a tab
+    // left in the background may suspend an existing one. Both resume silently
+    // once there's been any interaction; if not, we just lose the chime.
+    if (audio.state === "suspended") void audio.resume();
+    return audio;
+  } catch {
+    return null;
+  }
+}
 
-    for (const [index, freq] of [880, 660].entries()) {
+function play(cue: Tone[]): void {
+  try {
+    const ctx = context();
+    if (!ctx) return;
+    const start = ctx.currentTime;
+
+    for (const tone of cue) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      const at = now + index * 0.16;
+      const at = start + tone.at;
       osc.type = "sine";
-      osc.frequency.value = freq;
+      osc.frequency.value = tone.hz;
       // Ramped rather than switched, so it reads as a chime and not a click.
       gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.09, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+      gain.gain.exponentialRampToValueAtTime(tone.gain, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + tone.seconds - 0.02);
       osc.connect(gain).connect(ctx.destination);
       osc.start(at);
-      osc.stop(at + 0.16);
+      osc.stop(at + tone.seconds);
+      // Oscillators are single-use; letting them pile up over a long session
+      // leaks a node per tone.
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
     }
-
-    window.setTimeout(() => void ctx.close(), 600);
   } catch {
     // Audio is a nicety; never let it break a session.
+  }
+}
+
+/** Falling pair — attention has drifted. */
+export function playWanderChime(): void {
+  play(WANDER_CUE);
+}
+
+/** Rising pair — eyes are back on the screen. */
+export function playReturnChime(): void {
+  play(RETURN_CUE);
+}
+
+/**
+ * Releases the shared context. Called when tracking stops, so an idle tab isn't
+ * holding an audio device open for a feature that isn't running.
+ */
+export function releaseChimes(): void {
+  const ctx = audio;
+  audio = null;
+  try {
+    void ctx?.close();
+  } catch {
+    // Already closed.
   }
 }
