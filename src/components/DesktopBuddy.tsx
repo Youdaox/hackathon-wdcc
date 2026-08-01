@@ -118,7 +118,7 @@ export function DesktopBuddy() {
         onClick={toggle}
         className="fixed bottom-6 right-6 z-50 rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold text-muted shadow-lg transition-colors hover:text-ink"
       >
-        {isOpen ? "Bring your buddy back" : "Let your buddy out"}
+        {isOpen ? "Bring your buddy back in" : "Let your buddy out"}
       </button>
       {!isElectron &&
         pipWindow &&
