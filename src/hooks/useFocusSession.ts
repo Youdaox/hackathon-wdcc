@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActiveSession, FocusSession } from "@/lib/types";
+import type { ActiveSession, AwayReason, FocusSession } from "@/lib/types";
 import { RULES } from "@/lib/companion";
 import { uid } from "@/lib/storage";
 
@@ -22,14 +22,24 @@ interface Persisted {
   lastFlushAt: number;
 }
 
+/** The user is away if *either* signal says so. */
+function isAway(session: Pick<ActiveSession, "isHidden" | "isGazeAway">): boolean {
+  return session.isHidden || session.isGazeAway;
+}
+
 /**
- * Runs one focus session and measures it with the Page Visibility API.
+ * Runs one focus session and measures it with the Page Visibility API plus, if
+ * the user opted in, eye tracking.
  *
  * Accounting is timestamp-based rather than tick-based: every flush moves the
  * real elapsed time into either `focusedMs` or `distractedMs`, and we flush on
  * `visibilitychange` as well as on the 1s interval. That matters because
  * browsers throttle timers in background tabs — without the visibility flush a
  * hidden tab would under-report distraction.
+ *
+ * The two away signals are deliberately OR-ed into one state rather than
+ * tracked separately: switching tabs *while* looking away is one distraction,
+ * not two, and the user only ever sees one timer.
  */
 export function useFocusSession(onComplete: (session: FocusSession) => void) {
   const [active, setActive] = useState<ActiveSession | null>(null);
@@ -57,11 +67,67 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
       const delta = Math.max(0, at - lastFlushAt.current);
       lastFlushAt.current = at;
       if (delta === 0) return prev;
-      return prev.isHidden
+      return isAway(prev)
         ? { ...prev, distractedMs: prev.distractedMs + delta }
         : { ...prev, focusedMs: prev.focusedMs + delta };
     });
   }, []);
+
+  /**
+   * Banks the elapsed time against the state we were *just* in, then applies a
+   * change to one of the away signals — opening or closing a distraction event
+   * if that flips the combined state.
+   *
+   * Both signals funnel through here so the "when did this stretch start"
+   * bookkeeping exists exactly once.
+   */
+  const applyAway = useCallback((patch: Partial<ActiveSession>, reason: AwayReason) => {
+    const at = Date.now();
+    setNow(at);
+    setActive((prev) => {
+      if (!prev) return prev;
+      const changed = Object.entries(patch).some(
+        ([key, value]) => prev[key as keyof ActiveSession] !== value,
+      );
+      if (!changed) return prev;
+
+      const delta = Math.max(0, at - lastFlushAt.current);
+      lastFlushAt.current = at;
+      const wasAway = isAway(prev);
+      const next: ActiveSession = {
+        ...prev,
+        ...patch,
+        focusedMs: prev.focusedMs + (wasAway ? 0 : delta),
+        distractedMs: prev.distractedMs + (wasAway ? delta : 0),
+      };
+
+      if (isAway(next) === wasAway) return next;
+      if (isAway(next)) return { ...next, awaySince: at, awayReason: reason };
+
+      const startedAt = prev.awaySince ?? at;
+      const durationMs = at - startedAt;
+      return {
+        ...next,
+        awaySince: null,
+        awayReason: null,
+        distractions: [
+          ...prev.distractions,
+          {
+            startedAt,
+            durationMs,
+            penalized: durationMs >= RULES.graceMs,
+            reason: prev.awayReason ?? reason,
+          },
+        ],
+      };
+    });
+  }, []);
+
+  /** Called by the eye tracker when the gaze debounce flips. */
+  const setGazeAway = useCallback(
+    (away: boolean) => applyAway({ isGazeAway: away }, "gaze"),
+    [applyAway],
+  );
 
   const start = useCallback((input: StartSessionInput) => {
     const at = Date.now();
@@ -79,7 +145,9 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
       distractedMs: 0,
       distractions: [],
       isHidden: hidden,
-      hiddenSince: hidden ? at : null,
+      isGazeAway: false,
+      awaySince: hidden ? at : null,
+      awayReason: hidden ? "hidden" : null,
       bonusXp: 0,
     });
   }, []);
@@ -102,17 +170,19 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
     if (!current) return;
 
     // Final flush straight from the last committed state, plus close out an
-    // open hidden stretch if we're ending while backgrounded.
+    // open away stretch if we're ending mid-distraction.
     const delta = Math.max(0, at - lastFlushAt.current);
-    const focusedMs = current.focusedMs + (current.isHidden ? 0 : delta);
-    const distractedMs = current.distractedMs + (current.isHidden ? delta : 0);
+    const away = isAway(current);
+    const focusedMs = current.focusedMs + (away ? 0 : delta);
+    const distractedMs = current.distractedMs + (away ? delta : 0);
     const distractions = [...current.distractions];
-    if (current.isHidden && current.hiddenSince !== null) {
-      const durationMs = at - current.hiddenSince;
+    if (away && current.awaySince !== null) {
+      const durationMs = at - current.awaySince;
       distractions.push({
-        startedAt: current.hiddenSince,
+        startedAt: current.awaySince,
         durationMs,
         penalized: durationMs >= RULES.graceMs,
+        reason: current.awayReason ?? "hidden",
       });
     }
 
@@ -137,46 +207,12 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
     onCompleteRef.current(finished);
   }, [clearLive]);
 
-  // --- Visibility: the distraction signal -----------------------------------
+  // --- Visibility: the always-on distraction signal --------------------------
   useEffect(() => {
-    const handleVisibility = () => {
-      const at = Date.now();
-      setNow(at);
-      setActive((prev) => {
-        if (!prev) return prev;
-        const delta = Math.max(0, at - lastFlushAt.current);
-        lastFlushAt.current = at;
-        const nowHidden = document.hidden;
-
-        // Bank the elapsed time against the state we were *just* in.
-        const focusedMs = prev.focusedMs + (prev.isHidden ? 0 : delta);
-        const distractedMs = prev.distractedMs + (prev.isHidden ? delta : 0);
-
-        if (nowHidden && !prev.isHidden) {
-          return { ...prev, focusedMs, distractedMs, isHidden: true, hiddenSince: at };
-        }
-        if (!nowHidden && prev.isHidden) {
-          const startedAt = prev.hiddenSince ?? at;
-          const durationMs = at - startedAt;
-          return {
-            ...prev,
-            focusedMs,
-            distractedMs,
-            isHidden: false,
-            hiddenSince: null,
-            distractions: [
-              ...prev.distractions,
-              { startedAt, durationMs, penalized: durationMs >= RULES.graceMs },
-            ],
-          };
-        }
-        return { ...prev, focusedMs, distractedMs };
-      });
-    };
-
+    const handleVisibility = () => applyAway({ isHidden: document.hidden }, "hidden");
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  }, [applyAway]);
 
   // --- Tick -----------------------------------------------------------------
   // Keyed on whether a session exists, not on `active` itself, so the interval
@@ -223,7 +259,12 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
       // other distraction, which keeps things honest across a refresh.
       const distractions = [...session.distractions];
       if (gap >= RULES.graceMs) {
-        distractions.push({ startedAt: savedFlush, durationMs: gap, penalized: true });
+        distractions.push({
+          startedAt: savedFlush,
+          durationMs: gap,
+          penalized: true,
+          reason: "hidden",
+        });
       }
       const at = Date.now();
       lastFlushAt.current = at;
@@ -234,7 +275,11 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
         distractedMs: session.distractedMs + gap,
         distractions,
         isHidden: document.hidden,
-        hiddenSince: document.hidden ? at : null,
+        // Tracking restarts from scratch after a reload, so the gaze signal
+        // resets to "present" until the camera is back up.
+        isGazeAway: false,
+        awaySince: document.hidden ? at : null,
+        awayReason: document.hidden ? "hidden" : null,
       });
     } catch {
       window.localStorage.removeItem(LIVE_SESSION_KEY);
@@ -244,5 +289,5 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
 
   const elapsedMs = active ? Math.max(0, now - active.startedAt) : 0;
 
-  return { active, start, end, cancel: clearLive, elapsedMs, addBonusXp };
+  return { active, start, end, cancel: clearLive, elapsedMs, addBonusXp, setGazeAway };
 }

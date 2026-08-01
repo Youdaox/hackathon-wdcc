@@ -22,6 +22,9 @@ import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
 import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from "./companion";
 import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
+import { useFocusTracking, type GazeStatus } from "@/hooks/useFocusTracking";
+import type { GazePrediction } from "webgazer";
+import type { GazeCalibration } from "./gaze";
 import { activeZone, nearestZone, type BonusZone, type ZoneMatch } from "./zones";
 import { startOfDay } from "./time";
 
@@ -31,6 +34,16 @@ export interface SessionOutcome {
   growth: GrowthResult;
 }
 
+/** A block as it arrives from Canvas — no local id yet. */
+export type CanvasImportBlock = Omit<StudyBlock, "id" | "createdAt" | "source" | "externalId"> & {
+  externalId: string;
+};
+
+export interface ImportResult {
+  added: number;
+  updated: number;
+}
+
 interface InclineContextValue {
   /** False until localStorage has been read, so we never render mismatched HTML. */
   hydrated: boolean;
@@ -38,6 +51,8 @@ interface InclineContextValue {
   addBlock: (input: Omit<StudyBlock, "id" | "createdAt" | "source">) => void;
   updateBlock: (id: string, patch: Partial<StudyBlock>) => void;
   removeBlock: (id: string) => void;
+  /** Upserts Canvas-imported blocks by `externalId`. Returns what changed. */
+  importCanvasBlocks: (incoming: CanvasImportBlock[]) => ImportResult;
   companion: Companion;
   renameCompanion: (name: string) => void;
   setCompanionColor: (color: PigColor) => void;
@@ -66,6 +81,20 @@ interface InclineContextValue {
   nearest: ZoneMatch | null;
   /** Multiplier that would apply if the session ended now. Always ≥ 1. */
   liveMultiplier: number;
+
+  // --- Eye tracking (optional; also never gates a session) ------------------
+  eyeEnabled: boolean;
+  setEyeEnabled: (enabled: boolean) => void;
+  gazeStatus: GazeStatus;
+  /** True while the user's gaze has been off-screen long enough to warn. */
+  gazeWandering: boolean;
+  /** Wander episodes detected during the running session. */
+  gazeEpisodes: number;
+  /** Latest gaze prediction in viewport coordinates. */
+  gazePoint: GazePrediction | null;
+  /** How far the user got through the calibration dots. */
+  gazeCalibration: GazeCalibration;
+  setGazeCalibration: (state: GazeCalibration) => void;
 }
 
 const InclineContext = createContext<InclineContextValue | null>(null);
@@ -79,6 +108,9 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   // Opt-in is remembered, so a reload doesn't re-prompt — but we still never
   // ask for location until the user turns it on.
   const [geoEnabled, setGeoEnabled] = useState(false);
+  // Same deal for the camera: remembered, but only ever opened during a session.
+  const [eyeEnabled, setEyeEnabled] = useState(false);
+  const [gazeCalibration, setGazeCalibration] = useState<GazeCalibration>("none");
 
   // --- Hydrate --------------------------------------------------------------
   // localStorage isn't readable during SSR, so the first render always uses
@@ -100,6 +132,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     );
     setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
     setGeoEnabled(loadJSON<boolean>(STORAGE_KEYS.geo, false));
+    setEyeEnabled(loadJSON<boolean>(STORAGE_KEYS.eye, false));
+    setGazeCalibration(loadJSON<GazeCalibration>(STORAGE_KEYS.eyeCalibration, "none"));
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -120,6 +154,14 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated) saveJSON(STORAGE_KEYS.geo, geoEnabled);
   }, [geoEnabled, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) saveJSON(STORAGE_KEYS.eye, eyeEnabled);
+  }, [eyeEnabled, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) saveJSON(STORAGE_KEYS.eyeCalibration, gazeCalibration);
+  }, [gazeCalibration, hydrated]);
 
   // --- Location bonus -------------------------------------------------------
   const { status: geoStatus, reading: geoReading } = useGeolocation(geoEnabled);
@@ -168,7 +210,20 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setOutcome({ session: recorded, growth });
   }, []);
 
-  const { active, start, end, cancel, elapsedMs, addBonusXp } = useFocusSession(handleComplete);
+  const { active, start, end, cancel, elapsedMs, addBonusXp, setGazeAway } =
+    useFocusSession(handleComplete);
+
+  // --- Eye tracking ---------------------------------------------------------
+  // The camera only ever runs while a session is live, and only if the user
+  // asked for it. No session, no webcam — that's the whole privacy promise.
+  const gaze = useFocusTracking(eyeEnabled && active !== null, gazeCalibration);
+
+  // Nothing counts against the session while the calibration overlay is still
+  // up — the user is clicking dots, not studying.
+  const gazeAway = gaze.wandering && gazeCalibration !== "none";
+  useEffect(() => {
+    setGazeAway(gazeAway);
+  }, [gazeAway, setGazeAway]);
 
   // --- Schedule CRUD --------------------------------------------------------
   const addBlock = useCallback(
@@ -188,6 +243,56 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         .map((b) => (b.id === id ? { ...b, ...patch } : b))
         .sort((a, b) => a.startMin - b.startMin),
     );
+  }, []);
+
+  // Import reports back how many blocks it touched, so it reads the current
+  // schedule through a ref rather than a state updater — an updater has to stay
+  // pure, and this one needs to return a count to the caller.
+  const blocksRef = useRef(blocks);
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
+
+  const importCanvasBlocks = useCallback((incoming: CanvasImportBlock[]): ImportResult => {
+    const current = blocksRef.current;
+    let added = 0;
+    let updated = 0;
+
+    const merged = [...current];
+    for (const block of incoming) {
+      // Matching on externalId is what makes re-importing safe: a changed
+      // lecture time updates the row instead of adding a second one.
+      const index = merged.findIndex(
+        (existing) => existing.source === "canvas" && existing.externalId === block.externalId,
+      );
+
+      if (index === -1) {
+        merged.push({
+          ...block,
+          id: uid(),
+          createdAt: Date.now(),
+          source: "canvas",
+        });
+        added += 1;
+        continue;
+      }
+
+      const existing = merged[index];
+      const changed =
+        existing.title !== block.title ||
+        existing.course !== block.course ||
+        existing.startMin !== block.startMin ||
+        existing.endMin !== block.endMin ||
+        existing.days.join() !== block.days.join();
+
+      if (changed) {
+        merged[index] = { ...existing, ...block };
+        updated += 1;
+      }
+    }
+
+    setBlocks(merged.sort((a, b) => a.startMin - b.startMin));
+    return { added, updated };
   }, []);
 
   const removeBlock = useCallback((id: string) => {
@@ -213,6 +318,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion(createCompanion());
     setSessions([]);
     setOutcome(null);
+    setGazeCalibration("none");
     cancel();
   }, [cancel]);
 
@@ -228,6 +334,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       addBlock,
       updateBlock,
       removeBlock,
+      importCanvasBlocks,
       companion,
       renameCompanion,
       setCompanionColor,
@@ -250,6 +357,14 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       currentZone,
       nearest,
       liveMultiplier,
+      eyeEnabled,
+      setEyeEnabled,
+      gazeStatus: gaze.status,
+      gazeWandering: gazeAway,
+      gazeEpisodes: gaze.episodes,
+      gazePoint: gaze.point,
+      gazeCalibration,
+      setGazeCalibration,
     }),
     [
       hydrated,
@@ -257,6 +372,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       addBlock,
       updateBlock,
       removeBlock,
+      importCanvasBlocks,
       companion,
       renameCompanion,
       setCompanionColor,
@@ -277,6 +393,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       currentZone,
       nearest,
       liveMultiplier,
+      eyeEnabled,
+      gaze.status,
+      gaze.episodes,
+      gaze.point,
+      gazeAway,
+      gazeCalibration,
     ],
   );
 

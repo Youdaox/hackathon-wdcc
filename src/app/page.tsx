@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { CanvasCard } from "@/components/CanvasCard";
+import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
-import { FocusPanel } from "@/components/FocusPanel";
 import { LocationCard } from "@/components/LocationCard";
 import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
@@ -11,7 +12,7 @@ import { TodaySummary } from "@/components/TodaySummary";
 import { useIncline } from "@/lib/store";
 
 export default function Dashboard() {
-  const { hydrated, active } = useIncline();
+  const { hydrated, active, eyeEnabled } = useIncline();
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
@@ -44,6 +45,7 @@ export default function Dashboard() {
           <div className="space-y-6">
             <FocusPanel />
             <SchedulePanel />
+            <CanvasCard />
           </div>
           <div className="space-y-6">
             <CompanionCard />
@@ -56,6 +58,7 @@ export default function Dashboard() {
       <Footer />
       <RecallCheck />
       <SessionSummary />
+      {eyeEnabled && active && <CameraOverlay />}
     </main>
   );
 }
@@ -67,7 +70,10 @@ function Footer() {
 
   return (
     <footer className="mt-10 flex items-center justify-between border-t border-line-soft pt-5 text-xs text-faint">
-      <span>Focus is verified with the Page Visibility API. Everything is stored locally.</span>
+      <span>
+        Focus is verified with the Page Visibility API, and with your webcam if you turn eye tracking
+        on. Everything — video included — stays on your device.
+      </span>
       <button
         onClick={() => (confirming ? resetEverything() : setConfirming(true))}
         onBlur={() => setConfirming(false)}
@@ -88,6 +94,7 @@ function LoadingState() {
       <div className="space-y-6">
         <div className="card h-72 animate-pulse" />
         <div className="card h-80 animate-pulse" />
+        <div className="card h-64 animate-pulse" />
       </div>
       <div className="space-y-6">
         <div className="card h-96 animate-pulse" />

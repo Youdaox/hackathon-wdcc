@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { GazeCalibrationOverlay } from "@/components/GazeCalibration";
 import { useIncline } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
@@ -106,7 +107,45 @@ export function FocusPanel() {
           </Button>
         </div>
       </div>
+
+      <EyeTrackingToggle />
     </section>
+  );
+}
+
+/**
+ * Opt-in for the webcam. Deliberately worded around what actually happens —
+ * the camera opens only during a session and no video leaves the device.
+ */
+function EyeTrackingToggle() {
+  const { eyeEnabled, setEyeEnabled, gazeCalibration, setGazeCalibration } = useIncline();
+
+  return (
+    <div className="mt-6 flex items-start justify-between gap-4 border-t border-line-soft pt-5">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold">Eye tracking</div>
+        <p className="mt-0.5 text-xs text-muted">
+          {eyeEnabled
+            ? "Your webcam opens when a session starts and closes when it ends. Frames are processed on your device only."
+            : "Use your webcam to notice when your eyes wander off screen."}
+        </p>
+        {eyeEnabled && gazeCalibration !== "none" && (
+          <button
+            onClick={() => setGazeCalibration("none")}
+            className="mt-1.5 text-[11px] font-semibold text-faint transition-colors hover:text-muted"
+          >
+            {gazeCalibration === "done" ? "Recalibrate" : "Calibrate for better accuracy"}
+          </button>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant={eyeEnabled ? "ghost" : "outline"}
+        onClick={() => setEyeEnabled(!eyeEnabled)}
+      >
+        {eyeEnabled ? "Turn off" : "Turn on"}
+      </Button>
+    </div>
   );
 }
 
@@ -118,8 +157,9 @@ interface LiveProps {
 }
 
 function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
-  const { currentZone } = useIncline();
+  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes } = useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const away = active.isHidden || active.isGazeAway;
   const focusRatio =
     active.focusedMs + active.distractedMs > 0
       ? active.focusedMs / (active.focusedMs + active.distractedMs)
@@ -130,31 +170,39 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   return (
     <section
       className={`card relative overflow-hidden p-8 transition-colors ${
-        active.isHidden ? "border-clay/60" : "border-moss/30"
+        away ? "border-clay/60" : "border-moss/30"
       }`}
     >
+      {/* Only asked for once, and only while the camera is actually coming up. */}
+      {gazeCalibration === "none" && (gazeStatus === "loading" || gazeStatus === "tracking") && (
+        <GazeCalibrationOverlay />
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="eyebrow">{active.course}</div>
           <h2 className="mt-2 text-2xl font-extrabold">{active.title}</h2>
         </div>
-        <span
-          className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
-            active.isHidden ? "bg-clay/15 text-clay" : "bg-moss/15 text-moss"
-          }`}
-        >
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${active.isHidden ? "bg-clay" : "animate-pulse bg-moss"}`}
-          />
-          {active.isHidden ? "Away" : "Focused"}
-        </span>
+            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              away ? "bg-clay/15 text-clay" : "bg-moss/15 text-moss"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${away ? "bg-clay" : "animate-pulse bg-moss"}`}
+            />
+            {active.isHidden ? "Away" : active.isGazeAway ? "Eyes off screen" : "Focused"}
+          </span>
+          {eyeEnabled && <GazeStatusChip status={gazeStatus} calibration={gazeCalibration} />}
+        </div>
       </div>
 
       <div className="mt-8 text-center">
         <div className="eyebrow">{remainingMs !== null ? "Time remaining" : "Elapsed"}</div>
         <div
           className={`tabular mt-1 font-mono text-[5.5rem] font-bold leading-none tracking-tight ${
-            active.isHidden ? "text-clay" : "text-ink"
+            away ? "text-clay" : "text-ink"
           }`}
         >
           {formatDuration(remainingMs ?? elapsedMs)}
@@ -193,7 +241,26 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
             {penalized} distraction{penalized === 1 ? "" : "s"} logged this session
           </p>
         )}
+        {gazeEpisodes > 0 && !active.isGazeAway && (
+          <p className="text-xs text-faint">
+            Eyes drifted {gazeEpisodes} time{gazeEpisodes === 1 ? "" : "s"}
+          </p>
+        )}
       </div>
+
+      {/* The warning. Loud on purpose — it has to land in peripheral vision,
+          because by definition the user isn't looking straight at it. */}
+      {active.isGazeAway && (
+        <div className="animate-rise mt-6 flex items-center gap-3 rounded-xl border border-clay/50 bg-clay/10 px-4 py-3">
+          <span className="text-xl">👀</span>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-clay">Eyes back on the screen</div>
+            <div className="text-xs text-muted">
+              This time is counting as distraction until you&apos;re back.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 flex items-center justify-center gap-3">
         <Button size="lg" onClick={onEnd}>
@@ -215,5 +282,114 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </div>
       )}
     </section>
+  );
+}
+
+export function CameraOverlay() {
+  const { active, eyeEnabled, gazeStatus, gazeCalibration, gazePoint, gazeWandering } = useIncline();
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  if (!eyeEnabled || !active) return null;
+
+  const statusLabel =
+    gazeStatus === "tracking"
+      ? gazeCalibration === "done"
+        ? "Tracking"
+        : "Watching"
+      : gazeStatus === "loading"
+        ? "Starting camera"
+        : gazeStatus === "denied"
+          ? "Camera blocked"
+          : gazeStatus === "unsupported"
+            ? "No camera"
+            : gazeStatus === "error"
+              ? "Camera unavailable"
+              : "Idle";
+
+  const dotStyle =
+    gazePoint && viewport.width > 0 && viewport.height > 0
+      ? {
+          left: `${Math.min(100, Math.max(0, (gazePoint.x / viewport.width) * 100))}%`,
+          top: `${Math.min(100, Math.max(0, (gazePoint.y / viewport.height) * 100))}%`,
+        }
+      : undefined;
+
+  const statusTone = gazeWandering ? "bg-clay" : gazeStatus === "tracking" ? "bg-moss" : "bg-citrus";
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-4 z-50 w-57.5 rounded-2xl border border-white/10 bg-slate-950/75 p-3 shadow-lg backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-faint">
+            Camera
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-ink">{statusLabel}</div>
+        </div>
+        <span className={`h-2.5 w-2.5 rounded-full ${statusTone}`} />
+      </div>
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2">
+        <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-surface-2/90">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_55%)]" />
+          <div className="absolute inset-0 border border-white/10" />
+          {gazePoint && dotStyle ? (
+            <span
+              className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-citrus shadow-[0_0_0_4px_rgba(255,203,70,0.18)]"
+              style={dotStyle}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-center text-[11px] text-faint">
+              {gazeStatus === "loading" ? "Starting camera…" : "Waiting for gaze data"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-2 text-[11px] text-faint">
+        {gazePoint
+          ? `Eye location: ${Math.round(gazePoint.x)}, ${Math.round(gazePoint.y)}`
+          : gazeWandering
+            ? "Eyes are drifting off screen"
+            : "Your current eye position will appear here"}
+      </div>
+    </div>
+  );
+}
+
+/** Small, quiet line about what the camera is doing. Never blocks anything. */
+function GazeStatusChip({
+  status,
+  calibration,
+}: {
+  status: ReturnType<typeof useIncline>["gazeStatus"];
+  calibration: ReturnType<typeof useIncline>["gazeCalibration"];
+}) {
+  const LABELS: Record<typeof status, string | null> = {
+    off: null,
+    loading: "Starting camera…",
+    tracking: calibration === "done" ? "Eye tracking on" : "Watching for you to look away",
+    denied: "Camera blocked",
+    unsupported: "No camera",
+    error: "Camera unavailable",
+  };
+
+  const label = LABELS[status];
+  if (!label) return null;
+
+  const warn = status === "denied" || status === "error" || status === "unsupported";
+  return (
+    <span className={`text-[11px] font-semibold ${warn ? "text-amber" : "text-faint"}`}>
+      {label}
+    </span>
   );
 }

@@ -8,6 +8,8 @@ export const STORAGE_KEYS = {
   companion: "incline.companion.v1",
   sessions: "incline.sessions.v1",
   geo: "incline.geo.v1",
+  eye: "incline.eye.v1",
+  eyeCalibration: "incline.eyeCalibration.v1",
 } as const;
 
 export function loadJSON<T>(key: string, fallback: T): T {

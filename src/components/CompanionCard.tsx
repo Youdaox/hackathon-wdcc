@@ -33,7 +33,7 @@ export function CompanionCard() {
   const [editing, setEditing] = useState(false);
   const mood = moodFor(companion.hp);
   const progress = levelProgress(companion);
-  const distracted = Boolean(active?.isHidden);
+  const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">

@@ -27,6 +27,7 @@ export function SessionSummary() {
   const total = session.focusedMs + session.distractedMs;
   const focusPct = total > 0 ? Math.round((session.focusedMs / total) * 100) : 0;
   const penalized = session.distractions.filter((d) => d.penalized).length;
+  const gazeDrifts = session.distractions.filter((d) => d.reason === "gaze").length;
 
   return (
     <div
@@ -83,6 +84,13 @@ export function SessionSummary() {
             }`}
             accent={session.hpDelta < 0 ? "text-clay" : "text-moss"}
           />
+          {gazeDrifts > 0 && (
+            <Row
+              label="Eyes wandered"
+              value={`${gazeDrifts} time${gazeDrifts === 1 ? "" : "s"}`}
+              accent="text-amber"
+            />
+          )}
           {session.bonusXp > 0 && (
             <Row
               label="Recall check"
