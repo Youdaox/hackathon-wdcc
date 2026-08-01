@@ -15,6 +15,13 @@
       "when": 1785561132514,
       "tag": "0001_sticky_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785570000000,
+      "tag": "0002_local_accounts",
+      "breakpoints": true
     }
   ]
 }

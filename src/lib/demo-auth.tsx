@@ -1,57 +1,71 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-export type DemoUser = { id: string; name: string; initials: string };
+export type DemoUser = { id: string; username: string; name: string; initials: string };
 
+/** Familiar local people remain available as community recipients. */
 export const DEMO_USERS: DemoUser[] = [
-  { id: "user-1", name: "Alice", initials: "AL" },
-  { id: "user-2", name: "Bob", initials: "BO" },
-  { id: "user-3", name: "Charlie", initials: "CH" },
-  { id: "user-4", name: "Diana", initials: "DI" },
-  { id: "user-5", name: "Ethan", initials: "ET" },
+  { id: "user-1", username: "alice", name: "Alice", initials: "AL" },
+  { id: "user-2", username: "bob", name: "Bob", initials: "BO" },
+  { id: "user-3", username: "charlie", name: "Charlie", initials: "CH" },
+  { id: "user-4", username: "diana", name: "Diana", initials: "DI" },
+  { id: "user-5", username: "ethan", name: "Ethan", initials: "ET" },
 ];
-
-const STORAGE_KEY = "incline.demo-user.v1";
-const CHANGE_EVENT = "incline-demo-auth-change";
 
 interface DemoAuthValue {
   currentUser: DemoUser | null;
-  login: (userId: string) => void;
-  logout: () => void;
+  ready: boolean;
+  login: (username: string, password: string) => Promise<string | null>;
+  register: (username: string, password: string) => Promise<string | null>;
+  logout: () => Promise<void>;
 }
 
 const DemoAuthContext = createContext<DemoAuthValue | null>(null);
 
-function getSnapshot() {
-  try { return window.sessionStorage.getItem(STORAGE_KEY); } catch { return null; }
-}
-
-function subscribe(callback: () => void) {
-  window.addEventListener("storage", callback);
-  window.addEventListener(CHANGE_EVENT, callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(CHANGE_EVENT, callback);
-  };
+async function authRequest(path: string, body?: Record<string, string>) {
+  const response = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({})) as { user?: DemoUser | null; error?: string };
+  if (!response.ok) throw new Error(payload.error ?? "Unable to complete that request.");
+  return payload;
 }
 
 export function DemoAuthProvider({ children }: { children: ReactNode }) {
-  const userId = useSyncExternalStore(subscribe, getSnapshot, () => null);
-  const currentUser = DEMO_USERS.find((user) => user.id === userId) ?? null;
+  const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
+  const [ready, setReady] = useState(false);
 
-  function login(nextUserId: string) {
-    if (!DEMO_USERS.some((user) => user.id === nextUserId)) return;
-    window.sessionStorage.setItem(STORAGE_KEY, nextUserId);
-    window.dispatchEvent(new Event(CHANGE_EVENT));
-  }
+  useEffect(() => {
+    let active = true;
+    void authRequest("/api/auth/session")
+      .then((payload) => { if (active) setCurrentUser(payload.user ?? null); })
+      .catch(() => { if (active) setCurrentUser(null); })
+      .finally(() => { if (active) setReady(true); });
+    return () => { active = false; };
+  }, []);
 
-  function logout() {
-    window.sessionStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new Event(CHANGE_EVENT));
-  }
+  const authenticate = useCallback(async (path: string, username: string, password: string) => {
+    try {
+      const payload = await authRequest(path, { username, password });
+      setCurrentUser(payload.user ?? null);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Unable to sign in.";
+    }
+  }, []);
 
-  return <DemoAuthContext.Provider value={{ currentUser, login, logout }}>{children}</DemoAuthContext.Provider>;
+  const login = useCallback((username: string, password: string) => authenticate("/api/auth/login", username, password), [authenticate]);
+  const register = useCallback((username: string, password: string) => authenticate("/api/auth/register", username, password), [authenticate]);
+  const logout = useCallback(async () => {
+    await authRequest("/api/auth/logout", {});
+    setCurrentUser(null);
+  }, []);
+
+  const value = useMemo(() => ({ currentUser, ready, login, register, logout }), [currentUser, ready, login, register, logout]);
+  return <DemoAuthContext.Provider value={value}>{children}</DemoAuthContext.Provider>;
 }
 
 export function useDemoAuth() {

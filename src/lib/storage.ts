@@ -43,6 +43,11 @@ export function clearAll(): void {
   }
 }
 
+/** Keeps browser-only data separate when people switch accounts on one device. */
+export function forUser(key: string, userId: string): string {
+  return `${key}.${userId}`;
+}
+
 /** crypto.randomUUID with a fallback for non-secure contexts. */
 export function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

@@ -20,8 +20,24 @@ import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core
  */
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+/** Server-side sessions: only a hash of the browser cookie token is stored. */
+export const authSessions = sqliteTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("auth_sessions_user_idx").on(table.userId)],
+);
 
 /**
  * One companion per user. Mirrors the `Companion` interface field-for-field so

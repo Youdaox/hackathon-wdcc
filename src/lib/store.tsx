@@ -20,7 +20,8 @@ import {
   type PigColor,
   type StudyBlock,
 } from "./types";
-import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
+import { STORAGE_KEYS, clearAll, forUser, loadJSON, saveJSON, uid } from "./storage";
+import { useDemoAuth } from "./demo-auth";
 import {
   applyIdleDecay,
   applySession,
@@ -29,7 +30,7 @@ import {
   hpLostForAwayMs,
   type GrowthResult,
 } from "./companion";
-import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
+import { LIVE_SESSION_KEY, liveSessionKeyForUser, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
 import {
   useFocusTracking,
@@ -116,7 +117,9 @@ interface InclineContextValue {
 const InclineContext = createContext<InclineContextValue | null>(null);
 
 export function InclineProvider({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useDemoAuth();
   const [hydrated, setHydrated] = useState(false);
+  const [hydratedUserId, setHydratedUserId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<StudyBlock[]>([]);
   const [companion, setCompanion] = useState<Companion>(() => createCompanion());
   const [sessions, setSessions] = useState<FocusSession[]>([]);
@@ -133,8 +136,19 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   // defaults and this mount-once effect swaps in the saved state.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    setBlocks(loadJSON<StudyBlock[]>(STORAGE_KEYS.schedule, []));
-    const loadedCompanion = loadJSON<Companion>(STORAGE_KEYS.companion, createCompanion());
+    if (!currentUser) {
+      setHydrated(false);
+      setHydratedUserId(null);
+      setBlocks([]);
+      setCompanion(createCompanion());
+      setSessions([]);
+      return;
+    }
+    const userKey = (key: string) => forUser(key, currentUser.id);
+    setHydrated(false);
+    setHydratedUserId(null);
+    setBlocks(loadJSON<StudyBlock[]>(userKey(STORAGE_KEYS.schedule), []));
+    const loadedCompanion = loadJSON<Companion>(userKey(STORAGE_KEYS.companion), createCompanion());
     // Older saves predate coat/accessory customization, or may carry a coat
     // color that's since been retired (grey/brown) — fall back to defaults.
     setCompanion(
@@ -153,38 +167,39 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
       }),
     );
-    setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
-    setGeoEnabled(loadJSON<boolean>(STORAGE_KEYS.geo, false));
-    setEyeEnabled(loadJSON<boolean>(STORAGE_KEYS.eye, false));
-    setGazeCalibration(loadJSON<GazeCalibration>(STORAGE_KEYS.eyeCalibration, "none"));
+    setSessions(loadJSON<FocusSession[]>(userKey(STORAGE_KEYS.sessions), []));
+    setGeoEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.geo), false));
+    setEyeEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.eye), false));
+    setGazeCalibration(loadJSON<GazeCalibration>(userKey(STORAGE_KEYS.eyeCalibration), "none"));
     setHydrated(true);
-  }, []);
+    setHydratedUserId(currentUser.id);
+  }, [currentUser]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // --- Persist (skipped until hydrated so we don't clobber saved data) ------
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.schedule, blocks);
-  }, [blocks, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.schedule, currentUser.id), blocks);
+  }, [blocks, currentUser, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.companion, companion);
-  }, [companion, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.companion, currentUser.id), companion);
+  }, [companion, currentUser, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.sessions, sessions);
-  }, [sessions, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.sessions, currentUser.id), sessions);
+  }, [sessions, currentUser, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.geo, geoEnabled);
-  }, [geoEnabled, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.geo, currentUser.id), geoEnabled);
+  }, [currentUser, geoEnabled, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.eye, eyeEnabled);
-  }, [eyeEnabled, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.eye, currentUser.id), eyeEnabled);
+  }, [currentUser, eyeEnabled, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.eyeCalibration, gazeCalibration);
-  }, [gazeCalibration, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.eyeCalibration, currentUser.id), gazeCalibration);
+  }, [currentUser, gazeCalibration, hydrated, hydratedUserId]);
 
   // --- Location bonus -------------------------------------------------------
   const { status: geoStatus, reading: geoReading } = useGeolocation(geoEnabled);
@@ -252,8 +267,9 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setOutcome({ session: recorded, growth });
   }, []);
 
+  const liveSessionKey = currentUser ? liveSessionKeyForUser(currentUser.id) : LIVE_SESSION_KEY;
   const { active, start, end, cancel, elapsedMs, addBonusXp, setGazeAway } =
-    useFocusSession(handleComplete);
+    useFocusSession(handleComplete, liveSessionKey);
 
   // --- Live decay -----------------------------------------------------------
   // The pet loses health *while* you're away rather than being docked once the
@@ -424,8 +440,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetEverything = useCallback(() => {
-    clearAll();
-    window.localStorage.removeItem(LIVE_SESSION_KEY);
+    if (currentUser) {
+      for (const key of Object.values(STORAGE_KEYS)) {
+        window.localStorage.removeItem(forUser(key, currentUser.id));
+      }
+    } else clearAll();
+    window.localStorage.removeItem(liveSessionKey);
     setBlocks([]);
     setCompanion(createCompanion());
     setSessions([]);
@@ -435,7 +455,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     // last fraction of a second against the brand-new companion.
     hpAnchor.current = null;
     cancel();
-  }, [cancel]);
+  }, [cancel, currentUser, liveSessionKey]);
 
   const todaysSessions = useMemo(() => {
     const dayStart = startOfDay();
