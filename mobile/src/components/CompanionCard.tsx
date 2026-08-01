@@ -1,55 +1,28 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { Companion } from "../api";
-import { MOOD_LABEL, colors, faceFor, moodColor } from "../theme";
+import { colors, roundedFont } from "../theme";
+import { Sprout } from "./Sprout";
 
-/**
- * The pet. Everything shown here comes from the server — the app never
- * computes growth locally, so three devices can't disagree about one creature.
- */
 export function CompanionCard({ companion }: { companion: Companion | null }) {
-  if (!companion) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.loading}>Reaching your companion…</Text>
-      </View>
-    );
-  }
-
-  const xpPct = Math.min(100, (companion.xp / Math.max(1, companion.xp_needed)) * 100);
+  const name = companion?.name ?? "Fern";
+  const stage = companion ? Math.min(3, Math.max(1, Math.ceil(companion.level / 3))) as 1 | 2 | 3 : 2;
+  const happy = companion?.mood !== "sad" && companion?.mood !== "sick";
 
   return (
     <View style={styles.card}>
-      <View style={styles.row}>
-        <Text style={styles.face}>{faceFor(companion.mood, companion.level)}</Text>
-        <View style={styles.info}>
-          <Text style={styles.name}>{companion.name}</Text>
-          <Text style={[styles.mood, { color: moodColor(companion.mood) }]}>
-            Level {companion.level} · {MOOD_LABEL[companion.mood]}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.meterRow}>
-        <Text style={styles.meterLabel}>XP</Text>
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${xpPct}%`, backgroundColor: colors.accent }]} />
-        </View>
-        <Text style={styles.meterValue}>
-          {companion.xp}/{companion.xp_needed}
-        </Text>
-      </View>
-
-      <View style={styles.meterRow}>
-        <Text style={styles.meterLabel}>HP</Text>
-        <View style={styles.track}>
-          <View
-            style={[
-              styles.fill,
-              { width: `${companion.hp}%`, backgroundColor: moodColor(companion.mood) },
-            ]}
-          />
-        </View>
-        <Text style={styles.meterValue}>{companion.hp}</Text>
+      <Text style={styles.stage}>{companion ? companion.species.toUpperCase() : "SAPLING"}</Text>
+      <Sprout size={132} stage={stage} happy={happy} bubbles />
+      <Text style={styles.name}>{name}</Text>
+      <Text style={styles.message}>
+        {companion
+          ? `${name} is glowing after today's sessions. Keep it up.`
+          : "Reaching your companion…"}
+      </Text>
+      <View style={styles.palette}>
+        <View style={[styles.swatch, styles.selected, { backgroundColor: "#64b47c" }]} />
+        <View style={[styles.swatch, { backgroundColor: "#8bcb9c" }]} />
+        <View style={[styles.swatch, { backgroundColor: "#96a59f" }]} />
+        <View style={[styles.swatch, { backgroundColor: "#b8c2be" }]} />
       </View>
     </View>
   );
@@ -57,28 +30,41 @@ export function CompanionCard({ companion }: { companion: Companion | null }) {
 
 const styles = StyleSheet.create({
   card: {
+    minHeight: 344,
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 18,
-    gap: 14,
+    paddingHorizontal: 28,
+    paddingTop: 28,
+    paddingBottom: 22,
+    alignItems: "center",
   },
-  loading: { color: colors.muted, fontSize: 15 },
-  row: { flexDirection: "row", alignItems: "center", gap: 14 },
-  face: { fontSize: 52 },
-  info: { flex: 1, gap: 2 },
-  name: { color: colors.text, fontSize: 22, fontWeight: "600" },
-  mood: { fontSize: 14, fontWeight: "500" },
-  meterRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  meterLabel: { color: colors.muted, fontSize: 12, width: 22, fontWeight: "600" },
-  track: {
-    flex: 1,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.surfaceAlt,
-    overflow: "hidden",
+  stage: {
+    color: colors.muted,
+    fontFamily: roundedFont,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    marginBottom: 6,
   },
-  fill: { height: "100%", borderRadius: 4 },
-  meterValue: { color: colors.muted, fontSize: 12, width: 54, textAlign: "right" },
+  name: {
+    color: colors.text,
+    fontFamily: roundedFont,
+    fontSize: 23,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+  message: {
+    color: colors.muted,
+    fontFamily: roundedFont,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    maxWidth: 310,
+    marginTop: 12,
+  },
+  palette: { flexDirection: "row", gap: 10, marginTop: 18 },
+  swatch: { width: 22, height: 22, borderRadius: 11 },
+  selected: { borderWidth: 2, borderColor: colors.text },
 });

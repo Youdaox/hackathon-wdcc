@@ -156,6 +156,34 @@ src/components/   FocusPanel, SchedulePanel, CanvasCard, CompanionCard, TodaySum
                   LocationCard, RecallCheck, SessionSummary
 ```
 
+<<<<<<< HEAD
+## Social leaderboard API
+
+The backend exposes an encouragement economy and UTC weekly/monthly leaderboards:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/encouragements` | Read the authenticated user's encouragement inbox. |
+| `POST` | `/api/encouragements` | Send one generated heartwarming message to `recipientId`. |
+| `GET` | `/api/encouragements/balance` | Read today's base, earned, used, and available sends. |
+| `POST` | `/api/tasks/complete` | Reward a unique `taskId` with an extra daily send and ranking points. |
+| `GET` | `/api/leaderboards?period=week` | Read the weekly or monthly ranking (`limit` is optional). |
+| `GET`, `PUT` | `/api/leaderboards/rules` | Read rules or replace them as an administrator. |
+
+Until the project has authentication, authenticated endpoints use `x-user-id` and optional
+`x-user-name` request headers. Rule updates require `Authorization: Bearer <secret>`, where the
+secret is configured as `LEADERBOARD_ADMIN_SECRET`.
+
+The daily allowance is derived from the UTC date, so it resets without a scheduled job. A sender
+can encourage a recipient only once per UTC day. Task rewards are idempotent by `(userId, taskId)`.
+Weekly rankings start on Monday; monthly rankings start on the first day of the month. Ties are
+resolved by encouragements received, then display name.
+
+Data currently uses the `LeaderboardRepository` interface with a process-memory adapter for local
+demo use. Before production deployment, replace it with a transactional database adapter and add
+unique constraints for `(senderId, recipientId, dayKey)` and `(userId, taskId)`. Serverless
+instances do not share process memory.
+=======
 ## Canvas GraphQL backend
 
 `POST /api/graphql` is a GraphQL layer over the **Canvas LMS API**. Open `http://localhost:3000/api/graphql` in a browser for GraphiQL (dev only).
@@ -198,6 +226,7 @@ Also available: `self`, `course(id:)`, `assignments(bucket:, limit:)` across all
 With no credentials at all it serves [fixtures](src/lib/canvas/mock.ts) — three real-looking UoA courses, a full weekly timetable, assignments and submissions — so the API is fully explorable with no Canvas account, and the demo can't be broken by a campus SSO outage. Fixture dates are generated relative to the current week, so "upcoming" work stays upcoming. `{ dataSource }` reports which backend answered.
 
 Both paths go through the same [`CanvasSource`](src/lib/canvas/source.ts) interface, so the resolvers never branch on which one they got. Tokens are read off the request, used for that request, and never stored or sent to the browser. Canvas errors (401/403/404) pass through with their status under `extensions.code: CANVAS_API_ERROR` rather than being masked, since the caller can act on them.
+>>>>>>> ccb13dd2e84cbb7794356c6e640c08585f52b649
 
 ## Not built yet
 
