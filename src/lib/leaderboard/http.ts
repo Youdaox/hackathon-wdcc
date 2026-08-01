@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { DomainError } from "./service";
+import { sessionFromRequest } from "@/lib/auth";
 
 export function identity(request: Request) {
-  const userId = request.headers.get("x-user-id")?.trim();
-  if (!userId || userId.length > 100) {
-    throw new DomainError("UNAUTHENTICATED", "A valid x-user-id header is required.", 401);
+  const user = sessionFromRequest(request);
+  if (!user) {
+    throw new DomainError("UNAUTHENTICATED", "Please log in to continue.", 401);
   }
-  const displayName = request.headers.get("x-user-name")?.trim().slice(0, 80);
-  return { userId, displayName };
+  return { userId: user.id, displayName: user.name };
 }
 
 export function errorResponse(error: unknown) {

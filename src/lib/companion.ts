@@ -1,4 +1,4 @@
-import type { ActiveSession, Companion, Mood } from "./types";
+import type { ActiveSession, AvatarEmotion, Companion, Mood, PigColor } from "./types";
 import { uid } from "./storage";
 
 /**
@@ -10,24 +10,50 @@ export const RULES = {
   xpPerFocusedMinute: 1,
   /** XP needed to clear level N. Grows linearly: L1 = 30, L2 = 60, … */
   xpForLevel: (level: number) => 30 * level,
-  /** HP lost per penalized distraction event. */
-  hpPerDistraction: 8,
+  /**
+   * HP lost per minute spent away, past the grace window.
+   *
+   * Time-based rather than a flat charge per distraction, so the cost tracks
+   * how long you were actually gone: a two-second glance and a ten-minute
+   * disappearance used to cost an identical 8 HP, which made the pet's health
+   * a count of interruptions rather than a measure of neglect. It also means
+   * the damage can be shown accruing live, because there is a rate to animate
+   * instead of a lump sum that only exists once the session is over.
+   *
+   * Calibrated so ~2 minutes away costs what a single distraction used to.
+   */
+  hpPerAwayMinute: 4,
   /** HP regained per focused minute. */
   hpPerFocusedMinute: 0.5,
-  /** Hidden stretches shorter than this cost focus time but not HP. */
+  /** The first stretch of any absence is free — see `awayMsPastGrace`. */
   graceMs: 5_000,
+  /**
+   * Floor on what a penalized absence costs, regardless of how brief.
+   *
+   * Grace already excuses short lapses by leaving them unpenalized, so the only
+   * absences that are penalized *and* shorter than the grace window are mobile
+   * bypasses — where the user saw the block screen and pushed through anyway.
+   * `contract.ts` treats that as the clearest signal of a broken session, and a
+   * purely duration-proportional charge would let it cost nothing at all.
+   */
+  minPenaltyMs: 15_000,
   /** HP lost per full day with no completed session. */
   hpDecayPerIdleDay: 6,
   maxHp: 100,
 } as const;
 
-export function createCompanion(name = "Pip"): Companion {
+export function createCompanion(name = "Oinky", color: PigColor = "pink"): Companion {
   return {
     name,
-    species: "sprout",
+    species: "pig",
+    color,
+    accessory: "none",
+    checkInEmotion: null,
+    checkInAt: null,
+    nextCheckInAt: null,
     level: 1,
     xp: 0,
-    hp: RULES.maxHp,
+    hp: 100,
     totalFocusedMs: 0,
     lastSessionAt: null,
     createdAt: Date.now(),
@@ -41,21 +67,58 @@ export function moodFor(hp: number): Mood {
   return "sick";
 }
 
-/** Emoji stand-in for real art — cheap to swap for an SVG later. */
-export function faceFor(mood: Mood, level: number): string {
-  if (mood === "sick") return "🥀";
-  if (mood === "sad") return "🌱";
-  if (level >= 8) return mood === "happy" ? "🌳" : "🪴";
-  if (level >= 4) return mood === "happy" ? "🪴" : "🌿";
-  return mood === "happy" ? "🌿" : "🌱";
+/** Low health takes priority; otherwise, show the feeling from the latest check-in. */
+export function avatarStateFor(hp: number, emotion: AvatarEmotion | null): string {
+  if (hp < 25) return "needs-care";
+  if (hp < 50) return "needs-energy";
+  return emotion ?? moodFor(hp);
 }
 
 export const MOOD_LABEL: Record<Mood, string> = {
-  happy: "Thriving",
-  neutral: "Steady",
-  sad: "Wilting",
-  sick: "Struggling",
+  happy: "Healthy",
+  neutral: "Content",
+  sad: "Hungry",
+  sick: "Sick",
 };
+
+/**
+ * The chargeable part of one away stretch: everything past the grace window.
+ *
+ * Grace is subtracted rather than used as an on/off switch so the cost is
+ * continuous at the boundary. A flat "penalized" flag makes 4.9s free and 5.1s
+ * cost the full amount, which is both unfair and impossible to animate — this
+ * way an absence starts costing nothing and ramps from zero.
+ */
+export function awayMsPastGrace(durationMs: number): number {
+  return Math.max(0, durationMs - RULES.graceMs);
+}
+
+/** HP drained by a given amount of chargeable away time. */
+export function hpLostForAwayMs(awayMs: number): number {
+  return (awayMs / 60_000) * RULES.hpPerAwayMinute;
+}
+
+/**
+ * Total HP a finished session's absences cost.
+ *
+ * Kept as a pure function of the recorded distractions so the server can
+ * recompute exactly what the client showed accruing live — the live decay is a
+ * preview of this number, never a separate source of truth.
+ */
+export function hpLostForSession(distractions: ReadonlyArray<{
+  durationMs: number;
+  penalized: boolean;
+}>): number {
+  return distractions.filter((d) => d.penalized).reduce((total, d) => {
+    const past = awayMsPastGrace(d.durationMs);
+    // The floor applies only where proportional charging would come to nothing,
+    // i.e. an event penalized despite being inside the grace window. On the web
+    // that never happens — penalized and past-grace are the same condition there
+    // — which is what keeps the live decay converging exactly on this total
+    // rather than jumping at the end of every session.
+    return total + hpLostForAwayMs(past > 0 ? past : RULES.minPenaltyMs);
+  }, 0);
+}
 
 /** XP earned by a session's focused time, before any multiplier. */
 export function xpFromFocusedMs(focusedMs: number): number {
@@ -98,8 +161,7 @@ export function applySession(
   const xpEarned =
     Math.floor(xpFromFocusedMs(session.focusedMs) * xpMultiplier) + (session.bonusXp ?? 0);
 
-  const penalties = session.distractions.filter((d) => d.penalized).length;
-  const hpLost = penalties * RULES.hpPerDistraction;
+  const hpLost = hpLostForSession(session.distractions);
   const hpGained = focusedMinutes * RULES.hpPerFocusedMinute;
   const nextHp = clampHp(companion.hp - hpLost + hpGained);
 

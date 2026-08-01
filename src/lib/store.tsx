@@ -9,12 +9,34 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Companion, FocusSession, StudyBlock } from "./types";
-import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
-import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from "./companion";
-import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
+import {
+  PIG_COLOR_VALUES,
+  PIG_ACCESSORY_VALUES,
+  AVATAR_EMOTIONS,
+  type AvatarEmotion,
+  type Companion,
+  type FocusSession,
+  type PigAccessory,
+  type PigColor,
+  type StudyBlock,
+} from "./types";
+import { STORAGE_KEYS, clearAll, forUser, loadJSON, saveJSON, uid } from "./storage";
+import { useDemoAuth } from "./demo-auth";
+import {
+  applyIdleDecay,
+  applySession,
+  awayMsPastGrace,
+  createCompanion,
+  hpLostForAwayMs,
+  type GrowthResult,
+} from "./companion";
+import { LIVE_SESSION_KEY, liveSessionKeyForUser, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
-import { useFocusTracking, type GazeStatus } from "@/hooks/useFocusTracking";
+import {
+  useFocusTracking,
+  type GazeAwayReason,
+  type GazeStatus,
+} from "@/hooks/useFocusTracking";
 import type { GazePrediction } from "webgazer";
 import type { GazeCalibration } from "./gaze";
 import { activeZone, nearestZone, type BonusZone, type ZoneMatch } from "./zones";
@@ -47,6 +69,9 @@ interface InclineContextValue {
   importCanvasBlocks: (incoming: CanvasImportBlock[]) => ImportResult;
   companion: Companion;
   renameCompanion: (name: string) => void;
+  setCompanionColor: (color: PigColor) => void;
+  setCompanionAccessory: (accessory: PigAccessory) => void;
+  checkInWithCompanion: (emotion: AvatarEmotion) => void;
   sessions: FocusSession[];
   todaysSessions: FocusSession[];
   active: ReturnType<typeof useFocusSession>["active"];
@@ -82,6 +107,8 @@ interface InclineContextValue {
   gazeEpisodes: number;
   /** Latest gaze prediction in viewport coordinates. */
   gazePoint: GazePrediction | null;
+  /** Live, undebounced reason the user reads as away — for describing, not scoring. */
+  gazeReason: GazeAwayReason | null;
   /** How far the user got through the calibration dots. */
   gazeCalibration: GazeCalibration;
   setGazeCalibration: (state: GazeCalibration) => void;
@@ -89,8 +116,19 @@ interface InclineContextValue {
 
 const InclineContext = createContext<InclineContextValue | null>(null);
 
+function hasAvatarCustomization(companion: Companion) {
+  return companion.name !== "Oinky"
+    || companion.color !== "pink"
+    || companion.accessory !== "none"
+    || companion.checkInEmotion !== null;
+}
+
 export function InclineProvider({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useDemoAuth();
   const [hydrated, setHydrated] = useState(false);
+  const [hydratedUserId, setHydratedUserId] = useState<string | null>(null);
+  /** Prevents a local cache from overwriting the shared profile before it loads. */
+  const [profileLoadedForUser, setProfileLoadedForUser] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<StudyBlock[]>([]);
   const [companion, setCompanion] = useState<Companion>(() => createCompanion());
   const [sessions, setSessions] = useState<FocusSession[]>([]);
@@ -107,40 +145,113 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   // defaults and this mount-once effect swaps in the saved state.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    setBlocks(loadJSON<StudyBlock[]>(STORAGE_KEYS.schedule, []));
-    setCompanion(applyIdleDecay(loadJSON<Companion>(STORAGE_KEYS.companion, createCompanion())));
-    setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
-    setGeoEnabled(loadJSON<boolean>(STORAGE_KEYS.geo, false));
-    setEyeEnabled(loadJSON<boolean>(STORAGE_KEYS.eye, false));
-    setGazeCalibration(loadJSON<GazeCalibration>(STORAGE_KEYS.eyeCalibration, "none"));
+    if (!currentUser) {
+      setHydrated(false);
+      setHydratedUserId(null);
+      setProfileLoadedForUser(null);
+      setBlocks([]);
+      setCompanion(createCompanion());
+      setSessions([]);
+      return;
+    }
+    const userKey = (key: string) => forUser(key, currentUser.id);
+    setHydrated(false);
+    setHydratedUserId(null);
+    setProfileLoadedForUser(null);
+    setBlocks(loadJSON<StudyBlock[]>(userKey(STORAGE_KEYS.schedule), []));
+    const loadedCompanion = loadJSON<Companion>(userKey(STORAGE_KEYS.companion), createCompanion());
+    // Older saves predate coat/accessory customization, or may carry a coat
+    // color that's since been retired (grey/brown) — fall back to defaults.
+    const localCompanion = applyIdleDecay({
+      ...loadedCompanion,
+      color: PIG_COLOR_VALUES.includes(loadedCompanion.color) ? loadedCompanion.color : "pink",
+      accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
+        ? loadedCompanion.accessory
+        : "none",
+      checkInEmotion: loadedCompanion.checkInEmotion !== null
+        && AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
+        ? loadedCompanion.checkInEmotion
+        : null,
+      checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
+      nextCheckInAt:
+        typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
+    });
+    setCompanion(localCompanion);
+    setSessions(loadJSON<FocusSession[]>(userKey(STORAGE_KEYS.sessions), []));
+    setGeoEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.geo), false));
+    setEyeEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.eye), false));
+    setGazeCalibration(loadJSON<GazeCalibration>(userKey(STORAGE_KEYS.eyeCalibration), "none"));
     setHydrated(true);
-  }, []);
+    setHydratedUserId(currentUser.id);
+    let active = true;
+    void fetch("/api/profile/companion")
+      .then((response) => response.ok ? response.json() as Promise<{ companion: Companion }> : null)
+      .then((payload) => {
+        if (!active || !payload) return;
+        // Focus/schedule data remains local today; only profile fields are
+        // shared so loading a popup cannot replace an in-progress web profile.
+        const sharedProfile = hasAvatarCustomization(payload.companion) || !hasAvatarCustomization(localCompanion)
+          ? {
+              ...localCompanion,
+              name: payload.companion.name,
+              color: payload.companion.color,
+              accessory: payload.companion.accessory,
+              checkInEmotion: payload.companion.checkInEmotion,
+              checkInAt: payload.companion.checkInAt,
+              nextCheckInAt: payload.companion.nextCheckInAt,
+            }
+          : localCompanion;
+        setCompanion(sharedProfile);
+        setProfileLoadedForUser(currentUser.id);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [currentUser]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // --- Persist (skipped until hydrated so we don't clobber saved data) ------
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.schedule, blocks);
-  }, [blocks, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.schedule, currentUser.id), blocks);
+  }, [blocks, currentUser, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.companion, companion);
-  }, [companion, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.companion, currentUser.id), companion);
+  }, [companion, currentUser, hydrated, hydratedUserId]);
+
+  // The database profile is shared by the browser, Electron dashboard, and
+  // its popup/overlay windows. Only avatar preferences belong here; focus
+  // sessions remain account-local until they have a dedicated sync flow.
+  useEffect(() => {
+    if (!currentUser || profileLoadedForUser !== currentUser.id) return;
+    void fetch("/api/profile/companion", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: companion.name,
+        color: companion.color,
+        accessory: companion.accessory,
+        checkInEmotion: companion.checkInEmotion,
+        checkInAt: companion.checkInAt,
+        nextCheckInAt: companion.nextCheckInAt,
+      }),
+    }).catch(() => undefined);
+  }, [companion, currentUser, profileLoadedForUser]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.sessions, sessions);
-  }, [sessions, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.sessions, currentUser.id), sessions);
+  }, [sessions, currentUser, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.geo, geoEnabled);
-  }, [geoEnabled, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.geo, currentUser.id), geoEnabled);
+  }, [currentUser, geoEnabled, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.eye, eyeEnabled);
-  }, [eyeEnabled, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.eye, currentUser.id), eyeEnabled);
+  }, [currentUser, eyeEnabled, hydrated, hydratedUserId]);
 
   useEffect(() => {
-    if (hydrated) saveJSON(STORAGE_KEYS.eyeCalibration, gazeCalibration);
-  }, [gazeCalibration, hydrated]);
+    if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.eyeCalibration, currentUser.id), gazeCalibration);
+  }, [currentUser, gazeCalibration, hydrated, hydratedUserId]);
 
   // --- Location bonus -------------------------------------------------------
   const { status: geoStatus, reading: geoReading } = useGeolocation(geoEnabled);
@@ -171,6 +282,19 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     zoneRef.current = currentZone;
   }, [currentZone]);
 
+  /**
+   * The companion's HP when the running session began, before any live decay.
+   *
+   * Live decay is a *preview* of what the session will cost, not a second
+   * source of truth — so when the session lands we rewind to this anchor and
+   * let `applySession` compute the real figure, exactly as the server does from
+   * the same recorded distractions. Without the rewind the finished session's
+   * cost would be charged twice: once as it accrued, once at the end.
+   */
+  const hpAnchor = useRef<number | null>(null);
+  /** HP already drained during the current away stretch. */
+  const drainedThisStretch = useRef(0);
+
   const handleComplete = useCallback((finished: FocusSession) => {
     const zone = zoneRef.current;
     const withBonus: FocusSession = {
@@ -178,7 +302,13 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       xpMultiplier: zone?.multiplier ?? 1,
       zoneName: zone?.name,
     };
-    const growth = applySession(companionRef.current, withBonus, withBonus.xpMultiplier);
+    // Cleared first: this also stops the drain loop from banking one last
+    // partial second on top of the authoritative result as it tears down.
+    const anchor = hpAnchor.current;
+    hpAnchor.current = null;
+    const base =
+      anchor === null ? companionRef.current : { ...companionRef.current, hp: anchor };
+    const growth = applySession(base, withBonus, withBonus.xpMultiplier);
     const recorded: FocusSession = {
       ...withBonus,
       xpEarned: growth.xpEarned,
@@ -189,8 +319,67 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setOutcome({ session: recorded, growth });
   }, []);
 
+  const liveSessionKey = currentUser ? liveSessionKeyForUser(currentUser.id) : LIVE_SESSION_KEY;
   const { active, start, end, cancel, elapsedMs, addBonusXp, setGazeAway } =
-    useFocusSession(handleComplete);
+    useFocusSession(handleComplete, liveSessionKey);
+
+  // --- Live decay -----------------------------------------------------------
+  // The pet loses health *while* you're away rather than being docked once the
+  // session is filed. Watching it slump in real time is the entire point: a
+  // number that only moves after the fact can't pull anyone back to their desk.
+
+  // Anchored per session, so a discard can put back exactly what it took.
+  const sessionId = active?.id ?? null;
+  useEffect(() => {
+    if (sessionId === null) {
+      hpAnchor.current = null;
+      return;
+    }
+    hpAnchor.current = companionRef.current.hp;
+    drainedThisStretch.current = 0;
+  }, [sessionId]);
+
+  // Keyed on when the current absence began. Each away stretch gets its own
+  // grace window, so this effect's lifetime is exactly one stretch.
+  const awaySince = active?.awaySince ?? null;
+  useEffect(() => {
+    if (awaySince === null || sessionId === null) return;
+    drainedThisStretch.current = 0;
+
+    // Derived from wall-clock elapsed time, never accumulated per tick: a
+    // backgrounded tab has its timers throttled to roughly once a minute, and a
+    // tick-counting drain would quietly stop charging for exactly the absence
+    // we most want to catch — the one where you switched away entirely.
+    const drain = () => {
+      // The session may have landed since the last tick; its final HP is
+      // authoritative and must not be decayed further.
+      if (hpAnchor.current === null) return;
+      const owed = hpLostForAwayMs(awayMsPastGrace(Date.now() - awaySince));
+      const unbanked = owed - drainedThisStretch.current;
+      if (unbanked <= 0) return;
+      drainedThisStretch.current = owed;
+      setCompanion((prev) => ({ ...prev, hp: Math.max(0, prev.hp - unbanked) }));
+    };
+
+    const id = window.setInterval(drain, 1_000);
+    return () => {
+      window.clearInterval(id);
+      // Bank the final partial second. Without this the live total would fall a
+      // fraction short of what `applySession` charges, and every session would
+      // end with a small unexplained drop.
+      drain();
+    };
+  }, [awaySince, sessionId]);
+
+  /** Discarding a session undoes the health it cost — it officially never happened. */
+  const cancelSession = useCallback(() => {
+    const anchor = hpAnchor.current;
+    hpAnchor.current = null;
+    if (anchor !== null) {
+      setCompanion((prev) => (prev.hp === anchor ? prev : { ...prev, hp: anchor }));
+    }
+    cancel();
+  }, [cancel]);
 
   // --- Eye tracking ---------------------------------------------------------
   // The camera only ever runs while a session is live, and only if the user
@@ -282,16 +471,43 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion((prev) => ({ ...prev, name: name.trim() || prev.name }));
   }, []);
 
+  const setCompanionColor = useCallback((color: PigColor) => {
+    setCompanion((prev) => ({ ...prev, color }));
+  }, []);
+
+  const setCompanionAccessory = useCallback((accessory: PigAccessory) => {
+    setCompanion((prev) => ({ ...prev, accessory }));
+  }, []);
+
+  const checkInWithCompanion = useCallback((emotion: AvatarEmotion) => {
+    const checkedInAt = Date.now();
+    // A varied delay keeps the prompt from feeling like a rigid notification.
+    const delayMs = (5 + Math.floor(Math.random() * 56)) * 60_000;
+    setCompanion((prev) => ({
+      ...prev,
+      checkInEmotion: emotion,
+      checkInAt: checkedInAt,
+      nextCheckInAt: checkedInAt + delayMs,
+    }));
+  }, []);
+
   const resetEverything = useCallback(() => {
-    clearAll();
-    window.localStorage.removeItem(LIVE_SESSION_KEY);
+    if (currentUser) {
+      for (const key of Object.values(STORAGE_KEYS)) {
+        window.localStorage.removeItem(forUser(key, currentUser.id));
+      }
+    } else clearAll();
+    window.localStorage.removeItem(liveSessionKey);
     setBlocks([]);
     setCompanion(createCompanion());
     setSessions([]);
     setOutcome(null);
     setGazeCalibration("none");
+    // Dropped before `cancel()`, so the drain loop can't tear down and charge a
+    // last fraction of a second against the brand-new companion.
+    hpAnchor.current = null;
     cancel();
-  }, [cancel]);
+  }, [cancel, currentUser, liveSessionKey]);
 
   const todaysSessions = useMemo(() => {
     const dayStart = startOfDay();
@@ -308,13 +524,16 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       importCanvasBlocks,
       companion,
       renameCompanion,
+      setCompanionColor,
+      setCompanionAccessory,
+      checkInWithCompanion,
       sessions,
       todaysSessions,
       active,
       elapsedMs,
       startSession: start,
       endSession: end,
-      cancelSession: cancel,
+      cancelSession,
       addBonusXp,
       outcome,
       dismissOutcome: () => setOutcome(null),
@@ -332,6 +551,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       gazeWandering: gazeAway,
       gazeEpisodes: gaze.episodes,
       gazePoint: gaze.point,
+      gazeReason: gaze.reason,
       gazeCalibration,
       setGazeCalibration,
     }),
@@ -344,13 +564,16 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       importCanvasBlocks,
       companion,
       renameCompanion,
+      setCompanionColor,
+      setCompanionAccessory,
+      checkInWithCompanion,
       sessions,
       todaysSessions,
       active,
       elapsedMs,
       start,
       end,
-      cancel,
+      cancelSession,
       addBonusXp,
       outcome,
       resetEverything,
@@ -364,6 +587,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       gaze.status,
       gaze.episodes,
       gaze.point,
+      gaze.reason,
       gazeAway,
       gazeCalibration,
     ],

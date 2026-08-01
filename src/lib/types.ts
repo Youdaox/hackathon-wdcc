@@ -32,9 +32,29 @@ export interface StudyBlock {
 /** Mood is derived from HP — never stored, so the two can't disagree. */
 export type Mood = "happy" | "neutral" | "sad" | "sick";
 
+/** A voluntary expression selected in a wellbeing check-in. */
+export type AvatarEmotion = "happy" | "sad" | "angry" | "calm" | "excited";
+export const AVATAR_EMOTIONS: AvatarEmotion[] = ["happy", "sad", "angry", "calm", "excited"];
+
+/** Pastel coat options for the pig companion. */
+export type PigColor = "pink" | "purple" | "blue";
+export const PIG_COLOR_VALUES: PigColor[] = ["pink", "purple", "blue"];
+
+/** Cosmetic accessory worn by the pig — purely visual, no gameplay effect. */
+export type PigAccessory = "none" | "glasses" | "flower";
+export const PIG_ACCESSORY_VALUES: PigAccessory[] = ["none", "glasses", "flower"];
+
 export interface Companion {
   name: string;
   species: string;
+  /** Coat color — purely cosmetic. */
+  color: PigColor;
+  /** Worn accessory — purely cosmetic. */
+  accessory: PigAccessory;
+  checkInEmotion: AvatarEmotion | null;
+  checkInAt: number | null;
+  /** When to ask again. Null means the check-in is ready to be shown. */
+  nextCheckInAt: number | null;
   level: number;
   /** XP accumulated toward the *current* level only. */
   xp: number;

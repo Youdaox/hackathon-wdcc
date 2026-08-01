@@ -12,22 +12,36 @@
     {
       "idx": 1,
       "version": "6",
-      "when": 1785567007665,
-      "tag": "0001_many_dakota_north",
+      "when": 1785561132514,
+      "tag": "0001_sticky_iron_fist",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1785587553284,
-      "tag": "0002_jittery_the_fallen",
+      "when": 1785570000000,
+      "tag": "0002_local_accounts",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1785588508755,
-      "tag": "0003_previous_wasp",
+      "when": 1785571000000,
+      "tag": "0003_friendships",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785572000000,
+      "tag": "0004_companion_profile_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785600000000,
+      "tag": "0005_focus_interruption",
       "breakpoints": true
     }
   ]

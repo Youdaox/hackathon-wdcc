@@ -2,7 +2,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions, users } from "@/lib/db/schema";
 import { applyIdleDecay, createCompanion } from "@/lib/companion";
-import type { Companion } from "@/lib/types";
+import {
+  AVATAR_EMOTIONS,
+  PIG_ACCESSORY_VALUES,
+  PIG_COLOR_VALUES,
+  type AvatarEmotion,
+  type Companion,
+} from "@/lib/types";
 
 /**
  * Ensures a user and companion row exist, and returns the companion with
@@ -15,23 +21,63 @@ import type { Companion } from "@/lib/types";
 export function ensureCompanion(userId: string): Companion {
   const now = Date.now();
 
-  db.insert(users).values({ id: userId, createdAt: now }).onConflictDoNothing().run();
+  // API-only/mobile callers are retained as local records; browser accounts
+  // are created through the password flow and already exist before this runs.
+  db.insert(users).values({
+    id: userId,
+    username: `device_${userId}`,
+    passwordHash: "external-device-account",
+    displayName: userId,
+    createdAt: now,
+  }).onConflictDoNothing().run();
 
   const existing = db.select().from(companions).where(eq(companions.userId, userId)).get();
 
   if (!existing) {
     const fresh = createCompanion();
     db.insert(companions)
-      .values({ userId, ...fresh })
+      .values({
+        userId,
+        name: fresh.name,
+        species: fresh.species,
+        color: fresh.color,
+        accessory: fresh.accessory,
+        checkInEmotion: fresh.checkInEmotion,
+        checkInAt: fresh.checkInAt,
+        nextCheckInAt: fresh.nextCheckInAt,
+        level: fresh.level,
+        xp: fresh.xp,
+        hp: fresh.hp,
+        totalFocusedMs: fresh.totalFocusedMs,
+        lastSessionAt: fresh.lastSessionAt,
+        createdAt: fresh.createdAt,
+      })
       .run();
     return fresh;
   }
 
   // Rebuilt field-by-field rather than spread, so the row's `userId` column
   // can't leak into the Companion shape the growth rules operate on.
+  //
+  // color/accessory are stored as plain text columns, so a row written before
+  // a coat was retired (or by a client with an older enum) needs the same
+  // defensive fallback the web store applies on load.
   const companion: Companion = {
     name: existing.name,
     species: existing.species,
+    color: PIG_COLOR_VALUES.includes(existing.color as Companion["color"])
+      ? (existing.color as Companion["color"])
+      : "pink",
+    accessory: PIG_ACCESSORY_VALUES.includes(existing.accessory as Companion["accessory"])
+      ? (existing.accessory as Companion["accessory"])
+      : "none",
+    // includes() narrows to the non-null member type, so the cast has to drop
+    // null before the check rather than after it.
+    checkInEmotion: AVATAR_EMOTIONS.includes(existing.checkInEmotion as AvatarEmotion)
+      ? (existing.checkInEmotion as AvatarEmotion)
+      : null,
+    checkInAt: existing.checkInAt,
+    nextCheckInAt: existing.nextCheckInAt,
     level: existing.level,
     xp: existing.xp,
     hp: existing.hp,

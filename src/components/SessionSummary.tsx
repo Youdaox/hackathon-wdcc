@@ -3,8 +3,10 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { useIncline } from "@/lib/store";
-import { MOOD_LABEL, faceFor, levelProgress, moodFor, reactionFor } from "@/lib/companion";
+import { MOOD_LABEL, levelProgress, moodFor, reactionFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
+import { Pig } from "@/components/Pig";
+import { FocusTimeline } from "@/components/FocusTimeline";
 
 export function SessionSummary() {
   const { outcome, dismissOutcome } = useIncline();
@@ -49,9 +51,14 @@ export function SessionSummary() {
               Level up
             </span>
           )}
-          <span className="text-[6rem] leading-none" role="img" aria-hidden>
-            {faceFor(mood, growth.companion.level)}
-          </span>
+          <Pig
+            mood={mood}
+            level={growth.companion.level}
+            color={growth.companion.color}
+            accessory={growth.companion.accessory}
+            hp={growth.companion.hp}
+            size={110}
+          />
         </div>
 
         <p className="mx-auto mt-4 max-w-sm text-sm text-muted">
@@ -62,6 +69,14 @@ export function SessionSummary() {
           <Stat label="Focused" value={formatCompact(session.focusedMs)} accent="text-moss" />
           <Stat label="Away" value={formatCompact(session.distractedMs)} accent="text-clay" />
           <Stat label="XP gained" value={`+${session.xpEarned}`} accent="text-citrus" />
+        </div>
+
+        <div className="mt-6 text-left">
+          <FocusTimeline
+            startedAt={session.startedAt}
+            endedAt={session.endedAt}
+            distractions={session.distractions}
+          />
         </div>
 
         <div className="mt-6 space-y-3 rounded-xl bg-surface-2/60 px-4 py-4 text-left">

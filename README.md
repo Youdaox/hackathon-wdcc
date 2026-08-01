@@ -213,7 +213,6 @@ src/components/   FocusPanel, SchedulePanel, CanvasCard, CompanionCard, TodaySum
                   LocationCard, RecallCheck, SessionSummary
 ```
 
-<<<<<<< HEAD
 ## Social leaderboard API
 
 The backend exposes an encouragement economy and UTC weekly/monthly leaderboards:
@@ -240,7 +239,7 @@ Data currently uses the `LeaderboardRepository` interface with a process-memory 
 demo use. Before production deployment, replace it with a transactional database adapter and add
 unique constraints for `(senderId, recipientId, dayKey)` and `(userId, taskId)`. Serverless
 instances do not share process memory.
-=======
+
 ## Canvas GraphQL backend
 
 `POST /api/graphql` is a GraphQL layer over the **Canvas LMS API**. Open `http://localhost:3000/api/graphql` in a browser for GraphiQL (dev only).
@@ -283,7 +282,21 @@ Also available: `self`, `course(id:)`, `assignments(bucket:, limit:)` across all
 With no credentials at all it serves [fixtures](src/lib/canvas/mock.ts) — three real-looking UoA courses, a full weekly timetable, assignments and submissions — so the API is fully explorable with no Canvas account, and the demo can't be broken by a campus SSO outage. Fixture dates are generated relative to the current week, so "upcoming" work stays upcoming. `{ dataSource }` reports which backend answered.
 
 Both paths go through the same [`CanvasSource`](src/lib/canvas/source.ts) interface, so the resolvers never branch on which one they got. Tokens are read off the request, used for that request, and never stored or sent to the browser. Canvas errors (401/403/404) pass through with their status under `extensions.code: CANVAS_API_ERROR` rather than being masked, since the caller can act on them.
->>>>>>> ccb13dd2e84cbb7794356c6e640c08585f52b649
+
+## Testing encouragements in two browser windows
+
+Demo login state is stored in `sessionStorage`, so each browser window can use a different user
+while both windows share the same backend data. Received encouragements are checked every 2.5
+seconds and appear once as a temporary popup before remaining in the recipient's history.
+
+1. Open the project in two browser windows.
+2. Log in as Alice in the first window.
+3. Log in as Bob in the second window.
+4. Send encouragement from Alice to Bob.
+5. Confirm that Bob's window shows the message automatically and keeps it under **Who Encouraged You**.
+
+For the clearest test, open two independently created windows rather than duplicating a tab that
+already has a logged-in session.
 
 ## Not built yet
 
