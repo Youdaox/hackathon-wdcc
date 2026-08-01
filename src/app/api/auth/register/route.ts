@@ -9,7 +9,13 @@ export async function POST(request: Request) {
     const user = registerUser(result.username, result.password);
     const session = createSession(user.id);
     return NextResponse.json({ user }, { status: 201, headers: { "Set-Cookie": sessionCookie(session.token, session.expiresAt) } });
-  } catch {
-    return NextResponse.json({ error: "That username is already taken." }, { status: 409 });
+  } catch (error) {
+    const isUsernameConflict =
+      error instanceof Error && /UNIQUE constraint failed: users\.username/.test(error.message);
+    if (isUsernameConflict) {
+      return NextResponse.json({ error: "That username is already taken." }, { status: 409 });
+    }
+    console.error("registerUser failed", error);
+    return NextResponse.json({ error: "Something went wrong creating your account." }, { status: 500 });
   }
 }
