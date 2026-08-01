@@ -22,6 +22,11 @@ export interface Encouragement {
   dayKey: string;
 }
 
+export interface EncouragementHistoryRecord extends Encouragement {
+  senderName: string;
+  recipientName: string;
+}
+
 export interface TaskCompletion {
   id: string;
   userId: string;

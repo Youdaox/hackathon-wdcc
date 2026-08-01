@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { CanvasCard } from "@/components/CanvasCard";
 import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
@@ -27,15 +28,16 @@ export default function Dashboard() {
             Your companion grows on verified focus only
           </p>
         </div>
-        <div
-          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+        <div className="flex items-center gap-2">
+          <Link href="/community" className="rounded-full border border-moss/30 bg-moss/10 px-3 py-1.5 text-xs font-semibold text-moss hover:bg-moss/20">Community</Link>
+          <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
             active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
-          }`}
-        >
+          }`}>
           <span
             className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-moss" : "bg-faint"}`}
           />
           {active ? "Session running" : "Idle"}
+          </div>
         </div>
       </header>
 

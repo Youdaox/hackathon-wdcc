@@ -2,6 +2,7 @@ import type { LeaderboardRepository, LeaderboardSnapshot } from "./repository";
 import { dayKey, periodBounds } from "./time";
 import type {
   EncouragementBalance,
+  EncouragementHistoryRecord,
   LeaderboardEntry,
   LeaderboardPeriod,
   RankingRules,
@@ -56,11 +57,16 @@ export class LeaderboardService {
     return this.repository.read((snapshot) => balance(snapshot, userId, now));
   }
 
-  getInbox(userId: string, limit = 50) {
+  getEncouragementHistory(userId: string, direction: "received" | "sent", limit = 50) {
     return this.repository.read((snapshot) => snapshot.encouragements
-      .filter((item) => item.recipientId === userId)
+      .filter((item) => direction === "received" ? item.recipientId === userId : item.senderId === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit));
+      .slice(0, limit)
+      .map((item): EncouragementHistoryRecord => ({
+        ...item,
+        senderName: snapshot.members.find((member) => member.id === item.senderId)?.displayName ?? item.senderId,
+        recipientName: snapshot.members.find((member) => member.id === item.recipientId)?.displayName ?? item.recipientId,
+      })));
   }
 
   completeTask(userId: string, displayName: string | undefined, taskId: string, now = new Date()) {
@@ -150,5 +156,47 @@ export class LeaderboardService {
 
   updateRules(rules: RankingRules) {
     return this.repository.write((snapshot) => { snapshot.rules = rules; return snapshot.rules; });
+  }
+
+  seedDemoData(now = new Date()) {
+    return this.repository.write((snapshot) => {
+      const users = [
+        ["user-1", "Alice"], ["user-2", "Bob"], ["user-3", "Charlie"],
+        ["user-4", "Diana"], ["user-5", "Ethan"],
+      ] as const;
+      users.forEach(([id, name]) => ensureMember(snapshot, id, name));
+      if (snapshot.taskCompletions.some((item) => item.id.startsWith("demo-seed-task-"))) {
+        return { seeded: false, users: snapshot.members.filter((member) => member.id.startsWith("user-")) };
+      }
+
+      const at = new Date(now.getTime() - 3_600_000);
+      const taskCounts = [4, 7, 5, 8, 3];
+      users.forEach(([userId], userIndex) => {
+        for (let index = 0; index < taskCounts[userIndex]; index += 1) {
+          snapshot.taskCompletions.push({
+            id: `demo-seed-task-${userId}-${index}`,
+            userId,
+            taskId: `demo-seed-${userId}-${index}`,
+            completedAt: at.toISOString(),
+            dayKey: "demo-seed",
+          });
+        }
+      });
+
+      const samples = [
+        ["user-2", "user-1", MESSAGES[0]],
+        ["user-3", "user-1", MESSAGES[1]],
+        ["user-1", "user-4", MESSAGES[2]],
+        ["user-5", "user-2", MESSAGES[3]],
+        ["user-4", "user-3", MESSAGES[4]],
+      ] as const;
+      samples.forEach(([senderId, recipientId, message], index) => snapshot.encouragements.push({
+        id: `demo-seed-encouragement-${index}`,
+        senderId, recipientId, message,
+        createdAt: new Date(at.getTime() - index * 60_000).toISOString(),
+        dayKey: "demo-seed",
+      }));
+      return { seeded: true, users: snapshot.members.filter((member) => member.id.startsWith("user-")) };
+    });
   }
 }
