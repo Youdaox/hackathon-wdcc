@@ -11,6 +11,14 @@ type Notice = { kind: "success" | "error"; message: string } | null;
 type CommunityUser = DemoUser;
 const WELLBEING_TASKS = ["Take three deep breaths", "Look into the distance", "Stand up and stretch", "Drink some water"] as const;
 
+function uniqueById<T extends { id: string }>(items: T[]) {
+  return [...new Map(items.map((item) => [item.id, item])).values()];
+}
+
+function uniqueLeaderboardEntries(entries: LeaderboardEntry[]) {
+  return [...new Map(entries.map((entry) => [entry.userId, entry])).values()];
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const body = await response.json().catch(() => ({})) as T & { error?: string | { message?: string } };
@@ -38,7 +46,7 @@ export function EncouragementDashboard() {
     const [nextBalance, weekly, monthly, friendResponse, receivedResponse, sentResponse] = await Promise.all([
       request<EncouragementBalance>("/api/encouragements/balance"), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=week"), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=month"), request<{ friends: CommunityUser[] }>("/api/friends"), request<{ encouragements: EncouragementHistoryRecord[] }>("/api/encouragements?direction=received"), request<{ encouragements: EncouragementHistoryRecord[] }>("/api/encouragements?direction=sent"),
     ]);
-    setBalance(nextBalance); setBoards({ week: weekly.entries, month: monthly.entries }); setFriends(friendResponse.friends); setReceived(receivedResponse.encouragements); setSent(sentResponse.encouragements);
+    setBalance(nextBalance); setBoards({ week: uniqueLeaderboardEntries(weekly.entries), month: uniqueLeaderboardEntries(monthly.entries) }); setFriends(uniqueById(friendResponse.friends)); setReceived(receivedResponse.encouragements); setSent(sentResponse.encouragements);
     receivedResponse.encouragements.forEach((item) => seenReceived.current.add(item.id));
   }, []);
 
@@ -56,7 +64,7 @@ export function EncouragementDashboard() {
     event.preventDefault();
     if (query.trim().length < 2) { setResults([]); return; }
     setBusy("search"); setNotice(null);
-    try { setResults((await request<{ users: CommunityUser[] }>(`/api/users/search?q=${encodeURIComponent(query)}`)).users); }
+    try { setResults(uniqueById((await request<{ users: CommunityUser[] }>(`/api/users/search?q=${encodeURIComponent(query)}`)).users)); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Search failed." }); }
     finally { setBusy(null); }
   }

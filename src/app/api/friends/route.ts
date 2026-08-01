@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   try {
     const user = current(request);
     const rows = db.select().from(friendships).where(eq(friendships.userId, user.id)).all();
-    const ids = rows.map((row) => row.friendId);
+    const ids = [...new Set(rows.map((row) => row.friendId))];
     if (!ids.length) return NextResponse.json({ friends: [] });
     const friends = db.select({ id: users.id, username: users.username, name: users.displayName }).from(users).where(inArray(users.id, ids)).all();
     return NextResponse.json({ friends: friends.map((friend) => ({ ...friend, initials: friend.name.slice(0, 2).toUpperCase() })) });
