@@ -114,6 +114,13 @@ export function SessionSummary() {
               accent="text-citrus"
             />
           )}
+          {session.emotionalXpMultiplier !== 1 && (
+            <Row
+              label="Check-in effect"
+              value={`${session.emotionalXpMultiplier}× XP · ${session.hpLossMultiplier}× health loss`}
+              accent={session.emotionalXpMultiplier > 1 ? "text-moss" : "text-amber"}
+            />
+          )}
           <Row
             label="Progress"
             value={`Level ${growth.companion.level} · ${progress.xp}/${progress.needed} XP`}
