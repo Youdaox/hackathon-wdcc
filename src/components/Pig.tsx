@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { Mood, PigAccessory, PigColor } from "@/lib/types";
+import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
 import { PIG_PIXELS, PIXEL_CELL, PIXEL_COLS, PIXEL_ROWS } from "@/components/pigPixels";
 
 /** Coat swatches — pastel only, gender-neutral, matches the app's pig palette. */
@@ -80,6 +80,7 @@ export function Pig({
   hp,
   asleep = false,
   animated = false,
+  emotion,
   size = FRAME,
 }: {
   mood: Mood;
@@ -92,6 +93,8 @@ export function Pig({
   /** Forces the sleeping pose regardless of mood/hp. */
   asleep?: boolean;
   animated?: boolean;
+  /** User-selected feeling from a quick check-in. */
+  emotion?: AvatarEmotion | null;
   size?: number;
 }) {
   const stage = stageForLevel(level);
@@ -104,60 +107,72 @@ export function Pig({
     "--pig-ear": coat.ear,
     "--pig-nose": coat.nose,
     "--pig-line": coat.line,
+    width: size,
+    height: size,
     transform: `scale(${scale})`,
   } as CSSProperties;
 
   return (
     <div
-      className={`pig pig-stage pig-state-${state} ${animated ? "animate-breathe" : ""}`}
+      className={`pig pig-stage pig-state-${state} pig-emotion-${emotion ?? mood} ${animated ? "animate-breathe" : ""}`}
       style={style}
       role="img"
       aria-label={`Pig is ${state}, ${STAGE_LABEL[stage].toLowerCase()} stage`}
     >
-      {stage === "master" && (
-        <>
-          <div className="pig-crown" />
-          <span className="pig-sparkle pig-sparkle-a" />
-          <span className="pig-sparkle pig-sparkle-b" />
-        </>
-      )}
-      {state === "sick" && (
-        <>
-          <div className="pig-icepack" />
-          <div className="pig-thermometer" />
-        </>
-      )}
-      {state === "sleeping" && (
-        <div className="pig-zzz" aria-hidden>
-          z
-        </div>
-      )}
+      {/* Everything below rides together on the state's motion (wobble,
+          shiver, keeling over) so accessories never appear to float free
+          of the sprite they're attached to. */}
+      <div className="pig-figure">
+        {stage === "master" && (
+          <>
+            <div className="pig-crown" />
+            <span className="pig-sparkle pig-sparkle-a" />
+            <span className="pig-sparkle pig-sparkle-b" />
+          </>
+        )}
+        {state === "sick" && (
+          <>
+            <div className="pig-icepack" />
+            <div className="pig-thermometer" />
+          </>
+        )}
+        {state === "sleeping" && (
+          <div className="pig-zzz" aria-hidden>
+            z
+          </div>
+        )}
 
-      <div
-        className="pig-px"
-        style={{
-          width: PIXEL_CELL,
-          height: PIXEL_CELL,
-          boxShadow: PIG_PIXELS[state],
-        }}
-      />
+        <div
+          className="pig-px"
+          style={{
+            width: PIXEL_CELL,
+            height: PIXEL_CELL,
+            boxShadow: PIG_PIXELS[state],
+          }}
+        />
 
-      {stage === "teen" && <div className="pig-bow" />}
-      {state === "hungry" && (
-        <div className="pig-bubble" aria-hidden>
-          🥣
-        </div>
-      )}
+        {stage === "teen" && <div className="pig-bow" />}
+        {state === "hungry" && (
+          <div className="pig-bubble" aria-hidden>
+            🥣
+          </div>
+        )}
+        {state === "healthy" && emotion && (
+          <div className={`pig-emotion-mark pig-emotion-mark-${emotion}`} aria-hidden>
+            {emotion === "happy" ? "♥" : emotion === "sad" ? "…" : emotion === "angry" ? "!" : emotion === "calm" ? "~" : "✦"}
+          </div>
+        )}
 
-      {accessory === "glasses" && <div className="pig-glasses" />}
-      {accessory === "flower" && (
-        <div className="pig-flower">
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-      )}
+        {accessory === "glasses" && <div className="pig-glasses" />}
+        {accessory === "flower" && (
+          <div className="pig-flower">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

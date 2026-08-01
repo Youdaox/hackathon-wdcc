@@ -11,6 +11,9 @@ import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
 import { SessionSummary } from "@/components/SessionSummary";
 import { TodaySummary } from "@/components/TodaySummary";
+import { GrowthTimeline } from "@/components/GrowthTimeline";
+import { InstallAppButton } from "@/components/InstallAppButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
 import { useDemoAuth } from "@/lib/demo-auth";
 import { DemoLogin } from "@/components/DemoLogin";
@@ -35,13 +38,17 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/community#leaderboards" className="rounded-full bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-moss-deep">Community Leaderboards</Link>
-          <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
-          }`}>
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-moss" : "bg-faint"}`}
-          />
-          {active ? "Session running" : "Idle"}
+          <InstallAppButton />
+          <ThemeToggle />
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-moss" : "bg-faint"}`}
+            />
+            {active ? "Session running" : "Idle"}
           </div>
           <button onClick={logout} className="rounded-full border border-clay/30 px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay/10">Log out</button>
         </div>
@@ -58,6 +65,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-6">
             <CompanionCard />
+            <GrowthTimeline />
             <TodaySummary />
             <LocationCard />
           </div>

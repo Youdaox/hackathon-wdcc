@@ -4,7 +4,7 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && set ELECTRON_RUN_AS_NODE=&& electron .\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

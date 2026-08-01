@@ -156,7 +156,6 @@ src/components/   FocusPanel, SchedulePanel, CanvasCard, CompanionCard, TodaySum
                   LocationCard, RecallCheck, SessionSummary
 ```
 
-<<<<<<< HEAD
 ## Social leaderboard API
 
 The backend exposes an encouragement economy and UTC weekly/monthly leaderboards:
@@ -183,7 +182,7 @@ Data currently uses the `LeaderboardRepository` interface with a process-memory 
 demo use. Before production deployment, replace it with a transactional database adapter and add
 unique constraints for `(senderId, recipientId, dayKey)` and `(userId, taskId)`. Serverless
 instances do not share process memory.
-=======
+
 ## Canvas GraphQL backend
 
 `POST /api/graphql` is a GraphQL layer over the **Canvas LMS API**. Open `http://localhost:3000/api/graphql` in a browser for GraphiQL (dev only).
@@ -226,7 +225,6 @@ Also available: `self`, `course(id:)`, `assignments(bucket:, limit:)` across all
 With no credentials at all it serves [fixtures](src/lib/canvas/mock.ts) — three real-looking UoA courses, a full weekly timetable, assignments and submissions — so the API is fully explorable with no Canvas account, and the demo can't be broken by a campus SSO outage. Fixture dates are generated relative to the current week, so "upcoming" work stays upcoming. `{ dataSource }` reports which backend answered.
 
 Both paths go through the same [`CanvasSource`](src/lib/canvas/source.ts) interface, so the resolvers never branch on which one they got. Tokens are read off the request, used for that request, and never stored or sent to the browser. Canvas errors (401/403/404) pass through with their status under `extensions.code: CANVAS_API_ERROR` rather than being masked, since the caller can act on them.
->>>>>>> ccb13dd2e84cbb7794356c6e640c08585f52b649
 
 ## Testing encouragements in two browser windows
 
