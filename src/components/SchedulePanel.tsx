@@ -1,210 +1,162 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
-import { ScheduleBlockForm, type BlockDraft } from "@/components/ScheduleBlockForm";
-import { useIncline } from "@/lib/store";
-import { useNow } from "@/hooks/useNow";
-import { DAY_LABELS, formatClock } from "@/lib/time";
-import { blocksOnDay, findActiveBlock } from "@/lib/schedule";
-import type { StudyBlock } from "@/lib/types";
+import { parseIcs, type CalendarEvent, type CalendarEventDraft } from "@/lib/calendar";
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const EMPTY: CalendarEventDraft = { title: "", date: "", startTime: "09:00", endTime: "10:00", description: "", location: "" };
+
+async function api(path: string, init?: RequestInit) {
+  const response = await fetch(path, init);
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(value.error ?? "Calendar request failed.");
+  return value;
+}
+
+function localDate(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 export function SchedulePanel() {
-  const { blocks, addBlock, updateBlock, removeBlock, active, startSession } = useIncline();
-  const now = useNow();
-  const [mode, setMode] = useState<"list" | "new" | { editing: string }>("list");
-  const [viewDay, setViewDay] = useState<number | null>(null);
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [selected, setSelected] = useState(localDate(today));
+  const [editing, setEditing] = useState<CalendarEvent | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [feedUrl, setFeedUrl] = useState("");
+  const [notice, setNotice] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // Default the day tabs to today, once the client clock is available.
-  const selectedDay = viewDay ?? now?.getDay() ?? 0;
-  const dayBlocks = blocksOnDay(blocks, selectedDay);
-  const activeBlock = now ? (findActiveBlock(blocks, now)?.block ?? null) : null;
-  const editingBlock =
-    typeof mode === "object" ? blocks.find((b) => b.id === mode.editing) : undefined;
+  const load = async () => {
+    const value = await api("/api/calendar/events");
+    setEvents(value.events);
+  };
+  useEffect(() => {
+    let active = true;
+    void api("/api/calendar/events")
+      .then((value) => { if (active) setEvents(value.events); })
+      .catch((error) => { if (active) setNotice(error.message); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => { void api("/api/calendar/feed-url").then((value) => setFeedUrl(value.url)).catch(() => undefined); }, []);
 
-  const handleSubmit = (draft: BlockDraft) => {
-    if (typeof mode === "object") {
-      updateBlock(mode.editing, draft);
-    } else {
-      addBlock(draft);
-    }
-    setMode("list");
+  const cells = useMemo(() => {
+    const first = new Date(year, month, 1).getDay();
+    const days = new Date(year, month + 1, 0).getDate();
+    const cellCount = Math.ceil((first + days) / 7) * 7;
+    return Array.from({ length: cellCount }, (_, index) => {
+      const date = new Date(year, month, index - first + 1);
+      return {
+        date: localDate(date),
+        day: date.getDate(),
+        inCurrentMonth: date.getMonth() === month && date.getFullYear() === year,
+      };
+    });
+  }, [month, year]);
+  const byDate = useMemo(() => events.reduce<Record<string, CalendarEvent[]>>((map, event) => ((map[event.date] ??= []).push(event), map), {}), [events]);
+  const selectedEvents = (byDate[selected] ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  const moveMonth = (delta: number) => {
+    const next = new Date(year, month + delta, 1);
+    setYear(next.getFullYear()); setMonth(next.getMonth());
+  };
+  const selectDate = (date: string) => {
+    setSelected(date); setEditing(null); setCreating(false);
+  };
+  const createOnDate = (date: string) => {
+    setSelected(date); setEditing(null); setCreating(true);
+  };
+  const remove = async (id: string) => {
+    await api(`/api/calendar/events?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    setEditing(null); await load(); setNotice("Event deleted.");
+  };
+  const importFile = async (file: File) => {
+    const drafts = parseIcs(await file.text());
+    if (!drafts.length) throw new Error("No supported events were found in that .ics file.");
+    await api("/api/calendar/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(drafts) });
+    await load(); setNotice(`Imported ${drafts.length} event${drafts.length === 1 ? "" : "s"}.`);
   };
 
   return (
-    <section className="card flex flex-col p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold">Schedule</h2>
-          <p className="mt-0.5 text-sm text-muted">
-            Your weekly study blocks. Sessions can link to any of them.
-          </p>
+    <section className="card overflow-hidden">
+      <header className="flex flex-col gap-4 border-b border-line-soft p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div><h2 className="text-xl font-bold tabular">{year} Calendar</h2><p className="mt-1 text-sm text-muted">Plan events and keep your calendars in sync.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <input ref={fileRef} type="file" accept=".ics,text/calendar" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void importFile(file).catch((error) => setNotice(error.message)); e.target.value = ""; }} />
+          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import .ics</Button>
+          <a href="/api/calendar/export" download className="inline-flex h-8 items-center rounded-full border border-line bg-surface-2 px-3 text-xs font-semibold hover:border-moss/60 hover:text-moss">Export .ics</a>
+          <Button size="sm" onClick={() => { setSelected(localDate(new Date(year, month, 1))); setEditing(null); setCreating(true); }}>+ Event</Button>
         </div>
-        {mode === "list" && (
-          <Button size="sm" variant="outline" onClick={() => setMode("new")}>
-            + Block
-          </Button>
-        )}
       </header>
 
-      <div className="mt-5">
-        {mode !== "list" ? (
-          <ScheduleBlockForm
-            initial={editingBlock}
-            onSubmit={handleSubmit}
-            onCancel={() => setMode("list")}
-          />
-        ) : (
-          <>
-            <div className="mb-4 flex gap-1">
-              {DAY_LABELS.map((label, day) => {
-                const count = blocksOnDay(blocks, day).length;
-                const selected = day === selectedDay;
-                return (
-                  <button
-                    key={label}
-                    onClick={() => setViewDay(day)}
-                    className={`group flex-1 rounded-lg py-2 text-center transition-colors ${
-                      selected ? "bg-surface-2 text-ink" : "text-faint hover:text-muted"
-                    }`}
-                  >
-                    <span className="block text-xs font-semibold">{label[0]}</span>
-                    <span
-                      className={`mx-auto mt-1 block h-1 w-1 rounded-full ${
-                        count > 0 ? "bg-moss" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
-                );
-              })}
+      <div>
+        <div className="min-w-0 p-3 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <button aria-label="Previous month" onClick={() => moveMonth(-1)} className="h-9 w-9 rounded-full border border-line text-muted hover:text-ink">‹</button>
+            <div className="flex items-center gap-2">
+              <select aria-label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-bold">{MONTHS.map((name, index) => <option value={index} key={name}>{name}</option>)}</select>
+              <input aria-label="Year" type="number" min="1900" max="2200" value={year} onChange={(e) => setYear(Number(e.target.value))} className="w-24 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-bold tabular" />
             </div>
+            <button aria-label="Next month" onClick={() => moveMonth(1)} className="h-9 w-9 rounded-full border border-line text-muted hover:text-ink">›</button>
+          </div>
+          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line">
+            {WEEKDAYS.map((day) => <div key={day} className="bg-surface-2 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-faint sm:text-xs">{day}</div>)}
+            {cells.map((cell) => {
+              const dayEvents = byDate[cell.date] ?? []; const isToday = cell.date === localDate(today);
+              return <div key={cell.date} role="button" tabIndex={0} aria-label={`${cell.date}, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`} onClick={() => selectDate(cell.date)} onDoubleClick={() => createOnDate(cell.date)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectDate(cell.date); } }} className={`min-h-16 cursor-pointer overflow-hidden p-1.5 text-left align-top transition hover:bg-moss/5 sm:min-h-24 sm:p-2 ${cell.inCurrentMonth ? "bg-surface" : "bg-surface-2/55"} ${selected === cell.date ? "ring-2 ring-inset ring-moss" : ""}`}>
+                <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isToday ? "bg-moss text-white" : cell.inCurrentMonth ? "text-muted" : "text-faint"}`}>{cell.day}</span>
+                <div className={`mt-1 space-y-1 ${cell.inCurrentMonth ? "" : "opacity-65"}`}>{dayEvents.slice(0, 2).map((event) => <button type="button" key={event.id} onClick={(click) => { click.stopPropagation(); setSelected(cell.date); setEditing(event); setCreating(false); }} onDoubleClick={(click) => click.stopPropagation()} className="block w-full truncate rounded bg-moss/15 px-1.5 py-1 text-left text-[10px] font-semibold text-moss-deep hover:bg-moss/25 dark:text-moss">{event.startTime} {event.title}</button>)}{dayEvents.length > 2 && <p className="px-1 text-[10px] font-semibold text-faint">+{dayEvents.length - 2} more</p>}</div>
+              </div>;
+            })}
+          </div>
+        </div>
 
-            {dayBlocks.length === 0 ? (
-              <EmptyDay onAdd={() => setMode("new")} />
-            ) : (
-              <ul className="space-y-2">
-                {dayBlocks.map((block) => (
-                  <BlockRow
-                    key={block.id}
-                    block={block}
-                    isNow={activeBlock?.id === block.id && selectedDay === now?.getDay()}
-                    canStart={!active}
-                    onStart={() =>
-                      startSession({
-                        title: block.title,
-                        course: block.course,
-                        blockId: block.id,
-                        plannedMinutes: block.endMin - block.startMin,
-                      })
-                    }
-                    onEdit={() => setMode({ editing: block.id })}
-                    onDelete={() => removeBlock(block.id)}
-                  />
-                ))}
-              </ul>
-            )}
-          </>
-        )}
+        <aside className="border-t border-line-soft p-5 sm:p-6">
+          <p className="eyebrow">{selected}</p><h3 className="mt-1 font-bold">Events</h3>
+          <div className="mt-4 space-y-2">{selectedEvents.length ? selectedEvents.map((event) => <button key={event.id} onClick={() => { setEditing(event); setCreating(false); }} className="w-full rounded-xl border border-line-soft bg-surface-2/60 p-3 text-left hover:border-moss/40"><p className="text-sm font-bold">{event.title}</p><p className="mt-1 text-xs text-muted">{event.startTime}–{event.endTime}</p>{event.location && <p className="mt-1 truncate text-xs text-faint">{event.location}</p>}</button>) : <p className="text-sm text-muted">No events. Select this date to add one.</p>}</div>
+          <Button size="sm" variant="outline" className="mt-4 w-full" onClick={() => { setEditing(null); setCreating(true); }}>Add on this date</Button>
+        </aside>
+      </div>
+
+      {(creating || editing) && <EventEditor initial={editing ?? { ...EMPTY, date: selected }} onCancel={() => { setCreating(false); setEditing(null); }} onDelete={editing ? () => void remove(editing.id).catch((error) => setNotice(error.message)) : undefined} onSaved={async () => { setCreating(false); setEditing(null); await load(); setNotice(editing ? "Event updated." : "Event added."); }} />}
+
+      <div className="border-t border-line-soft bg-surface-2/40 p-5 sm:p-6">
+        <p className="eyebrow">Calendar subscription</p><p className="mt-2 text-sm text-muted">Copy the link below and paste it into any calendar app that supports iCal feeds.</p>
+        <div className="mt-3 flex gap-2"><input readOnly value={feedUrl} aria-label="iCal feed URL" className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-xs text-muted" /><Button size="sm" variant="outline" disabled={!feedUrl} onClick={() => void navigator.clipboard.writeText(feedUrl).then(() => setNotice("iCal link copied."))}>Copy link</Button></div>
+        {notice && <p role="status" className="mt-3 text-xs font-semibold text-moss">{notice}</p>}
       </div>
     </section>
   );
 }
 
-function EmptyDay({ onAdd }: { onAdd: () => void }) {
-  return (
-    <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center">
-      <p className="text-sm text-muted">Nothing scheduled this day.</p>
-      <button
-        onClick={onAdd}
-        className="mt-2 text-sm font-semibold text-moss hover:underline"
-      >
-        Add a study block
-      </button>
-    </div>
-  );
-}
-
-interface RowProps {
-  block: StudyBlock;
-  isNow: boolean;
-  canStart: boolean;
-  onStart: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-function BlockRow({ block, isNow, canStart, onStart, onEdit, onDelete }: RowProps) {
-  const [confirming, setConfirming] = useState(false);
-
-  return (
-    <li
-      className={`group rounded-xl border px-4 py-3 transition-colors ${
-        isNow ? "border-moss/50 bg-moss/5" : "border-line-soft bg-surface-2/50 hover:border-line"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className="tabular w-[4.75rem] shrink-0 text-xs leading-tight text-muted">
-          <div className="font-medium text-ink">{formatClock(block.startMin)}</div>
-          <div>{formatClock(block.endMin)}</div>
+function EventEditor({ initial, onCancel, onDelete, onSaved }: { initial: CalendarEvent | CalendarEventDraft; onCancel: () => void; onDelete?: () => void; onSaved: () => Promise<void> }) {
+  const [draft, setDraft] = useState<CalendarEventDraft>(initial);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const editingId = "id" in initial ? initial.id : null;
+  const field = (key: keyof CalendarEventDraft) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft((value) => ({ ...value, [key]: event.target.value }));
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { await api("/api/calendar/events", { method: editingId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, id: editingId }) }); await onSaved(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save event."); } finally { setBusy(false); } };
+  return <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/35 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}><form onSubmit={submit} className="w-full max-w-lg rounded-t-3xl border border-line bg-surface p-6 shadow-2xl sm:rounded-3xl">
+    <div className="flex items-center justify-between"><div><p className="eyebrow">{editingId ? "Edit event" : "New event"}</p><h3 className="mt-1 text-xl font-bold">Event details</h3></div><button type="button" onClick={onCancel} aria-label="Close" className="h-9 w-9 rounded-full text-xl text-muted hover:bg-surface-2">×</button></div>
+    <div className="mt-5 grid gap-4"><label className="text-xs font-semibold text-muted">Title<input required value={draft.title} onChange={field("title")} className="mt-1 block w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label><label className="text-xs font-semibold text-muted">Date<input required type="date" value={draft.date} onChange={field("date")} className="mt-1 block w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label>
+      <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold text-muted">Starts<input required type="time" value={draft.startTime} onChange={field("startTime")} className="mt-1 block w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label><label className="text-xs font-semibold text-muted">Ends<input required type="time" value={draft.endTime} onChange={field("endTime")} className="mt-1 block w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label></div>
+      <label className="text-xs font-semibold text-muted">Location <span className="font-normal text-faint">(optional)</span><input value={draft.location} onChange={field("location")} className="mt-1 block w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label><label className="text-xs font-semibold text-muted">Description<textarea rows={3} value={draft.description} onChange={field("description")} className="mt-1 block w-full resize-none rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-sm text-ink" /></label></div>
+    {error && <p className="mt-3 text-xs font-semibold text-clay">{error}</p>}<div className="mt-5 flex gap-2">{onDelete && <Button type="button" variant="danger" onClick={() => setConfirmingDelete(true)}>Delete</Button>}<Button type="button" variant="ghost" className="ml-auto" onClick={onCancel}>Cancel</Button><Button disabled={busy}>{busy ? "Saving…" : "Save event"}</Button></div>
+    {confirmingDelete && onDelete && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/45 p-6 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmingDelete(false); }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="delete-event-title" aria-describedby="delete-event-description" className="card w-full max-w-sm p-6 shadow-2xl">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-clay/15 text-xl font-bold text-clay">!</div>
+        <h3 id="delete-event-title" className="mt-4 text-xl font-bold">Delete event?</h3>
+        <p id="delete-event-description" className="mt-2 text-sm leading-6 text-muted">Are you sure you want to delete this event?</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+          <Button type="button" variant="danger" onClick={onDelete}>Delete</Button>
         </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold">{block.title}</span>
-            {isNow && (
-              <span className="shrink-0 rounded-full bg-moss px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-canvas">
-                Now
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-faint">
-            <span className="truncate">{block.course}</span>
-            {block.source === "canvas" && (
-              <span className="shrink-0 rounded bg-surface-2 px-1.5 py-px text-[10px] font-semibold text-muted">
-                Canvas
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-          <IconButton label="Edit block" onClick={onEdit}>
-            ✎
-          </IconButton>
-          <IconButton
-            label={confirming ? "Confirm delete" : "Delete block"}
-            danger={confirming}
-            onClick={() => (confirming ? onDelete() : setConfirming(true))}
-            onBlur={() => setConfirming(false)}
-          >
-            {confirming ? "!" : "×"}
-          </IconButton>
-        </div>
-
-        <Button size="sm" variant="outline" onClick={onStart} disabled={!canStart}>
-          Start
-        </Button>
       </div>
-    </li>
-  );
-}
-
-function IconButton({
-  children,
-  label,
-  danger,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; danger?: boolean }) {
-  return (
-    <button
-      aria-label={label}
-      title={label}
-      className={`h-7 w-7 rounded-lg text-sm transition-colors ${
-        danger ? "bg-clay/15 text-clay" : "text-faint hover:bg-surface-2 hover:text-ink"
-      }`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+    </div>}
+  </form></div>;
 }
