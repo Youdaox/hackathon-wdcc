@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CanvasCard } from "@/components/CanvasCard";
 import { CompanionCard } from "@/components/CompanionCard";
+import { DesktopBuddy } from "@/components/DesktopBuddy";
 import { FocusPanel } from "@/components/FocusPanel";
 import { LocationCard } from "@/components/LocationCard";
 import { RecallCheck } from "@/components/RecallCheck";
@@ -58,6 +59,7 @@ export default function Dashboard() {
       <Footer />
       <RecallCheck />
       <SessionSummary />
+      <DesktopBuddy />
     </main>
   );
 }

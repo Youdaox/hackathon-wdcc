@@ -2,11 +2,14 @@
   "name": "hackathon-wdcc",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron": "electron .",
+    "dev:overlay": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && electron .\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -21,9 +24,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.4",
+    "electron": "^43.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.1.0"
   }
 }
