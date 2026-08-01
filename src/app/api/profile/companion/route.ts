@@ -36,6 +36,7 @@ export async function PUT(request: Request) {
     lastMeal: body.lastMeal === "breakfast" || body.lastMeal === "lunch" || body.lastMeal === "dinner" ? body.lastMeal : null,
     lastMealAt: typeof body.lastMealAt === "number" ? body.lastMealAt : null,
     lastWaterAt: typeof body.lastWaterAt === "number" ? body.lastWaterAt : null,
+    nextWaterCheckAt: typeof body.nextWaterCheckAt === "number" ? body.nextWaterCheckAt : null,
     foodBreakMissed: body.foodBreakMissed === true,
     waterBreakMissed: body.waterBreakMissed === true,
   }).where(eq(companions.userId, user.id)).run();

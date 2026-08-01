@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useIncline } from "@/lib/store";
-import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor, WELLBEING } from "@/lib/companion";
+import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { useNow } from "@/hooks/useNow";
 import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
@@ -54,17 +54,15 @@ export function CompanionCard() {
   const progress = levelProgress(companion);
   const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
   const avatarState = avatarStateFor(companion.hp, companion.checkInEmotion);
-  const checkInDue = active !== null && companion.nextCheckInAt !== null
-    && now !== null && now.getTime() >= companion.nextCheckInAt;
+  const checkInDue = companion.nextCheckInAt === null
+    || (now !== null && now.getTime() >= companion.nextCheckInAt);
   const meal = now === null ? null : mealForTime(now);
   const mealCheckDue = meal !== null && (
     companion.lastMealAt === null
     || new Date(companion.lastMealAt).toDateString() !== now?.toDateString()
     || companion.lastMeal !== meal
   );
-  const waterBreakDue = now !== null && (
-    companion.lastWaterAt === null || now.getTime() - companion.lastWaterAt >= WELLBEING.waterBreakMs
-  );
+  const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);
   const hasPrompt = checkInDue || mealCheckDue || waterBreakDue;
 
   return (

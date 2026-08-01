@@ -61,6 +61,8 @@ export interface Companion {
   lastMeal: Meal | null;
   lastMealAt: number | null;
   lastWaterAt: number | null;
+  /** When the next standalone water-break prompt should appear. */
+  nextWaterCheckAt: number | null;
   foodBreakMissed: boolean;
   waterBreakMissed: boolean;
   level: number;

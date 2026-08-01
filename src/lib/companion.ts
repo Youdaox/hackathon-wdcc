@@ -80,7 +80,7 @@ export function mealForTime(now = new Date()): Meal | null {
 
 /** Combine the active food and water needs into one distraction-health modifier. */
 export function wellbeingHpLossMultiplier(
-  companion: Pick<Companion, "lastMeal" | "lastMealAt" | "lastWaterAt" | "foodBreakMissed" | "waterBreakMissed">,
+  companion: Pick<Companion, "lastMeal" | "lastMealAt" | "lastWaterAt" | "nextWaterCheckAt" | "foodBreakMissed" | "waterBreakMissed">,
   now = Date.now(),
 ): number {
   const meal = mealForTime(new Date(now));
@@ -93,7 +93,7 @@ export function wellbeingHpLossMultiplier(
       : 1;
   const waterMultiplier = companion.waterBreakMissed
     ? WELLBEING.missedWaterHpLossMultiplier
-    : companion.lastWaterAt === null || now - companion.lastWaterAt >= WELLBEING.waterBreakMs
+    : companion.nextWaterCheckAt === null || now >= companion.nextWaterCheckAt
       ? 1.15
       : 1;
   return mealMultiplier * waterMultiplier;
@@ -111,6 +111,7 @@ export function createCompanion(name = "Oinky", color: PigColor = "pink"): Compa
     lastMeal: null,
     lastMealAt: null,
     lastWaterAt: null,
+    nextWaterCheckAt: Date.now() + WELLBEING.waterBreakMs,
     foodBreakMissed: false,
     waterBreakMissed: false,
     level: 1,

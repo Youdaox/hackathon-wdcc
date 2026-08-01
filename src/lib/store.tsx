@@ -186,6 +186,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         ? loadedCompanion.lastMeal : null,
       lastMealAt: typeof loadedCompanion.lastMealAt === "number" ? loadedCompanion.lastMealAt : null,
       lastWaterAt: typeof loadedCompanion.lastWaterAt === "number" ? loadedCompanion.lastWaterAt : null,
+      nextWaterCheckAt: typeof loadedCompanion.nextWaterCheckAt === "number" ? loadedCompanion.nextWaterCheckAt : null,
       foodBreakMissed: loadedCompanion.foodBreakMissed === true,
       waterBreakMissed: loadedCompanion.waterBreakMissed === true,
     });
@@ -223,6 +224,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           lastMeal: payload.companion.lastMeal,
           lastMealAt: payload.companion.lastMealAt,
           lastWaterAt: payload.companion.lastWaterAt,
+          nextWaterCheckAt: payload.companion.nextWaterCheckAt,
           foodBreakMissed: payload.companion.foodBreakMissed,
           waterBreakMissed: payload.companion.waterBreakMissed,
         };
@@ -261,6 +263,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         lastMeal: companion.lastMeal,
         lastMealAt: companion.lastMealAt,
         lastWaterAt: companion.lastWaterAt,
+        nextWaterCheckAt: companion.nextWaterCheckAt,
         foodBreakMissed: companion.foodBreakMissed,
         waterBreakMissed: companion.waterBreakMissed,
       }),
@@ -327,10 +330,14 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   const handleComplete = useCallback((finished: FocusSession) => {
     const zone = zoneRef.current;
+    const emotionalEffectCurrent = companionRef.current.nextCheckInAt !== null
+      && finished.endedAt < companionRef.current.nextCheckInAt;
     const withBonus: FocusSession = {
       ...finished,
       xpMultiplier: zone?.multiplier ?? 1,
       zoneName: zone?.name,
+      emotionalXpMultiplier: emotionalEffectCurrent ? finished.emotionalXpMultiplier : 1,
+      hpLossMultiplier: emotionalEffectCurrent ? finished.hpLossMultiplier : 1,
     };
     // Cleared first: this also stops the drain loop from banking one last
     // partial second on top of the authoritative result as it tears down.
@@ -358,19 +365,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   const { active, start, end, cancel, elapsedMs, addBonusXp, setEmotionalModifiers, setGazeAway } =
     useFocusSession(handleComplete, liveSessionKey);
 
-  const startSession = useCallback((input: StartSessionInput) => {
-    const now = Date.now();
-    // Check-ins only appear during a study session, at a varied interval.
-    // Preserve a future prompt that was already scheduled from an earlier session.
-    setCompanion((prev) => prev.nextCheckInAt !== null && prev.nextCheckInAt > now
-      ? prev
-      : {
-          ...prev,
-          nextCheckInAt: now + WELLBEING.emotionalCheckInMinMs
-            + Math.random() * (WELLBEING.emotionalCheckInMaxMs - WELLBEING.emotionalCheckInMinMs),
-        });
-    start(input);
-  }, [start]);
+  const startSession = start;
 
   // --- Live decay -----------------------------------------------------------
   // The pet loses health *while* you're away rather than being docked once the
@@ -379,7 +374,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   // Anchored per session, so a discard can put back exactly what it took.
   const sessionId = active?.id ?? null;
-  const hpLossMultiplier = (active?.hpLossMultiplier ?? 1) * wellbeingHpLossMultiplier(companion);
+  const emotionalEffectCurrent = active !== null && companion.nextCheckInAt !== null
+    && active.startedAt + elapsedMs < companion.nextCheckInAt;
+  const hpLossMultiplier = (emotionalEffectCurrent ? active?.hpLossMultiplier ?? 1 : 1)
+    * wellbeingHpLossMultiplier(companion);
   useEffect(() => {
     if (sessionId === null) {
       hpAnchor.current = null;
@@ -530,7 +528,6 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkInWithCompanion = useCallback((emotion: AvatarEmotion) => {
-    if (!active) return;
     const checkedInAt = Date.now();
     // A varied delay keeps the prompt from feeling like a rigid notification.
     const delayMs = WELLBEING.emotionalCheckInMinMs
@@ -541,8 +538,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       checkInAt: checkedInAt,
       nextCheckInAt: checkedInAt + delayMs,
     }));
-    const modifiers = EMOTION_SESSION_MODIFIERS[emotion];
-    setEmotionalModifiers(modifiers.xpMultiplier, modifiers.hpLossMultiplier);
+    if (active) {
+      const modifiers = EMOTION_SESSION_MODIFIERS[emotion];
+      setEmotionalModifiers(modifiers.xpMultiplier, modifiers.hpLossMultiplier);
+    }
   }, [active, setEmotionalModifiers]);
 
   const respondToMealCheck = useCallback((meal: Meal, ate: boolean) => {
@@ -557,7 +556,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   const respondToWaterBreak = useCallback((drank: boolean) => {
     const at = Date.now();
     setCompanion((prev) => {
-      const next = { ...prev, lastWaterAt: drank ? at : prev.lastWaterAt, waterBreakMissed: !drank };
+      const next = {
+        ...prev,
+        lastWaterAt: drank ? at : prev.lastWaterAt,
+        nextWaterCheckAt: at + WELLBEING.waterBreakMs,
+        waterBreakMissed: !drank,
+      };
       return drank ? restoreHp(next, WELLBEING.waterRecoveryHp) : next;
     });
     if (drank && hpAnchor.current !== null) hpAnchor.current = Math.min(100, hpAnchor.current + WELLBEING.waterRecoveryHp);
