@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 import { useIncline } from "@/lib/store";
-import { MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
+import { avatarStateFor, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
-import type { Mood, PigAccessory, PigColor } from "@/lib/types";
+import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
+
+const CHECK_INS: { emotion: AvatarEmotion; label: string; icon: string }[] = [
+  { emotion: "happy", label: "Happy", icon: "☺" },
+  { emotion: "sad", label: "Sad", icon: "☹" },
+  { emotion: "angry", label: "Angry", icon: "♨" },
+  { emotion: "calm", label: "Calm", icon: "~" },
+  { emotion: "excited", label: "Excited", icon: "✦" },
+];
 
 const ACCESSORY_ICON: Record<PigAccessory, string> = {
   none: "—",
@@ -28,12 +36,13 @@ const HP_BAR: Record<Mood, string> = {
 };
 
 export function CompanionCard() {
-  const { companion, active, renameCompanion, setCompanionColor, setCompanionAccessory } =
+  const { companion, active, renameCompanion, setCompanionColor, setCompanionAccessory, checkInWithCompanion } =
     useIncline();
   const [editing, setEditing] = useState(false);
   const mood = moodFor(companion.hp);
   const progress = levelProgress(companion);
   const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
+  const avatarState = avatarStateFor(companion.hp, companion.checkInEmotion);
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">
@@ -49,7 +58,7 @@ export function CompanionCard() {
                 : "rgba(207,154,52,0.16)",
           }}
         />
-        <div className="relative" aria-label={`${companion.name} is ${MOOD_LABEL[mood].toLowerCase()}`}>
+        <div className="relative" aria-label={`${companion.name} is ${avatarState.replace("-", " ")}`}>
           <Pig
             mood={mood}
             level={companion.level}
@@ -57,6 +66,7 @@ export function CompanionCard() {
             accessory={companion.accessory}
             hp={companion.hp}
             animated={Boolean(active)}
+            emotion={companion.checkInEmotion}
           />
         </div>
       </div>
@@ -88,7 +98,28 @@ export function CompanionCard() {
         </button>
       )}
 
-      <p className={`mt-1 text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
+      <div className="mt-5 w-full rounded-xl bg-surface-2/60 px-3 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="eyebrow">Quick check-in</span>
+          <span className="text-xs text-faint">How are you feeling?</span>
+        </div>
+        <div className="mt-2 grid grid-cols-5 gap-1" role="group" aria-label="How are you feeling?">
+          {CHECK_INS.map(({ emotion, label, icon }) => (
+            <button
+              key={emotion}
+              type="button"
+              onClick={() => checkInWithCompanion(emotion)}
+              aria-pressed={companion.checkInEmotion === emotion}
+              title={label}
+              className={`rounded-lg py-1.5 text-base transition-colors hover:bg-canvas ${companion.checkInEmotion === emotion ? "bg-canvas text-moss shadow-sm" : "text-muted"}`}
+            >
+              <span className="sr-only">{label}</span>{icon}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className={`mt-2 text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
         Level {companion.level} · {MOOD_LABEL[mood]}
       </p>
 

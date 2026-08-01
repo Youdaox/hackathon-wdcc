@@ -22,7 +22,19 @@ export function ensureCompanion(userId: string): Companion {
   if (!existing) {
     const fresh = createCompanion();
     db.insert(companions)
-      .values({ userId, ...fresh })
+      .values({
+        userId,
+        name: fresh.name,
+        species: fresh.species,
+        color: fresh.color,
+        accessory: fresh.accessory,
+        level: fresh.level,
+        xp: fresh.xp,
+        hp: fresh.hp,
+        totalFocusedMs: fresh.totalFocusedMs,
+        lastSessionAt: fresh.lastSessionAt,
+        createdAt: fresh.createdAt,
+      })
       .run();
     return fresh;
   }
@@ -42,6 +54,10 @@ export function ensureCompanion(userId: string): Companion {
     accessory: PIG_ACCESSORY_VALUES.includes(existing.accessory as Companion["accessory"])
       ? (existing.accessory as Companion["accessory"])
       : "none",
+    // Mobile check-ins are intentionally local for now; its sync contract
+    // does not yet include a profile-preference mutation.
+    checkInEmotion: null,
+    checkInAt: null,
     level: existing.level,
     xp: existing.xp,
     hp: existing.hp,

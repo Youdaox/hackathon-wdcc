@@ -6,6 +6,7 @@ type SproutProps = {
   stage?: 1 | 2 | 3;
   flower?: boolean;
   happy?: boolean;
+  emotion?: "happy" | "sad" | "angry" | "calm" | "excited";
   bubbles?: boolean;
 };
 
@@ -15,6 +16,7 @@ export function Sprout({
   stage = 3,
   flower = false,
   happy = false,
+  emotion,
   bubbles = false,
 }: SproutProps) {
   const bodyColor = stage === 1 ? colors.accentPale : stage === 2 ? colors.accentSoft : "#7fc08e";
@@ -53,7 +55,7 @@ export function Sprout({
             { width: eye, height: eye, borderRadius: eye / 2, right: size * 0.28, top: size * 0.43 },
           ]}
         />
-        {happy ? (
+        {(emotion === "happy" || emotion === "excited" || happy) ? (
           <View
             style={[
               styles.happyMouth,
@@ -69,7 +71,7 @@ export function Sprout({
         ) : (
           <View
             style={[
-              styles.smallMouth,
+              emotion === "sad" ? styles.sadMouth : styles.smallMouth,
               {
                 width: size * 0.11,
                 height: size * 0.055,
@@ -79,6 +81,9 @@ export function Sprout({
             ]}
           />
         )}
+        {emotion === "angry" && <View style={[styles.reaction, styles.angryReaction]} />}
+        {emotion === "calm" && <View style={[styles.reaction, styles.calmReaction]} />}
+        {emotion === "excited" && <View style={[styles.reaction, styles.excitedReaction]} />}
       </View>
 
       <View
@@ -115,6 +120,11 @@ const styles = StyleSheet.create({
   eye: { position: "absolute", backgroundColor: colors.text },
   happyMouth: { position: "absolute", alignSelf: "center", backgroundColor: colors.text },
   smallMouth: { position: "absolute", alignSelf: "center", backgroundColor: colors.text },
+  sadMouth: { position: "absolute", alignSelf: "center", backgroundColor: colors.text, transform: [{ rotate: "180deg" }] },
+  reaction: { position: "absolute", right: 1, top: 3, width: 10, height: 10, borderRadius: 5 },
+  angryReaction: { backgroundColor: colors.peach },
+  calmReaction: { backgroundColor: colors.accentPale },
+  excitedReaction: { backgroundColor: "#f2cf5b" },
   bubble: { position: "absolute", borderRadius: 999, backgroundColor: "#f8dcc9" },
   bubbleSmall: { backgroundColor: colors.peach },
   flower: { position: "absolute", width: 18, height: 18 },

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { Mood, PigAccessory, PigColor } from "@/lib/types";
+import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
 import { PIG_PIXELS, PIXEL_CELL, PIXEL_COLS, PIXEL_ROWS } from "@/components/pigPixels";
 
 /** Coat swatches — pastel only, gender-neutral, matches the app's pig palette. */
@@ -80,6 +80,7 @@ export function Pig({
   hp,
   asleep = false,
   animated = false,
+  emotion,
   size = FRAME,
 }: {
   mood: Mood;
@@ -92,6 +93,8 @@ export function Pig({
   /** Forces the sleeping pose regardless of mood/hp. */
   asleep?: boolean;
   animated?: boolean;
+  /** User-selected feeling from a quick check-in. */
+  emotion?: AvatarEmotion | null;
   size?: number;
 }) {
   const stage = stageForLevel(level);
@@ -104,12 +107,14 @@ export function Pig({
     "--pig-ear": coat.ear,
     "--pig-nose": coat.nose,
     "--pig-line": coat.line,
+    width: size,
+    height: size,
     transform: `scale(${scale})`,
   } as CSSProperties;
 
   return (
     <div
-      className={`pig pig-stage pig-state-${state} ${animated ? "animate-breathe" : ""}`}
+      className={`pig pig-stage pig-state-${state} pig-emotion-${emotion ?? mood} ${animated ? "animate-breathe" : ""}`}
       style={style}
       role="img"
       aria-label={`Pig is ${state}, ${STAGE_LABEL[stage].toLowerCase()} stage`}
@@ -150,6 +155,11 @@ export function Pig({
         {state === "hungry" && (
           <div className="pig-bubble" aria-hidden>
             🥣
+          </div>
+        )}
+        {state === "healthy" && emotion && (
+          <div className={`pig-emotion-mark pig-emotion-mark-${emotion}`} aria-hidden>
+            {emotion === "happy" ? "♥" : emotion === "sad" ? "…" : emotion === "angry" ? "!" : emotion === "calm" ? "~" : "✦"}
           </div>
         )}
 
