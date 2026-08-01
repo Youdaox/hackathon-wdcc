@@ -12,9 +12,14 @@ import { SchedulePanel } from "@/components/SchedulePanel";
 import { SessionSummary } from "@/components/SessionSummary";
 import { TodaySummary } from "@/components/TodaySummary";
 import { useIncline } from "@/lib/store";
+import { useDemoAuth } from "@/lib/demo-auth";
+import { DemoLogin } from "@/components/DemoLogin";
 
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
+  const { currentUser, logout } = useDemoAuth();
+
+  if (!currentUser) return <DemoLogin />;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
@@ -29,7 +34,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/community" className="rounded-full border border-moss/30 bg-moss/10 px-3 py-1.5 text-xs font-semibold text-moss hover:bg-moss/20">Community</Link>
+          <Link href="/community#leaderboards" className="rounded-full bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-moss-deep">Community Leaderboards</Link>
           <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
             active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
           }`}>
@@ -38,6 +43,7 @@ export default function Dashboard() {
           />
           {active ? "Session running" : "Idle"}
           </div>
+          <button onClick={logout} className="rounded-full border border-clay/30 px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay/10">Log out</button>
         </div>
       </header>
 

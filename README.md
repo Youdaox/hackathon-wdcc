@@ -228,6 +228,21 @@ With no credentials at all it serves [fixtures](src/lib/canvas/mock.ts) — thre
 Both paths go through the same [`CanvasSource`](src/lib/canvas/source.ts) interface, so the resolvers never branch on which one they got. Tokens are read off the request, used for that request, and never stored or sent to the browser. Canvas errors (401/403/404) pass through with their status under `extensions.code: CANVAS_API_ERROR` rather than being masked, since the caller can act on them.
 >>>>>>> ccb13dd2e84cbb7794356c6e640c08585f52b649
 
+## Testing encouragements in two browser windows
+
+Demo login state is stored in `sessionStorage`, so each browser window can use a different user
+while both windows share the same backend data. Received encouragements are checked every 2.5
+seconds and appear once as a temporary popup before remaining in the recipient's history.
+
+1. Open the project in two browser windows.
+2. Log in as Alice in the first window.
+3. Log in as Bob in the second window.
+4. Send encouragement from Alice to Bob.
+5. Confirm that Bob's window shows the message automatically and keeps it under **Who Encouraged You**.
+
+For the clearest test, open two independently created windows rather than duplicating a tab that
+already has a logged-in session.
+
 ## Not built yet
 
 - **Canvas OAuth** — login is by personal access token, which is the right call for a hackathon (no developer key to register with the university). A real deployment would want the OAuth2 flow so students never handle a token.

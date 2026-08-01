@@ -6,19 +6,12 @@ import type {
   EncouragementHistoryRecord,
   LeaderboardEntry,
 } from "@/lib/leaderboard/types";
+import { DEMO_USERS as USERS, useDemoAuth, type DemoUser } from "@/lib/demo-auth";
+import { DemoLogin } from "@/components/DemoLogin";
 
-type DemoUser = { id: string; name: string; initials: string };
 type Period = "week" | "month";
 type HistoryTab = "received" | "sent";
 type Notice = { kind: "success" | "error"; message: string } | null;
-
-const USERS: DemoUser[] = [
-  { id: "user-1", name: "Alice", initials: "AL" },
-  { id: "user-2", name: "Bob", initials: "BO" },
-  { id: "user-3", name: "Charlie", initials: "CH" },
-  { id: "user-4", name: "Diana", initials: "DI" },
-  { id: "user-5", name: "Ethan", initials: "ET" },
-];
 
 const WELLBEING_TASKS = [
   "Take three deep breaths",
@@ -43,8 +36,7 @@ async function request<T>(url: string, user: DemoUser, init?: RequestInit): Prom
 }
 
 export function EncouragementDashboard() {
-  const [selectedUserId, setSelectedUserId] = useState(USERS[0].id);
-  const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
+  const { currentUser, logout } = useDemoAuth();
   const [balance, setBalance] = useState<EncouragementBalance | null>(null);
   const [received, setReceived] = useState<EncouragementHistoryRecord[]>([]);
   const [sent, setSent] = useState<EncouragementHistoryRecord[]>([]);
@@ -110,9 +102,14 @@ export function EncouragementDashboard() {
 
   useEffect(() => {
     if (!currentUser) return;
+    let requestInFlight = false;
     const interval = window.setInterval(() => {
-      void loadHistory(currentUser, true).catch(() => undefined);
-    }, 3500);
+      if (requestInFlight) return;
+      requestInFlight = true;
+      void loadHistory(currentUser, true)
+        .catch(() => undefined)
+        .finally(() => { requestInFlight = false; });
+    }, 2500);
     return () => window.clearInterval(interval);
   }, [currentUser, loadHistory]);
 
@@ -183,7 +180,7 @@ export function EncouragementDashboard() {
   }
 
   function logOut() {
-    setCurrentUser(null);
+    logout();
     setBalance(null);
     setReceived([]);
     setSent([]);
@@ -195,21 +192,7 @@ export function EncouragementDashboard() {
   }
 
   if (!currentUser) {
-    const selectedUser = USERS.find((user) => user.id === selectedUserId) ?? USERS[0];
-    return (
-      <section className="mx-auto max-w-lg py-8 sm:py-16">
-        <div className="card p-6 sm:p-8">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-moss/15 text-xl font-bold text-moss">{selectedUser.initials}</div>
-          <div className="mt-5 text-center"><p className="eyebrow">Community login</p><h2 className="mt-2 text-2xl font-bold">Choose a demo profile</h2><p className="mt-2 text-sm text-muted">Log in as any community member to test sending and receiving encouragements.</p></div>
-          <label htmlFor="login-user" className="mt-6 block text-xs font-semibold text-muted">User</label>
-          <select id="login-user" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface-2 px-4 py-3 font-semibold text-ink">
-            {USERS.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
-          </select>
-          <button onClick={() => setCurrentUser(selectedUser)} className="mt-4 w-full rounded-xl bg-moss px-4 py-3 text-sm font-bold text-canvas transition hover:bg-citrus">Log in as {selectedUser.name}</button>
-          <p className="mt-4 text-center text-xs text-faint">Demo only — no password or production authentication.</p>
-        </div>
-      </section>
-    );
+    return <DemoLogin />;
   }
 
   const history = historyTab === "received" ? received : sent;
@@ -217,10 +200,17 @@ export function EncouragementDashboard() {
 
   return (
     <div className="space-y-6">
+      <nav className="sticky top-3 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-sm backdrop-blur">
+        <a href="#overview" className="rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-surface-2 hover:text-ink">Overview</a>
+        <a href="#tasks" className="rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-surface-2 hover:text-ink">Tasks</a>
+        <a href="#encouragements" className="rounded-xl px-3 py-2 text-xs font-semibold text-muted hover:bg-surface-2 hover:text-ink">Encouragements</a>
+        <a href="#leaderboards" className="rounded-xl bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-moss-deep">Weekly & Monthly Leaderboards</a>
+        <button onClick={logOut} className="ml-auto rounded-xl border border-clay/30 px-3 py-2 text-xs font-semibold text-clay hover:bg-clay/10">Switch user</button>
+      </nav>
       {toast && <div role="status" className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm animate-rise rounded-2xl border border-moss/40 bg-surface p-5 shadow-2xl shadow-black/40"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-moss/15 font-bold text-moss">♥</div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-moss">New encouragement from {toast.senderName}</p><p className="mt-2 text-sm leading-relaxed text-ink">“{toast.message}”</p></div><button onClick={() => setToast(null)} className="text-faint hover:text-ink" aria-label="Dismiss notification">×</button></div></div>}
 
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.8fr_1fr]">
-        <div className="card p-6"><p className="eyebrow">Logged in</p><div className="mt-3 flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-moss/15 font-bold text-moss">{currentUser.initials}</div><div className="min-w-0 flex-1"><h2 className="text-lg font-bold">{currentUser.name}</h2><p className="text-xs text-faint">{currentUser.id}</p></div><button onClick={logOut} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-moss/40 hover:text-ink">Switch User</button></div></div>
+      <section id="overview" className="scroll-mt-24 grid gap-4 lg:grid-cols-[1.35fr_0.8fr_1fr]">
+        <div className="card p-6"><p className="eyebrow">Logged in</p><div className="mt-3 flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-moss/15 font-bold text-moss">{currentUser.initials}</div><div className="min-w-0 flex-1"><h2 className="text-lg font-bold">{currentUser.name}</h2><p className="text-xs text-faint">{currentUser.id}</p></div><button onClick={logOut} className="rounded-xl border border-clay/30 bg-clay/10 px-3 py-2 text-xs font-semibold text-clay transition hover:bg-clay/20">Log out</button></div></div>
         <div className="card p-6"><p className="eyebrow">Available today</p><p className="tabular mt-3 text-4xl font-extrabold text-moss">{balance?.available ?? "—"}</p><p className="mt-1 text-sm text-muted">encouragements remaining</p>{balance && <p className="mt-3 text-xs text-faint">{balance.base} base + {balance.earned} earned − {balance.used} sent</p>}</div>
         <div className="card p-6">
           {balance && balance.taskPoints >= balance.maxTaskPoints ? (
@@ -234,7 +224,7 @@ export function EncouragementDashboard() {
         </div>
       </section>
 
-      <section className="card p-6">
+      <section id="tasks" className="card scroll-mt-24 p-6">
         <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
           <div><p className="eyebrow">Current task</p>{activeTask ? <div className="mt-3 rounded-2xl border border-moss/25 bg-moss/[0.07] p-5"><h2 className="text-xl font-bold">{activeTask}</h2><p className="mt-1 text-sm text-muted">Take a moment for yourself, then mark it complete.</p><div className="mt-4 flex gap-2"><button onClick={completeTask} disabled={busy !== null} className="rounded-xl bg-moss px-4 py-2.5 text-sm font-bold text-canvas disabled:opacity-50">{busy === "task" ? "Completing…" : "Complete Task"}</button><button onClick={showRandomTask} disabled={busy !== null} className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink">Try another</button></div></div> : <div className="mt-3 rounded-2xl border border-dashed border-line p-6 text-sm text-muted">Choose a random task or create your own.</div>}</div>
           <form onSubmit={createCustomTask}><label htmlFor="custom-task" className="eyebrow">Create your own</label><p className="mt-2 text-sm text-muted">Add a small wellbeing action that works for you.</p><input id="custom-task" value={customTask} onChange={(event) => setCustomTask(event.target.value)} maxLength={120} placeholder="e.g. Walk outside for two minutes" className="mt-4 w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink placeholder:text-faint" /><button type="submit" disabled={!customTask.trim()} className="mt-3 rounded-xl border border-moss/30 bg-moss/10 px-4 py-2.5 text-sm font-bold text-moss disabled:opacity-50">Create Task</button></form>
@@ -243,9 +233,11 @@ export function EncouragementDashboard() {
 
       {notice && <div role="status" className={`rounded-xl border px-4 py-3 text-sm ${notice.kind === "success" ? "border-moss/30 bg-moss/10 text-moss" : "border-clay/30 bg-clay/10 text-clay"}`}>{notice.message}</div>}
 
+      <div id="encouragements" className="scroll-mt-24" />
+
       <section className="card p-6"><p className="eyebrow">Share support</p><h2 className="mt-1 text-xl font-bold">Encourage someone</h2><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{otherUsers.map((user) => <article key={user.id} className="rounded-2xl border border-line-soft bg-surface-2 p-4"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-citrus/10 text-xs font-bold text-citrus">{user.initials}</div><h3 className="mt-3 font-bold">{user.name}</h3><p className="text-xs text-faint">{user.id}</p><button onClick={() => sendEncouragement(user)} disabled={busy !== null || !balance?.available} className="mt-4 w-full rounded-xl border border-moss/30 bg-moss/10 px-3 py-2 text-xs font-bold text-moss hover:bg-moss/20 disabled:border-line disabled:text-faint disabled:opacity-60">{busy === user.id ? "Sending…" : "Send Encouragement"}</button></article>)}</div></section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+      <section id="leaderboards" className="scroll-mt-24 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="card overflow-hidden"><div className="border-b border-line-soft p-6"><p className="eyebrow">Encouragement history</p><div className="mt-4 flex rounded-xl bg-surface-2 p-1">{(["received", "sent"] as const).map((tab) => <button key={tab} onClick={() => setHistoryTab(tab)} className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${historyTab === tab ? "bg-moss text-canvas" : "text-muted hover:text-ink"}`}>{tab === "received" ? "Who Encouraged You" : "Who You Encouraged"}</button>)}</div></div><div className="max-h-[28rem] divide-y divide-line-soft overflow-y-auto">{history.length ? history.map((item) => <article key={item.id} className="p-5"><div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">{historyTab === "received" ? item.senderName : item.recipientName}</p><time className="shrink-0 text-[11px] text-faint">{new Date(item.createdAt).toLocaleString("en-NZ", { dateStyle: "medium", timeStyle: "short" })}</time></div><p className="mt-2 text-sm leading-relaxed text-muted">“{item.message}”</p></article>) : <p className="p-8 text-center text-sm text-muted">No encouragements here yet.</p>}</div></div>
 
         <div className="card overflow-hidden"><div className="flex flex-col gap-4 border-b border-line-soft p-6 sm:flex-row sm:items-center sm:justify-between"><div><p className="eyebrow">Leaderboard</p><h2 className="mt-1 text-xl font-bold">Community momentum</h2></div><div className="flex rounded-xl bg-surface-2 p-1">{(["week", "month"] as const).map((tab) => <button key={tab} onClick={() => setPeriod(tab)} className={`rounded-lg px-4 py-2 text-xs font-semibold transition ${period === tab ? "bg-moss text-canvas" : "text-muted hover:text-ink"}`}>{tab === "week" ? "Weekly" : "Monthly"}</button>)}</div></div><div className="overflow-x-auto"><table className="w-full min-w-[32rem] text-left"><thead><tr className="border-b border-line-soft text-xs uppercase tracking-wider text-faint"><th className="px-5 py-3">Rank</th><th className="px-3 py-3">User</th><th className="px-3 py-3 text-center">Received</th><th className="px-5 py-3 text-right">Score</th></tr></thead><tbody>{boards[period].map((entry) => <tr key={entry.userId} className={`border-b border-line-soft last:border-0 ${entry.userId === currentUser.id ? "bg-moss/[0.07]" : ""}`}><td className="tabular px-5 py-4 font-bold text-citrus">#{entry.rank}</td><td className="px-3 py-4 font-semibold">{entry.displayName}{entry.userId === currentUser.id && <span className="ml-2 rounded-full bg-moss/15 px-2 py-0.5 text-[10px] uppercase text-moss">You</span>}</td><td className="tabular px-3 py-4 text-center text-muted">{entry.encouragementsReceived}</td><td className="tabular px-5 py-4 text-right font-bold">{entry.score}</td></tr>)}</tbody></table>{!boards[period].length && <p className="p-8 text-center text-sm text-muted">{busy === "initial" ? "Loading rankings…" : "No ranking data yet."}</p>}</div></div>
