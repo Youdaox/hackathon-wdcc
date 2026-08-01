@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CanvasCard } from "@/components/CanvasCard";
-import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
+import { FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
 import { DesktopBuddy } from "@/components/DesktopBuddy";
 import { LocationCard } from "@/components/LocationCard";
@@ -17,6 +17,11 @@ import { useIncline } from "@/lib/store";
 
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
+
+  useEffect(() => {
+    window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
+    return () => window.electronAPI?.setBackgroundTracking(false);
+  }, [active, eyeEnabled]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
@@ -68,7 +73,6 @@ export default function Dashboard() {
       <RecallCheck />
       <SessionSummary />
       <DesktopBuddy />
-      {eyeEnabled && active && <CameraOverlay />}
     </main>
   );
 }
