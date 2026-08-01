@@ -6,6 +6,8 @@ import { useWander } from "@/hooks/useWander";
 import { useIncline } from "@/lib/store";
 import { moodFor } from "@/lib/companion";
 import { Pig } from "@/components/Pig";
+import { SpeechBubble } from "@/components/SpeechBubble";
+import { randomIdleLine } from "@/lib/speechLines";
 
 declare global {
   interface Window {
@@ -25,6 +27,9 @@ declare global {
 }
 
 const PET_SIZE = 96;
+const DRAG_SPEECH_LINE = "Let me down!";
+const SPEECH_EVERY_N_IDLES = 3;
+const SPEECH_DURATION_MS = 3000;
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running
@@ -40,6 +45,14 @@ export function DesktopBuddy() {
   const [pipSupported, setPipSupported] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const petRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const idleCountRef = useRef(0);
+  const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [bubbleText, setBubbleText] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => clearTimeout(speechTimeoutRef.current);
+  }, []);
 
   useEffect(() => {
     setIsElectron(Boolean(window.electronAPI?.isElectron));
@@ -108,10 +121,21 @@ export function DesktopBuddy() {
       width: pipWindow?.innerWidth ?? 0,
       height: pipWindow?.innerHeight ?? 0,
     }),
-    undefined,
+    (dragging) => {
+      clearTimeout(speechTimeoutRef.current);
+      setBubbleText(dragging ? DRAG_SPEECH_LINE : null);
+    },
     // The Pig sprite's box-shadow pixel art is too expensive to rescale every
     // frame — see useWander's enableSquish doc comment.
     false,
+    () => {
+      idleCountRef.current += 1;
+      if (idleCountRef.current % SPEECH_EVERY_N_IDLES !== 0) return;
+      setBubbleText(randomIdleLine());
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = setTimeout(() => setBubbleText(null), SPEECH_DURATION_MS);
+    },
+    bubbleRef,
   );
 
   useEffect(() => {
@@ -136,32 +160,39 @@ export function DesktopBuddy() {
       {!isElectron &&
         pipWindow &&
         createPortal(
-          <div
-            ref={petRef}
-            role="img"
-            aria-label="Desktop buddy"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: PET_SIZE,
-              height: PET_SIZE,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              willChange: "transform",
-              userSelect: "none",
-            }}
-          >
-            <Pig
-              mood={moodFor(companion.hp)}
-              level={companion.level}
-              color={companion.color}
-              accessory={companion.accessory}
-              hp={companion.hp}
-              size={PET_SIZE}
-            />
-          </div>,
+          <>
+            <div
+              ref={petRef}
+              role="img"
+              aria-label="Desktop buddy"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: PET_SIZE,
+                height: PET_SIZE,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                willChange: "transform",
+                userSelect: "none",
+              }}
+            >
+              <Pig
+                mood={moodFor(companion.hp)}
+                level={companion.level}
+                color={companion.color}
+                accessory={companion.accessory}
+                hp={companion.hp}
+                size={PET_SIZE}
+              />
+            </div>
+            {bubbleText && (
+              <SpeechBubble ref={bubbleRef} size={PET_SIZE}>
+                {bubbleText}
+              </SpeechBubble>
+            )}
+          </>,
           pipWindow.document.body,
         )}
     </>

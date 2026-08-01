@@ -3,15 +3,17 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 const SPEED = 0.8; // px per animation frame
-const MIN_IDLE_MS = 2500;
-const MAX_IDLE_MS = 6000;
-const MIN_WALK_MS = 1500;
-const MAX_WALK_MS = 4000;
+const MIN_IDLE_MS = 4000;
+const MAX_IDLE_MS = 9000;
+const MIN_WALK_MS = 3000;
+const MAX_WALK_MS = 7000;
 const IDLE_SQUISH_PERIOD_MS = 900;
 const IDLE_SQUISH_AMOUNT = 0.08;
 const WALK_STEP_MS = 260; // one hop (ground → peak → ground)
 const WALK_BOB_HEIGHT = 5; // px lift at the peak of each hop
 const WALK_SQUISH_AMOUNT = 0.05; // squash on ground contact
+const SHAKE_INTERVAL_MS = 70; // how often the drag-shake jitter picks a new offset
+const SHAKE_AMOUNT = 2; // px
 
 function randRange(min: number, max: number) {
   return min + Math.random() * (max - min);
@@ -40,6 +42,17 @@ function clamp(value: number, min: number, max: number) {
  * ancestor forces the browser to re-rasterize it on every animation frame,
  * which is enough to freeze the tab. Position (translate) and the hop bounce
  * stay on regardless, since pure translate is compositor-only and cheap.
+ *
+ * `onEnterIdle` fires every time a fresh idle pause begins (including right
+ * after a drag ends), with the sprite's position at that moment — a caller
+ * can use this to, say, pop up a speech bubble every few idles.
+ *
+ * While dragging, a small translate-only jitter (never scale/rotate, for the
+ * same repaint-cost reason as `enableSquish`) is layered on top so the sprite
+ * visibly shakes in the cursor's grip. `bubbleRef`, if given, gets the same
+ * position (minus the jitter and facing flip) written to it every frame, so
+ * a speech bubble element can float above the sprite and follow it exactly
+ * — including mid-drag — without needing its own React state updates.
  */
 export function useWander(
   elRef: RefObject<HTMLElement | null>,
@@ -48,6 +61,8 @@ export function useWander(
   getBounds: () => { width: number; height: number },
   onDragStateChange?: (dragging: boolean) => void,
   enableSquish = true,
+  onEnterIdle?: (position: { x: number; y: number }) => void,
+  bubbleRef?: RefObject<HTMLElement | null>,
 ) {
   const posRef = useRef({ x: 0, y: 0 });
   const velRef = useRef({ x: 0, y: 0 });
@@ -58,11 +73,15 @@ export function useWander(
   const walkStartRef = useRef(0);
   const draggingRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const shakeOffsetRef = useRef({ x: 0, y: 0 });
+  const nextShakeAtRef = useRef(0);
   const frameRef = useRef(0);
   const getBoundsRef = useRef(getBounds);
   getBoundsRef.current = getBounds;
   const onDragStateChangeRef = useRef(onDragStateChange);
   onDragStateChangeRef.current = onDragStateChange;
+  const onEnterIdleRef = useRef(onEnterIdle);
+  onEnterIdleRef.current = onEnterIdle;
 
   useEffect(() => {
     if (!active) return;
@@ -75,6 +94,7 @@ export function useWander(
       velRef.current = { x: 0, y: 0 };
       idleStartRef.current = now;
       modeUntilRef.current = now + randRange(MIN_IDLE_MS, MAX_IDLE_MS);
+      onEnterIdleRef.current?.({ ...posRef.current });
     }
 
     function enterWalk(now: number) {
@@ -186,7 +206,26 @@ export function useWander(
           }
         }
 
-        el.style.transform = `translate(${pos.x}px, ${pos.y + bobY}px) scaleX(${facingRef.current}) scaleY(${squishY})`;
+        let shakeX = 0;
+        let shakeY = 0;
+        if (draggingRef.current) {
+          if (now >= nextShakeAtRef.current) {
+            shakeOffsetRef.current = {
+              x: (Math.random() - 0.5) * 2 * SHAKE_AMOUNT,
+              y: (Math.random() - 0.5) * 2 * SHAKE_AMOUNT,
+            };
+            nextShakeAtRef.current = now + SHAKE_INTERVAL_MS;
+          }
+          shakeX = shakeOffsetRef.current.x;
+          shakeY = shakeOffsetRef.current.y;
+        }
+
+        el.style.transform = `translate(${pos.x + shakeX}px, ${pos.y + bobY + shakeY}px) scaleX(${facingRef.current}) scaleY(${squishY})`;
+
+        const bubbleEl = bubbleRef?.current;
+        if (bubbleEl) {
+          bubbleEl.style.transform = `translate(${pos.x}px, ${pos.y + bobY}px)`;
+        }
       }
       frameRef.current = requestAnimationFrame(tick);
     }
