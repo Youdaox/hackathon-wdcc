@@ -8,6 +8,13 @@
       "when": 1785554310231,
       "tag": "0000_hard_baron_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785561132514,
+      "tag": "0001_sticky_iron_fist",
+      "breakpoints": true
     }
   ]
 }

@@ -37,6 +37,10 @@ export const companions = sqliteTable("companions", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   species: text("species").notNull(),
+  /** Cosmetic coat color — see PigColor in src/lib/types.ts. */
+  color: text("color").notNull().default("pink"),
+  /** Cosmetic worn accessory — see PigAccessory in src/lib/types.ts. */
+  accessory: text("accessory").notNull().default("none"),
   level: integer("level").notNull(),
   /** XP toward the *current* level only, not lifetime. */
   xp: integer("xp").notNull(),
