@@ -1,5 +1,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { resolve } from "node:path";
 import * as schema from "./schema";
 
 /**
@@ -23,7 +25,15 @@ function createDb() {
   // WAL lets the seed script and the dev server hold the file at once.
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
-  return drizzle(sqlite, { schema });
+  const db = drizzle(sqlite, { schema });
+
+  // A fresh checkout doesn't always have the local SQLite file bootstrapped yet,
+  // so ensure the stored auth tables are created before any login/signup route
+  // attempts to read or write them.
+  const migrationsFolder = resolve(process.cwd(), "drizzle");
+  migrate(db, { migrationsFolder });
+
+  return db;
 }
 
 export const db = globalForDb.inclineDb ?? createDb();

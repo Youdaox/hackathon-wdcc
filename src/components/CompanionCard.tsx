@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useIncline } from "@/lib/store";
-import { avatarStateFor, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
+import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { useNow } from "@/hooks/useNow";
 import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
@@ -37,7 +37,16 @@ const HP_BAR: Record<Mood, string> = {
 };
 
 export function CompanionCard() {
-  const { companion, active, renameCompanion, setCompanionColor, setCompanionAccessory, checkInWithCompanion } =
+  const {
+    companion,
+    active,
+    renameCompanion,
+    setCompanionColor,
+    setCompanionAccessory,
+    checkInWithCompanion,
+    respondToMealCheck,
+    respondToWaterBreak,
+  } =
     useIncline();
   const [editing, setEditing] = useState(false);
   const now = useNow(30_000);
@@ -45,7 +54,16 @@ export function CompanionCard() {
   const progress = levelProgress(companion);
   const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
   const avatarState = avatarStateFor(companion.hp, companion.checkInEmotion);
-  const checkInDue = companion.nextCheckInAt === null || (now !== null && now.getTime() >= companion.nextCheckInAt);
+  const checkInDue = companion.nextCheckInAt === null
+    || (now !== null && now.getTime() >= companion.nextCheckInAt);
+  const meal = now === null ? null : mealForTime(now);
+  const mealCheckDue = meal !== null && (
+    companion.lastMealAt === null
+    || new Date(companion.lastMealAt).toDateString() !== now?.toDateString()
+    || companion.lastMeal !== meal
+  );
+  const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);
+  const hasPrompt = checkInDue || mealCheckDue || waterBreakDue;
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">
@@ -122,7 +140,29 @@ export function CompanionCard() {
         </div>
       </div>}
 
-      <p className={`${checkInDue ? "mt-2" : "mt-5"} text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
+      {mealCheckDue && meal !== null && (
+        <WellbeingPrompt
+          question={`Have you had ${meal}?`}
+          onYes={() => respondToMealCheck(meal, true)}
+          onNo={() => respondToMealCheck(meal, false)}
+        />
+      )}
+
+      {waterBreakDue && (
+        <WellbeingPrompt
+          question="Have you had some water?"
+          onYes={() => respondToWaterBreak(true)}
+          onNo={() => respondToWaterBreak(false)}
+        />
+      )}
+
+      {active && active.emotionalXpMultiplier !== 1 && !checkInDue && (
+        <p className="mt-2 text-xs text-faint">
+          Check-in effect: {active.emotionalXpMultiplier}× XP · {active.hpLossMultiplier}× health loss
+        </p>
+      )}
+
+      <p className={`${hasPrompt ? "mt-2" : "mt-5"} text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
         Level {companion.level} · {MOOD_LABEL[mood]}
       </p>
 
@@ -145,6 +185,33 @@ export function CompanionCard() {
         {formatCompact(companion.totalFocusedMs)} of verified focus, all time
       </p>
     </section>
+  );
+}
+
+function WellbeingPrompt({
+  question,
+  onYes,
+  onNo,
+}: {
+  question: string;
+  onYes: () => void;
+  onNo: () => void;
+}) {
+  return (
+    <div className="mt-3 w-full rounded-xl bg-surface-2/60 px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="eyebrow">Wellbeing break</span>
+        <span className="text-xs text-faint">{question}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onYes} className="rounded-lg bg-moss px-3 py-1.5 text-sm font-semibold text-white">
+          Yes
+        </button>
+        <button type="button" onClick={onNo} className="rounded-lg bg-canvas px-3 py-1.5 text-sm font-semibold text-muted hover:bg-line">
+          Not yet
+        </button>
+      </div>
+    </div>
   );
 }
 

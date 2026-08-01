@@ -7,7 +7,19 @@ const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 let dashboardWindow = null;
 let overlayWindow = null;
 let statusWindow = null;
-let trackingActive = false;
+
+/**
+ * The latest status pushed up from the dashboard renderer.
+ *
+ * The main process deliberately does not work this out for itself. It used to,
+ * from `dashboardWindow.isFocused()` — but the session scores "away" as
+ * `document.hidden || gaze`, so OS window focus disagreed with the scoring in
+ * both directions: a dashboard sitting visible beside a PDF read as "Unfocused"
+ * while the session counted it as focused, and a focused window with the user's
+ * eyes elsewhere read as "Focused" while their companion was losing health.
+ * Only the renderer knows what away means, so it is the one that decides.
+ */
+let status = { phase: "idle" };
 
 function getStatusBounds() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -23,17 +35,13 @@ function getStatusBounds() {
 }
 
 function syncStatusWindow() {
-  const dashboardFocused = dashboardWindow?.isFocused?.() ?? false;
-  const shouldShow = trackingActive;
-  const state = trackingActive
-    ? dashboardFocused
-      ? { mode: "focused", label: "Focused", tone: "bg-moss" }
-      : { mode: "unfocused", label: "Unfocused", tone: "bg-red-500" }
-    : { mode: "idle", label: "Tracking off", tone: "bg-faint" };
+  // The pill follows the *session*, not the camera. Gating it on eye tracking
+  // meant a perfectly ordinary session got no desktop status at all.
+  const shouldShow = status.phase !== "idle";
 
   if (!shouldShow) {
     if (statusWindow) {
-      statusWindow.webContents.send("status:update", state);
+      statusWindow.webContents.send("status:update", status);
       statusWindow.hide();
     }
     return;
@@ -64,7 +72,7 @@ function syncStatusWindow() {
     statusWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     statusWindow.setIgnoreMouseEvents(true, { forward: true });
     statusWindow.webContents.on("did-finish-load", () => {
-      statusWindow?.webContents.send("status:update", state);
+      statusWindow?.webContents.send("status:update", status);
     });
     statusWindow.loadURL(`${APP_URL}/status`);
     statusWindow.on("closed", () => {
@@ -74,7 +82,7 @@ function syncStatusWindow() {
   }
 
   statusWindow.setBounds(getStatusBounds());
-  statusWindow.webContents.send("status:update", state);
+  statusWindow.webContents.send("status:update", status);
   if (!statusWindow.isVisible()) statusWindow.showInactive();
 }
 
@@ -90,8 +98,11 @@ function createDashboardWindow() {
   });
 
   dashboardWindow.loadURL(APP_URL);
-  dashboardWindow.on("focus", syncStatusWindow);
-  dashboardWindow.on("blur", syncStatusWindow);
+  // `focus` and `blur` are deliberately not listened for. They were what drove
+  // the old state, and window focus is not what "away" means — the renderer
+  // reports that. These remaining events only re-assert the pill's bounds and
+  // visibility; minimising also flips `document.hidden`, so the renderer pushes
+  // the phase change itself.
   dashboardWindow.on("minimize", syncStatusWindow);
   dashboardWindow.on("restore", syncStatusWindow);
   dashboardWindow.on("show", syncStatusWindow);
@@ -177,8 +188,8 @@ ipcMain.on("status:ready", (event) => {
   win?.showInactive();
 });
 
-ipcMain.on("tracking:set-active", (_event, active) => {
-  trackingActive = Boolean(active);
+ipcMain.on("status:set", (_event, next) => {
+  status = next && typeof next.phase === "string" ? next : { phase: "idle" };
   syncStatusWindow();
 });
 
