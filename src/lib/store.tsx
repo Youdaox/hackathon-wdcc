@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import {
   PIG_COLOR_VALUES,
   PIG_ACCESSORY_VALUES,
@@ -384,7 +385,15 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   // --- Eye tracking ---------------------------------------------------------
   // The camera only ever runs while a session is live, and only if the user
   // asked for it. No session, no webcam — that's the whole privacy promise.
-  const gaze = useFocusTracking(eyeEnabled && active !== null, gazeCalibration);
+  //
+  // The Electron overlay and status windows each load this same provider in
+  // their own separate page — without this check, opening either while a
+  // session is live starts a second concurrent WebGazer/TensorFlow pipeline
+  // on top of the dashboard's, which is heavy enough to freeze everything.
+  // Neither window needs gaze data at all, so it's just skipped there.
+  const pathname = usePathname();
+  const isTrackingWindow = pathname === "/overlay" || pathname === "/status";
+  const gaze = useFocusTracking(eyeEnabled && active !== null && !isTrackingWindow, gazeCalibration);
 
   // Nothing counts against the session while the calibration overlay is still
   // up — the user is clicking dots, not studying.
