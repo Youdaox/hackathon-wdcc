@@ -24,6 +24,12 @@ export const metadata: Metadata = {
   title: "Incline — grow through focus",
   description:
     "A companion that only grows on verified, undistracted study time, tied to your real class schedule.",
+  applicationName: "Incline",
+  appleWebApp: {
+    capable: true,
+    title: "Incline",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({

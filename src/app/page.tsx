@@ -9,6 +9,8 @@ import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
 import { SessionSummary } from "@/components/SessionSummary";
 import { TodaySummary } from "@/components/TodaySummary";
+import { InstallAppButton } from "@/components/InstallAppButton";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
 
 export default function Dashboard() {
@@ -26,15 +28,19 @@ export default function Dashboard() {
             Your companion grows on verified focus only
           </p>
         </div>
-        <div
-          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-moss" : "bg-faint"}`}
-          />
-          {active ? "Session running" : "Idle"}
+        <div className="flex items-center gap-2">
+          <InstallAppButton />
+          <ThemeToggle />
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              active ? "border-moss/40 bg-moss/10 text-moss" : "border-line bg-surface text-faint"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${active ? "animate-pulse bg-moss" : "bg-faint"}`}
+            />
+            {active ? "Session running" : "Idle"}
+          </div>
         </div>
       </header>
 

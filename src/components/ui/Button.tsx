@@ -7,8 +7,8 @@ type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-moss text-canvas hover:bg-[#8ce9b6] active:bg-moss shadow-[0_6px_20px_-8px_rgba(111,221,160,0.7)]",
-  outline: "border border-line bg-surface-2 text-ink hover:border-moss/60 hover:text-moss",
+    "bg-moss text-white hover:bg-[#4b9961] active:bg-moss shadow-[0_12px_24px_-12px_rgba(88,169,109,0.75)]",
+  outline: "border border-line bg-surface text-ink hover:border-moss/60 hover:text-moss",
   ghost: "text-muted hover:text-ink hover:bg-surface-2",
   danger: "border border-clay/40 text-clay hover:bg-clay/10",
 };

@@ -6,30 +6,53 @@
   UI chrome. High contrast throughout — this has to survive a projector.
 */
 @theme {
-  --color-canvas: #0e1211;
-  --color-surface: #161b19;
-  --color-surface-2: #1e2522;
-  --color-line: #2a332e;
-  --color-line-soft: #222a26;
+  --color-canvas: #faf5ed;
+  --color-surface: #ffffff;
+  --color-surface-2: #f5eee5;
+  --color-line: #e7e1d8;
+  --color-line-soft: #eee8df;
 
-  --color-ink: #eaf1ec;
-  --color-muted: #8b9c92;
-  --color-faint: #5f6f66;
+  --color-ink: #3b3329;
+  --color-muted: #897f70;
+  --color-faint: #aaa08f;
 
-  --color-moss: #6fdda0;
-  --color-moss-deep: #2b6d4a;
-  --color-citrus: #d9e86e;
-  --color-amber: #f5b860;
-  --color-clay: #ee7c63;
+  --color-moss: #58a96d;
+  --color-moss-deep: #397849;
+  --color-citrus: #8acb98;
+  --color-amber: #c59f68;
+  --color-clay: #e88d67;
 
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  --radius-card: 1.25rem;
+  --radius-card: 1.75rem;
 }
 
 @layer base {
+  [data-theme="dark"] {
+    --color-canvas: #101412;
+    --color-surface: #18201c;
+    --color-surface-2: #222b26;
+    --color-line: #303b34;
+    --color-line-soft: #28332d;
+
+    --color-ink: #edf3ee;
+    --color-muted: #a4b3a9;
+    --color-faint: #728178;
+
+    --color-moss: #72cf8c;
+    --color-moss-deep: #3f8856;
+    --color-citrus: #c4da84;
+    --color-amber: #e0ae6c;
+    --color-clay: #f08d73;
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
   html {
     background-color: var(--color-canvas);
     color: var(--color-ink);
@@ -39,8 +62,8 @@
     font-family: var(--font-sans);
     /* Two soft light sources: moss from the upper left, amber warmth low right. */
     background-image:
-      radial-gradient(60rem 40rem at 12% -8%, rgba(111, 221, 160, 0.09), transparent 62%),
-      radial-gradient(48rem 34rem at 92% 108%, rgba(245, 184, 96, 0.07), transparent 60%);
+      radial-gradient(46rem 34rem at 0% -10%, rgba(138, 203, 152, 0.1), transparent 65%),
+      radial-gradient(40rem 30rem at 100% 100%, rgba(232, 141, 103, 0.06), transparent 65%);
     background-attachment: fixed;
   }
 
@@ -82,6 +105,7 @@
     background-color: var(--color-surface);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
+    box-shadow: 0 1px 2px rgba(59, 51, 41, 0.02), 0 10px 30px rgba(59, 51, 41, 0.025);
   }
 
   /* Slow, organic pulse for the companion while a session is running. */
