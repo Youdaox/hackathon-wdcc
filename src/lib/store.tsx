@@ -19,7 +19,14 @@ import {
   type StudyBlock,
 } from "./types";
 import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
-import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from "./companion";
+import {
+  applyIdleDecay,
+  applySession,
+  awayMsPastGrace,
+  createCompanion,
+  hpLostForAwayMs,
+  type GrowthResult,
+} from "./companion";
 import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
 import {
@@ -198,6 +205,19 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     zoneRef.current = currentZone;
   }, [currentZone]);
 
+  /**
+   * The companion's HP when the running session began, before any live decay.
+   *
+   * Live decay is a *preview* of what the session will cost, not a second
+   * source of truth — so when the session lands we rewind to this anchor and
+   * let `applySession` compute the real figure, exactly as the server does from
+   * the same recorded distractions. Without the rewind the finished session's
+   * cost would be charged twice: once as it accrued, once at the end.
+   */
+  const hpAnchor = useRef<number | null>(null);
+  /** HP already drained during the current away stretch. */
+  const drainedThisStretch = useRef(0);
+
   const handleComplete = useCallback((finished: FocusSession) => {
     const zone = zoneRef.current;
     const withBonus: FocusSession = {
@@ -205,7 +225,13 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       xpMultiplier: zone?.multiplier ?? 1,
       zoneName: zone?.name,
     };
-    const growth = applySession(companionRef.current, withBonus, withBonus.xpMultiplier);
+    // Cleared first: this also stops the drain loop from banking one last
+    // partial second on top of the authoritative result as it tears down.
+    const anchor = hpAnchor.current;
+    hpAnchor.current = null;
+    const base =
+      anchor === null ? companionRef.current : { ...companionRef.current, hp: anchor };
+    const growth = applySession(base, withBonus, withBonus.xpMultiplier);
     const recorded: FocusSession = {
       ...withBonus,
       xpEarned: growth.xpEarned,
@@ -218,6 +244,64 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   const { active, start, end, cancel, elapsedMs, addBonusXp, setGazeAway } =
     useFocusSession(handleComplete);
+
+  // --- Live decay -----------------------------------------------------------
+  // The pet loses health *while* you're away rather than being docked once the
+  // session is filed. Watching it slump in real time is the entire point: a
+  // number that only moves after the fact can't pull anyone back to their desk.
+
+  // Anchored per session, so a discard can put back exactly what it took.
+  const sessionId = active?.id ?? null;
+  useEffect(() => {
+    if (sessionId === null) {
+      hpAnchor.current = null;
+      return;
+    }
+    hpAnchor.current = companionRef.current.hp;
+    drainedThisStretch.current = 0;
+  }, [sessionId]);
+
+  // Keyed on when the current absence began. Each away stretch gets its own
+  // grace window, so this effect's lifetime is exactly one stretch.
+  const awaySince = active?.awaySince ?? null;
+  useEffect(() => {
+    if (awaySince === null || sessionId === null) return;
+    drainedThisStretch.current = 0;
+
+    // Derived from wall-clock elapsed time, never accumulated per tick: a
+    // backgrounded tab has its timers throttled to roughly once a minute, and a
+    // tick-counting drain would quietly stop charging for exactly the absence
+    // we most want to catch — the one where you switched away entirely.
+    const drain = () => {
+      // The session may have landed since the last tick; its final HP is
+      // authoritative and must not be decayed further.
+      if (hpAnchor.current === null) return;
+      const owed = hpLostForAwayMs(awayMsPastGrace(Date.now() - awaySince));
+      const unbanked = owed - drainedThisStretch.current;
+      if (unbanked <= 0) return;
+      drainedThisStretch.current = owed;
+      setCompanion((prev) => ({ ...prev, hp: Math.max(0, prev.hp - unbanked) }));
+    };
+
+    const id = window.setInterval(drain, 1_000);
+    return () => {
+      window.clearInterval(id);
+      // Bank the final partial second. Without this the live total would fall a
+      // fraction short of what `applySession` charges, and every session would
+      // end with a small unexplained drop.
+      drain();
+    };
+  }, [awaySince, sessionId]);
+
+  /** Discarding a session undoes the health it cost — it officially never happened. */
+  const cancelSession = useCallback(() => {
+    const anchor = hpAnchor.current;
+    hpAnchor.current = null;
+    if (anchor !== null) {
+      setCompanion((prev) => (prev.hp === anchor ? prev : { ...prev, hp: anchor }));
+    }
+    cancel();
+  }, [cancel]);
 
   // --- Eye tracking ---------------------------------------------------------
   // The camera only ever runs while a session is live, and only if the user
@@ -325,6 +409,9 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setSessions([]);
     setOutcome(null);
     setGazeCalibration("none");
+    // Dropped before `cancel()`, so the drain loop can't tear down and charge a
+    // last fraction of a second against the brand-new companion.
+    hpAnchor.current = null;
     cancel();
   }, [cancel]);
 
@@ -351,7 +438,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       elapsedMs,
       startSession: start,
       endSession: end,
-      cancelSession: cancel,
+      cancelSession,
       addBonusXp,
       outcome,
       dismissOutcome: () => setOutcome(null),
@@ -390,7 +477,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       elapsedMs,
       start,
       end,
-      cancel,
+      cancelSession,
       addBonusXp,
       outcome,
       resetEverything,
