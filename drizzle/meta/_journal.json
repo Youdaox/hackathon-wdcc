@@ -36,6 +36,13 @@
       "when": 1785572000000,
       "tag": "0004_companion_profile_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785632400000,
+      "tag": "0005_calendar_events",
+      "breakpoints": true
     }
   ]
 }

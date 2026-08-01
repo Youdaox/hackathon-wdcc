@@ -39,6 +39,31 @@ export const authSessions = sqliteTable(
   (table) => [index("auth_sessions_user_idx").on(table.userId)],
 );
 
+/** Dated calendar events are server-backed so every account has a private calendar. */
+export const calendarEvents = sqliteTable(
+  "calendar_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    eventDate: text("event_date").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    description: text("description").notNull().default(""),
+    location: text("location"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [index("calendar_events_user_date_idx").on(table.userId, table.eventDate)],
+);
+
+/** Secret bearer token used by calendar apps, which cannot send the login cookie. */
+export const calendarFeedTokens = sqliteTable("calendar_feed_tokens", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** Mutual, account-backed connections used to limit encouragement sharing. */
 export const friendships = sqliteTable(
   "friendships",
