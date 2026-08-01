@@ -12,6 +12,8 @@ import {
 import {
   PIG_COLOR_VALUES,
   PIG_ACCESSORY_VALUES,
+  AVATAR_EMOTIONS,
+  type AvatarEmotion,
   type Companion,
   type FocusSession,
   type PigAccessory,
@@ -61,6 +63,7 @@ interface InclineContextValue {
   renameCompanion: (name: string) => void;
   setCompanionColor: (color: PigColor) => void;
   setCompanionAccessory: (accessory: PigAccessory) => void;
+  checkInWithCompanion: (emotion: AvatarEmotion) => void;
   sessions: FocusSession[];
   todaysSessions: FocusSession[];
   active: ReturnType<typeof useFocusSession>["active"];
@@ -134,6 +137,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
           ? loadedCompanion.accessory
           : "none",
+        checkInEmotion: AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
+          ? loadedCompanion.checkInEmotion
+          : null,
+        checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
+        nextCheckInAt:
+          typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
       }),
     );
     setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
@@ -317,6 +326,18 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion((prev) => ({ ...prev, accessory }));
   }, []);
 
+  const checkInWithCompanion = useCallback((emotion: AvatarEmotion) => {
+    const checkedInAt = Date.now();
+    // A varied delay keeps the prompt from feeling like a rigid notification.
+    const delayMs = (5 + Math.floor(Math.random() * 56)) * 60_000;
+    setCompanion((prev) => ({
+      ...prev,
+      checkInEmotion: emotion,
+      checkInAt: checkedInAt,
+      nextCheckInAt: checkedInAt + delayMs,
+    }));
+  }, []);
+
   const resetEverything = useCallback(() => {
     clearAll();
     window.localStorage.removeItem(LIVE_SESSION_KEY);
@@ -345,6 +366,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       renameCompanion,
       setCompanionColor,
       setCompanionAccessory,
+      checkInWithCompanion,
       sessions,
       todaysSessions,
       active,
@@ -384,6 +406,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       renameCompanion,
       setCompanionColor,
       setCompanionAccessory,
+      checkInWithCompanion,
       sessions,
       todaysSessions,
       active,

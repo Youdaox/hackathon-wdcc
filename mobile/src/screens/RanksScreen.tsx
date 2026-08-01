@@ -3,11 +3,11 @@ import { Sprout } from "../components/Sprout";
 import { colors, roundedFont } from "../theme";
 
 const RANKS = [
-  { rank: 1, name: "Priya N.", streak: 11, minutes: 301, stage: 3 as const, flower: true },
-  { rank: 2, name: "Marcus T.", streak: 8, minutes: 260, stage: 2 as const },
-  { rank: 3, name: "You", streak: 6, minutes: 243, stage: 2 as const, you: true },
-  { rank: 4, name: "Sofia R.", streak: 3, minutes: 150, stage: 1 as const },
-  { rank: 5, name: "Devon K.", streak: 2, minutes: 120, stage: 2 as const },
+  { rank: 1, name: "Priya N.", streak: 11, minutes: 301, stage: 3 as const, flower: true, emotion: "excited" as const },
+  { rank: 2, name: "Marcus T.", streak: 8, minutes: 260, stage: 2 as const, emotion: "calm" as const },
+  { rank: 3, name: "You", streak: 6, minutes: 243, stage: 2 as const, you: true, emotion: "happy" as const },
+  { rank: 4, name: "Sofia R.", streak: 3, minutes: 150, stage: 1 as const, emotion: "sad" as const },
+  { rank: 5, name: "Devon K.", streak: 2, minutes: 120, stage: 2 as const, emotion: "angry" as const },
 ];
 
 export function RanksScreen() {
@@ -27,10 +27,10 @@ export function RanksScreen() {
             ]}
           >
             <Text style={[styles.rank, entry.rank === 1 && styles.first]}>{entry.rank}</Text>
-            <Sprout size={34} stage={entry.stage} flower={entry.flower} />
+            <Sprout size={34} stage={entry.stage} flower={entry.flower} emotion={entry.emotion} />
             <View style={styles.person}>
               <Text style={styles.name}>{entry.name}</Text>
-              <Text style={styles.streak}>{entry.streak} day streak</Text>
+              <Text style={styles.streak}>{entry.streak} day streak · {entry.emotion}</Text>
             </View>
             <View style={styles.minutesRow}>
               <Text style={styles.minutes}>{entry.minutes}</Text>

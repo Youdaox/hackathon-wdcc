@@ -10,6 +10,7 @@ import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
 import { SessionSummary } from "@/components/SessionSummary";
 import { TodaySummary } from "@/components/TodaySummary";
+import { GrowthTimeline } from "@/components/GrowthTimeline";
 import { InstallAppButton } from "@/components/InstallAppButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
@@ -56,6 +57,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-6">
             <CompanionCard />
+            <GrowthTimeline />
             <TodaySummary />
             <LocationCard />
           </div>

@@ -385,6 +385,32 @@
     }
   }
 
+  /* Check-in reactions are layered on top of the health pose, rather than
+     replacing it: a low-health companion still visibly needs care. */
+  .pig-emotion-mark {
+    position: absolute;
+    left: 88px;
+    top: 26px;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--pig-line);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--pig-line);
+    font: 800 12px/1 var(--font-display, sans-serif);
+  }
+  .pig-state-healthy.pig-emotion-happy .pig-figure { animation: pig-happy-hop 1.8s ease-in-out infinite; }
+  .pig-state-healthy.pig-emotion-sad .pig-figure { transform: translateY(3px); }
+  .pig-state-healthy.pig-emotion-angry .pig-figure { animation: pig-angry-stomp .65s ease-in-out infinite; }
+  .pig-state-healthy.pig-emotion-calm .pig-figure { animation: pig-calm-sway 3s ease-in-out infinite; }
+  .pig-state-healthy.pig-emotion-excited .pig-figure { animation: pig-happy-hop .65s ease-in-out infinite; }
+  @keyframes pig-happy-hop { 50% { transform: translateY(-4px); } }
+  @keyframes pig-angry-stomp { 50% { transform: translateY(2px) rotate(-1deg); } }
+  @keyframes pig-calm-sway { 50% { transform: translateY(-1px) rotate(1deg); } }
+
   /* --- Cosmetic accessories (player-chosen, no gameplay effect) --- */
 
   /* Round frames + a thin bridge, sitting across the sprite's eye line. */
