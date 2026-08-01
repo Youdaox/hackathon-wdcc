@@ -159,23 +159,32 @@
     transform-origin: bottom center;
   }
 
+  /* Wraps the sprite + every accessory/milestone/mood decoration so they all
+     ride the same state motion (wobble, shiver, keeling over) instead of the
+     sprite moving while accessories stay pinned in place. Same 128x128 box
+     as .pig-stage, so every child's existing absolute coordinates hold. */
+  .pig-figure {
+    position: absolute;
+    inset: 0;
+  }
+  .pig-state-sick .pig-figure {
+    animation: pig-wobble 3.4s ease-in-out infinite;
+  }
+  .pig-state-hungry .pig-figure {
+    animation: pig-hungry-shiver 2.8s ease-in-out infinite;
+  }
+  /* Fainted: the whole sprite keels over onto its side. Origin is the
+     visual center of the 128x128 painted sprite, not the 4x4 source box. */
+  .pig-state-fainted .pig-figure {
+    transform: rotate(70deg) translate(-2px, 8px);
+    transform-origin: 64px 64px;
+  }
+
   .pig-px {
     position: absolute;
     top: 0;
     left: 0;
     transition: box-shadow 0.15s steps(1);
-  }
-  .pig-state-sick .pig-px {
-    animation: pig-wobble 3.4s ease-in-out infinite;
-  }
-  .pig-state-hungry .pig-px {
-    animation: pig-hungry-shiver 2.8s ease-in-out infinite;
-  }
-  /* Fainted: the whole sprite keels over onto its side. Origin is the
-     visual center of the 128x128 painted sprite, not the 4x4 source box. */
-  .pig-state-fainted .pig-px {
-    transform: rotate(70deg) translate(-2px, 8px);
-    transform-origin: 64px 64px;
   }
 
   @keyframes pig-wobble {
@@ -431,8 +440,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .pig-sparkle,
-    .pig-state-sick .pig-px,
-    .pig-state-hungry .pig-px,
+    .pig-state-sick .pig-figure,
+    .pig-state-hungry .pig-figure,
     .pig-zzz {
       animation: none;
     }

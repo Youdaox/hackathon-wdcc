@@ -114,50 +114,55 @@ export function Pig({
       role="img"
       aria-label={`Pig is ${state}, ${STAGE_LABEL[stage].toLowerCase()} stage`}
     >
-      {stage === "master" && (
-        <>
-          <div className="pig-crown" />
-          <span className="pig-sparkle pig-sparkle-a" />
-          <span className="pig-sparkle pig-sparkle-b" />
-        </>
-      )}
-      {state === "sick" && (
-        <>
-          <div className="pig-icepack" />
-          <div className="pig-thermometer" />
-        </>
-      )}
-      {state === "sleeping" && (
-        <div className="pig-zzz" aria-hidden>
-          z
-        </div>
-      )}
+      {/* Everything below rides together on the state's motion (wobble,
+          shiver, keeling over) so accessories never appear to float free
+          of the sprite they're attached to. */}
+      <div className="pig-figure">
+        {stage === "master" && (
+          <>
+            <div className="pig-crown" />
+            <span className="pig-sparkle pig-sparkle-a" />
+            <span className="pig-sparkle pig-sparkle-b" />
+          </>
+        )}
+        {state === "sick" && (
+          <>
+            <div className="pig-icepack" />
+            <div className="pig-thermometer" />
+          </>
+        )}
+        {state === "sleeping" && (
+          <div className="pig-zzz" aria-hidden>
+            z
+          </div>
+        )}
 
-      <div
-        className="pig-px"
-        style={{
-          width: PIXEL_CELL,
-          height: PIXEL_CELL,
-          boxShadow: PIG_PIXELS[state],
-        }}
-      />
+        <div
+          className="pig-px"
+          style={{
+            width: PIXEL_CELL,
+            height: PIXEL_CELL,
+            boxShadow: PIG_PIXELS[state],
+          }}
+        />
 
-      {stage === "teen" && <div className="pig-bow" />}
-      {state === "hungry" && (
-        <div className="pig-bubble" aria-hidden>
-          🥣
-        </div>
-      )}
+        {stage === "teen" && <div className="pig-bow" />}
+        {state === "hungry" && (
+          <div className="pig-bubble" aria-hidden>
+            🥣
+          </div>
+        )}
 
-      {accessory === "glasses" && <div className="pig-glasses" />}
-      {accessory === "flower" && (
-        <div className="pig-flower">
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
-      )}
+        {accessory === "glasses" && <div className="pig-glasses" />}
+        {accessory === "flower" && (
+          <div className="pig-flower">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
