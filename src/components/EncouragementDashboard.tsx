@@ -43,7 +43,8 @@ async function request<T>(url: string, user: DemoUser, init?: RequestInit): Prom
 }
 
 export function EncouragementDashboard() {
-  const [currentUser, setCurrentUser] = useState(USERS[0]);
+  const [selectedUserId, setSelectedUserId] = useState(USERS[0].id);
+  const [currentUser, setCurrentUser] = useState<DemoUser | null>(null);
   const [balance, setBalance] = useState<EncouragementBalance | null>(null);
   const [received, setReceived] = useState<EncouragementHistoryRecord[]>([]);
   const [sent, setSent] = useState<EncouragementHistoryRecord[]>([]);
@@ -84,6 +85,8 @@ export function EncouragementDashboard() {
   }, []);
 
   useEffect(() => {
+    if (!currentUser) return;
+    const user = currentUser;
     let active = true;
     async function initialise() {
       setBusy("initial");
@@ -92,9 +95,9 @@ export function EncouragementDashboard() {
       seenReceived.current = new Set();
       historyReady.current = false;
       try {
-        await request("/api/demo/seed", currentUser, { method: "POST" });
+        await request("/api/demo/seed", user, { method: "POST" });
         if (!active) return;
-        await Promise.all([loadDashboard(currentUser), loadHistory(currentUser, false)]);
+        await Promise.all([loadDashboard(user), loadHistory(user, false)]);
       } catch (error) {
         if (active) setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to load the demo." });
       } finally {
@@ -106,6 +109,7 @@ export function EncouragementDashboard() {
   }, [currentUser, loadDashboard, loadHistory]);
 
   useEffect(() => {
+    if (!currentUser) return;
     const interval = window.setInterval(() => {
       void loadHistory(currentUser, true).catch(() => undefined);
     }, 3500);
@@ -114,11 +118,12 @@ export function EncouragementDashboard() {
 
   useEffect(() => {
     if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(null), 5000);
+    const timeout = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
   async function sendEncouragement(recipient: DemoUser) {
+    if (!currentUser) return;
     setBusy(recipient.id);
     setNotice(null);
     try {
@@ -151,7 +156,7 @@ export function EncouragementDashboard() {
   }
 
   async function completeTask() {
-    if (!activeTask) return;
+    if (!activeTask || !currentUser) return;
     setBusy("task");
     setNotice(null);
     try {
@@ -177,6 +182,36 @@ export function EncouragementDashboard() {
     } finally { setBusy(null); }
   }
 
+  function logOut() {
+    setCurrentUser(null);
+    setBalance(null);
+    setReceived([]);
+    setSent([]);
+    setToast(null);
+    setNotice(null);
+    setActiveTask(null);
+    seenReceived.current = new Set();
+    historyReady.current = false;
+  }
+
+  if (!currentUser) {
+    const selectedUser = USERS.find((user) => user.id === selectedUserId) ?? USERS[0];
+    return (
+      <section className="mx-auto max-w-lg py-8 sm:py-16">
+        <div className="card p-6 sm:p-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-moss/15 text-xl font-bold text-moss">{selectedUser.initials}</div>
+          <div className="mt-5 text-center"><p className="eyebrow">Community login</p><h2 className="mt-2 text-2xl font-bold">Choose a demo profile</h2><p className="mt-2 text-sm text-muted">Log in as any community member to test sending and receiving encouragements.</p></div>
+          <label htmlFor="login-user" className="mt-6 block text-xs font-semibold text-muted">User</label>
+          <select id="login-user" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-surface-2 px-4 py-3 font-semibold text-ink">
+            {USERS.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+          </select>
+          <button onClick={() => setCurrentUser(selectedUser)} className="mt-4 w-full rounded-xl bg-moss px-4 py-3 text-sm font-bold text-canvas transition hover:bg-citrus">Log in as {selectedUser.name}</button>
+          <p className="mt-4 text-center text-xs text-faint">Demo only — no password or production authentication.</p>
+        </div>
+      </section>
+    );
+  }
+
   const history = historyTab === "received" ? received : sent;
   const otherUsers = USERS.filter((user) => user.id !== currentUser.id);
 
@@ -185,7 +220,7 @@ export function EncouragementDashboard() {
       {toast && <div role="status" className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm animate-rise rounded-2xl border border-moss/40 bg-surface p-5 shadow-2xl shadow-black/40"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-moss/15 font-bold text-moss">♥</div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-moss">New encouragement from {toast.senderName}</p><p className="mt-2 text-sm leading-relaxed text-ink">“{toast.message}”</p></div><button onClick={() => setToast(null)} className="text-faint hover:text-ink" aria-label="Dismiss notification">×</button></div></div>}
 
       <section className="grid gap-4 lg:grid-cols-[1.35fr_0.8fr_1fr]">
-        <div className="card p-6"><label htmlFor="demo-user" className="eyebrow">Demo user</label><div className="mt-3 flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-moss/15 font-bold text-moss">{currentUser.initials}</div><div className="min-w-0 flex-1"><select id="demo-user" value={currentUser.id} onChange={(event) => setCurrentUser(USERS.find((user) => user.id === event.target.value) ?? USERS[0])} className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2.5 font-semibold text-ink"><option value="user-1">Alice</option><option value="user-2">Bob</option><option value="user-3">Charlie</option><option value="user-4">Diana</option><option value="user-5">Ethan</option></select><p className="mt-1 text-xs text-faint">Switch users to demo both sides of a message.</p></div></div></div>
+        <div className="card p-6"><p className="eyebrow">Logged in</p><div className="mt-3 flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-moss/15 font-bold text-moss">{currentUser.initials}</div><div className="min-w-0 flex-1"><h2 className="text-lg font-bold">{currentUser.name}</h2><p className="text-xs text-faint">{currentUser.id}</p></div><button onClick={logOut} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-moss/40 hover:text-ink">Switch User</button></div></div>
         <div className="card p-6"><p className="eyebrow">Available today</p><p className="tabular mt-3 text-4xl font-extrabold text-moss">{balance?.available ?? "—"}</p><p className="mt-1 text-sm text-muted">encouragements remaining</p>{balance && <p className="mt-3 text-xs text-faint">{balance.base} base + {balance.earned} earned − {balance.used} sent</p>}</div>
         <div className="card p-6">
           {balance && balance.taskPoints >= balance.maxTaskPoints ? (
@@ -194,14 +229,14 @@ export function EncouragementDashboard() {
               <div><p className="eyebrow text-citrus">Challenge complete</p><h2 className="mt-1 text-lg font-bold">Wellbeing Champion</h2><p className="mt-1 text-xs text-muted">15 / 15 points earned. You can still complete tasks.</p><button onClick={showRandomTask} className="mt-3 text-xs font-bold text-citrus hover:underline">Choose another task</button></div>
             </div>
           ) : (
-            <div><div className="flex items-center justify-between"><p className="eyebrow">Wellbeing challenge</p><span className="tabular text-sm font-bold text-moss">{balance?.taskPoints ?? 0} / {balance?.maxTaskPoints ?? 15}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-moss transition-all" style={{ width: `${((balance?.taskPoints ?? 0) / (balance?.maxTaskPoints ?? 15)) * 100}%` }} /></div><button onClick={showRandomTask} disabled={busy !== null} className="mt-4 w-full rounded-xl bg-moss px-4 py-2.5 text-sm font-bold text-canvas hover:bg-citrus disabled:opacity-50">Show Demo Task</button></div>
+            <div><div className="flex items-center justify-between"><p className="eyebrow">Wellbeing challenge</p><span className="tabular text-sm font-bold text-moss">{balance?.taskPoints ?? 0} / {balance?.maxTaskPoints ?? 15}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-moss transition-all" style={{ width: `${((balance?.taskPoints ?? 0) / (balance?.maxTaskPoints ?? 15)) * 100}%` }} /></div><button onClick={showRandomTask} disabled={busy !== null} className="mt-4 w-full rounded-xl bg-moss px-4 py-2.5 text-sm font-bold text-canvas hover:bg-citrus disabled:opacity-50">Show Task</button></div>
           )}
         </div>
       </section>
 
       <section className="card p-6">
         <div className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
-          <div><p className="eyebrow">Current task</p>{activeTask ? <div className="mt-3 rounded-2xl border border-moss/25 bg-moss/[0.07] p-5"><h2 className="text-xl font-bold">{activeTask}</h2><p className="mt-1 text-sm text-muted">Take a moment for yourself, then mark it complete.</p><div className="mt-4 flex gap-2"><button onClick={completeTask} disabled={busy !== null} className="rounded-xl bg-moss px-4 py-2.5 text-sm font-bold text-canvas disabled:opacity-50">{busy === "task" ? "Completing…" : "Complete Task"}</button><button onClick={showRandomTask} disabled={busy !== null} className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink">Try another</button></div></div> : <div className="mt-3 rounded-2xl border border-dashed border-line p-6 text-sm text-muted">Choose a random demo task or create your own.</div>}</div>
+          <div><p className="eyebrow">Current task</p>{activeTask ? <div className="mt-3 rounded-2xl border border-moss/25 bg-moss/[0.07] p-5"><h2 className="text-xl font-bold">{activeTask}</h2><p className="mt-1 text-sm text-muted">Take a moment for yourself, then mark it complete.</p><div className="mt-4 flex gap-2"><button onClick={completeTask} disabled={busy !== null} className="rounded-xl bg-moss px-4 py-2.5 text-sm font-bold text-canvas disabled:opacity-50">{busy === "task" ? "Completing…" : "Complete Task"}</button><button onClick={showRandomTask} disabled={busy !== null} className="rounded-xl border border-line px-4 py-2.5 text-sm font-semibold text-muted hover:text-ink">Try another</button></div></div> : <div className="mt-3 rounded-2xl border border-dashed border-line p-6 text-sm text-muted">Choose a random task or create your own.</div>}</div>
           <form onSubmit={createCustomTask}><label htmlFor="custom-task" className="eyebrow">Create your own</label><p className="mt-2 text-sm text-muted">Add a small wellbeing action that works for you.</p><input id="custom-task" value={customTask} onChange={(event) => setCustomTask(event.target.value)} maxLength={120} placeholder="e.g. Walk outside for two minutes" className="mt-4 w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-ink placeholder:text-faint" /><button type="submit" disabled={!customTask.trim()} className="mt-3 rounded-xl border border-moss/30 bg-moss/10 px-4 py-2.5 text-sm font-bold text-moss disabled:opacity-50">Create Task</button></form>
         </div>
       </section>
