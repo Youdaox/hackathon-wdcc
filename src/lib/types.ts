@@ -32,9 +32,21 @@ export interface StudyBlock {
 /** Mood is derived from HP — never stored, so the two can't disagree. */
 export type Mood = "happy" | "neutral" | "sad" | "sick";
 
+/** Pastel coat options for the pig companion. */
+export type PigColor = "pink" | "purple" | "blue";
+export const PIG_COLOR_VALUES: PigColor[] = ["pink", "purple", "blue"];
+
+/** Cosmetic accessory worn by the pig — purely visual, no gameplay effect. */
+export type PigAccessory = "none" | "glasses" | "flower";
+export const PIG_ACCESSORY_VALUES: PigAccessory[] = ["none", "glasses", "flower"];
+
 export interface Companion {
   name: string;
   species: string;
+  /** Coat color — purely cosmetic. */
+  color: PigColor;
+  /** Worn accessory — purely cosmetic. */
+  accessory: PigAccessory;
   level: number;
   /** XP accumulated toward the *current* level only. */
   xp: number;

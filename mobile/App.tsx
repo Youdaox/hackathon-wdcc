@@ -23,6 +23,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [restrictedApps, setRestrictedApps] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     try {
@@ -112,7 +113,14 @@ export default function App() {
           )}
           {tab === "recap" && <RecapScreen companion={companion} />}
           {tab === "ranks" && <RanksScreen />}
-          {tab === "settings" && <SettingsScreen />}
+          {tab === "settings" && (
+            <SettingsScreen
+              enabled={restrictedApps}
+              onToggle={(appName, value) =>
+                setRestrictedApps((current) => ({ ...current, [appName]: value }))
+              }
+            />
+          )}
         </View>
         <SafeAreaView edges={["bottom"]} style={styles.navSafe}>
           <BottomNav active={tab} onChange={setTab} />
