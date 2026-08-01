@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { GazeCalibrationOverlay } from "@/components/GazeCalibration";
 import { useIncline } from "@/lib/store";
@@ -282,6 +282,87 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </div>
       )}
     </section>
+  );
+}
+
+export function CameraOverlay() {
+  const { active, eyeEnabled, gazeStatus, gazeCalibration, gazePoint, gazeWandering } = useIncline();
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  if (!eyeEnabled || !active) return null;
+
+  const statusLabel =
+    gazeStatus === "tracking"
+      ? gazeCalibration === "done"
+        ? "Tracking"
+        : "Watching"
+      : gazeStatus === "loading"
+        ? "Starting camera"
+        : gazeStatus === "denied"
+          ? "Camera blocked"
+          : gazeStatus === "unsupported"
+            ? "No camera"
+            : gazeStatus === "error"
+              ? "Camera unavailable"
+              : "Idle";
+
+  const dotStyle =
+    gazePoint && viewport.width > 0 && viewport.height > 0
+      ? {
+          left: `${Math.min(100, Math.max(0, (gazePoint.x / viewport.width) * 100))}%`,
+          top: `${Math.min(100, Math.max(0, (gazePoint.y / viewport.height) * 100))}%`,
+        }
+      : undefined;
+
+  const statusTone = gazeWandering ? "bg-clay" : gazeStatus === "tracking" ? "bg-moss" : "bg-citrus";
+
+  return (
+    <div className="pointer-events-none fixed right-4 top-4 z-50 w-57.5 rounded-2xl border border-white/10 bg-slate-950/75 p-3 shadow-lg backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-faint">
+            Camera
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-ink">{statusLabel}</div>
+        </div>
+        <span className={`h-2.5 w-2.5 rounded-full ${statusTone}`} />
+      </div>
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2">
+        <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-surface-2/90">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_55%)]" />
+          <div className="absolute inset-0 border border-white/10" />
+          {gazePoint && dotStyle ? (
+            <span
+              className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-citrus shadow-[0_0_0_4px_rgba(255,203,70,0.18)]"
+              style={dotStyle}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-center text-[11px] text-faint">
+              {gazeStatus === "loading" ? "Starting camera…" : "Waiting for gaze data"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-2 text-[11px] text-faint">
+        {gazePoint
+          ? `Eye location: ${Math.round(gazePoint.x)}, ${Math.round(gazePoint.y)}`
+          : gazeWandering
+            ? "Eyes are drifting off screen"
+            : "Your current eye position will appear here"}
+      </div>
+    </div>
   );
 }
 

@@ -19,6 +19,10 @@ export type GazeCalibration = "none" | "skipped" | "done";
 export const GAZE_RULES = {
   /** Predictions this far outside the viewport still count as on-screen. */
   marginPx: 140,
+  /** Low-pass smoothing for jittery gaze samples. */
+  smoothingAlpha: 0.35,
+  /** Ignore jumps larger than this before smoothing; they usually come from noisy frames. */
+  maxJumpPx: 320,
   /** Off-screen (or no face) must hold this long before we warn. */
   wanderAfterMs: 4_000,
   /** …and eyes must be back this long before we clear the warning. */
@@ -54,6 +58,27 @@ export function isOnScreen(
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
   const m = GAZE_RULES.marginPx;
   return point.x >= -m && point.x <= width + m && point.y >= -m && point.y <= height + m;
+}
+
+/**
+ * Smooth a raw WebGazer prediction so the overlay does not jump on every noisy frame.
+ */
+export function smoothPoint(
+  point: { x: number; y: number } | null,
+  previous: { x: number; y: number } | null,
+): { x: number; y: number } | null {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return previous;
+  if (!previous) return point;
+
+  const dx = point.x - previous.x;
+  const dy = point.y - previous.y;
+  const jump = Math.hypot(dx, dy);
+  if (jump > GAZE_RULES.maxJumpPx) return previous;
+
+  return {
+    x: previous.x + GAZE_RULES.smoothingAlpha * dx,
+    y: previous.y + GAZE_RULES.smoothingAlpha * dy,
+  };
 }
 
 /**

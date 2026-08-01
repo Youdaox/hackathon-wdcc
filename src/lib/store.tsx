@@ -15,6 +15,7 @@ import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from
 import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
 import { useGeolocation, type GeoReading, type GeoStatus } from "@/hooks/useGeolocation";
 import { useFocusTracking, type GazeStatus } from "@/hooks/useFocusTracking";
+import type { GazePrediction } from "webgazer";
 import type { GazeCalibration } from "./gaze";
 import { activeZone, nearestZone, type BonusZone, type ZoneMatch } from "./zones";
 import { startOfDay } from "./time";
@@ -79,6 +80,8 @@ interface InclineContextValue {
   gazeWandering: boolean;
   /** Wander episodes detected during the running session. */
   gazeEpisodes: number;
+  /** Latest gaze prediction in viewport coordinates. */
+  gazePoint: GazePrediction | null;
   /** How far the user got through the calibration dots. */
   gazeCalibration: GazeCalibration;
   setGazeCalibration: (state: GazeCalibration) => void;
@@ -328,6 +331,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       gazeStatus: gaze.status,
       gazeWandering: gazeAway,
       gazeEpisodes: gaze.episodes,
+      gazePoint: gaze.point,
       gazeCalibration,
       setGazeCalibration,
     }),
@@ -359,6 +363,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       eyeEnabled,
       gaze.status,
       gaze.episodes,
+      gaze.point,
       gazeAway,
       gazeCalibration,
     ],

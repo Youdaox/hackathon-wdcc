@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { GazePrediction, WebGazer } from "webgazer";
 
-import { GAZE_RULES, isOnScreen, playWanderChime, type GazeCalibration } from "@/lib/gaze";
+import {
+  GAZE_RULES,
+  isOnScreen,
+  playWanderChime,
+  smoothPoint,
+  type GazeCalibration,
+} from "@/lib/gaze";
 
 export type GazeStatus =
   /** Not tracking — no session running, or the user hasn't opted in. */
@@ -137,16 +143,18 @@ export function useFocusTracking(enabled: boolean, calibration: GazeCalibration)
         if (cancelled) return;
 
         webgazer
-          .setRegression("ridge")
+          .setRegression("weightedRidge")
+          .setTracker("clmtrackr")
           .applyKalmanFilter(true)
           // Calibration clicks are worth keeping between sessions; re-doing the
           // dots every time would be its own kind of distraction.
           .saveDataAcrossSessions(true)
           .setGazeListener((data) => {
+            const nextPoint = smoothPoint(data, sample.current.point);
             sample.current = {
               at: Date.now(),
-              onScreen: isOnScreen(data, window.innerWidth, window.innerHeight),
-              point: data,
+              onScreen: isOnScreen(nextPoint, window.innerWidth, window.innerHeight),
+              point: nextPoint,
             };
           });
 
@@ -219,11 +227,26 @@ export function useFocusTracking(enabled: boolean, calibration: GazeCalibration)
       }
       wandering.current = next;
 
-      setState((prev) =>
-        prev.wandering === next && prev.episodes === episodes.current
-          ? prev
-          : { ...prev, wandering: next, episodes: episodes.current, point: sample.current.point },
-      );
+      setState((prev) => {
+        const nextPoint = sample.current.point;
+        const pointChanged =
+          prev.point === null
+            ? nextPoint !== null
+            : nextPoint === null
+              ? true
+              : prev.point.x !== nextPoint.x || prev.point.y !== nextPoint.y;
+
+        if (prev.wandering === next && prev.episodes === episodes.current && !pointChanged) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          wandering: next,
+          episodes: episodes.current,
+          point: nextPoint,
+        };
+      });
     }, GAZE_RULES.tickMs);
 
     return () => {
