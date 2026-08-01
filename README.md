@@ -15,7 +15,7 @@ cp .env.example .env.local   # optional — AI recall checks and a real Canvas i
 
 Focus is verified with the **Page Visibility API**. While a session runs, the tab being visible is the only time that earns XP. Switch tabs and the clock keeps running, but that time lands in the *distracted* bucket and your companion notices.
 
-There's no blocking and no punishment — the cost is emotional, not punitive. The creature just wilts.
+The cost is emotional rather than punitive — the creature just wilts. Android additionally gets real app blocking (see below); everywhere else the enforcement layer is honesty, not restriction.
 
 ## Data model
 
@@ -77,26 +77,76 @@ Every failure path — no key configured, rate limit, network error, malformed r
 
 Model: `claude-opus-5` with `effort: "low"` (it's one short question and the user is waiting) and structured outputs pinning the JSON shape, plus server-side validation of whatever comes back.
 
-## Mobile app (Expo Go, SDK 54)
+## Mobile app (Expo, SDK 54)
 
-`mobile/` is an Expo Go app on SDK 54 (React Native 0.81.5). Two terminals:
+`mobile/` is an Expo app on SDK 54 (React Native 0.81.5). Two terminals:
 
 ```bash
 pnpm dev -H 0.0.0.0            # repo root — backend on your LAN
-cd mobile && pnpm start        # Expo, then scan the QR
+cd mobile && pnpm start        # Expo dev server
 ```
 
-Scan the QR with Expo Go. Set `expo.extra.apiBaseUrl` in [mobile/app.json](mobile/app.json) to your machine's LAN address — it's read at runtime, so changing it is a reload, not a rebuild.
+Expo Go runs everything **except** app blocking — see below for the Android development build. Set `expo.extra.apiBaseUrl` in [mobile/app.json](mobile/app.json) to your machine's LAN address — it's read at runtime, so changing it is a reload, not a rebuild.
 
-**Use plain `http://` for the phone.** React Native's networking rejects the repo's self-signed dev cert outright, with no way to click through the way a browser does.
+**Use plain `http://` for the phone.** React Native's networking has no click-through for untrusted certificates, so don't point the app at an HTTPS dev server. If the venue's wifi blocks device-to-device traffic, `adb reverse tcp:3000 tcp:3000` tunnels it over USB instead.
 
-### Expo Go can't block apps
+### The return check-in
 
-Expo Go is a fixed binary — you can't add native modules to it. That rules out `UsageStatsManager` and the overlay on Android, and the whole Screen Time family on iOS. There is no block screen and no "5 more minutes" bypass.
+Leaving mid-session doesn't silently subtract points. On return — for any stretch past 15s — the pet asks about it, in [CheckpointScreen.tsx](mobile/src/screens/CheckpointScreen.tsx).
 
-What remains is honest *detection*. React Native's `AppState` is the same signal as the web app's Page Visibility API: leave Incline and the clock keeps running, but that time stops earning XP. So the phone and the browser measure exactly the same thing, and [mobile/src/useFocusSession.ts](mobile/src/useFocusSession.ts) is a direct port of the web engine.
+**You guess before you're told.** The real duration stays hidden until you commit to an estimate, because the gap between the two is what does the motivating; people consistently underestimate their own drift, and seeing the number first throws that away. The week's average gap surfaces in the recap.
 
-This also means the mobile client fits the existing contract with no changes: it posts `app_identifier: null` and `bypassed: false` — the case the server's penalty rule was already written for.
+Then a reason, and the reasons genuinely differ:
+
+| Answer | Consequence |
+| --- | --- |
+| Something urgent | no penalty |
+| Needed it for the task | logged for the recap, no penalty |
+| I got distracted | costs HP |
+| I'm done for now | ends the session |
+
+If every answer cost the same, asking would be theatre. The rule lives server-side in `toWebDistraction` — a stated reason overrides the duration heuristic entirely, so there's one copy of it rather than one per client.
+
+The 15s floor sits above the 5s grace window on purpose: being questioned over a glance at a notification teaches people to resent the app.
+
+Reason counts and the guess-vs-actual gap are aggregated by [/api/recap](src/app/api/recap/route.ts). "You flagged *something urgent* eight times this week" is something a person can act on; "you were distracted for 96 minutes" is a number they already feel bad about.
+
+### App blocking (Android only)
+
+Real blocking lives in a local native module, [mobile/modules/app-blocker](mobile/modules/app-blocker). It needs a **development build** — Expo Go is a fixed binary and cannot load native code:
+
+```bash
+cd mobile
+npx expo prebuild --platform android   # generates android/, gitignored
+npx expo run:android                   # builds + installs on a connected device
+```
+
+After that, `npx expo start --dev-client` replaces `expo start` for day-to-day work.
+
+Detection uses `UsageStatsManager` on a foreground service polling every 1.5s, not an `AccessibilityService` — both work, but accessibility is far more invasive, harder to justify, and gets apps pulled from Play. A foreground service (with its persistent notification) is required because Android kills a plain background loop within minutes, and a blocker that silently stops blocking is worse than none.
+
+Two permissions are needed, and neither has a runtime dialog — Android only grants them from a Settings screen, so the app deep-links there and re-checks on return:
+
+| Permission | Why |
+| --- | --- |
+| `PACKAGE_USAGE_STATS` | read which app is foregrounded |
+| `SYSTEM_ALERT_WINDOW` | draw the block screen over it |
+
+The block screen is **bypassable by design**. "5 more minutes" dismisses it and logs a `DistractionEvent` with `bypassed: true`. An unskippable block gets the whole app uninstalled the first time someone genuinely needs Maps mid-session; the cost is meant to be emotional, and the bypass is recorded and shown back to you.
+
+The restricted list is built from `PackageManager`, so entries are real package names — a hardcoded `"Instagram"` can never be matched against a foreground process. Android 11+ also needs the `<queries>` block in the module manifest, or the list comes back containing only Incline.
+
+### What each platform can do
+
+| | Web | Android (dev build) | iOS |
+| --- | --- | --- | --- |
+| Detects distraction | tab hidden | named app opened | app backgrounded only |
+| Blocks apps | no | **yes** | no — needs Apple's entitlement |
+| Knows *which* app | n/a | yes | never, by design |
+| Bypass button | n/a | yes, logged | n/a — nothing to bypass |
+| Return check-in | n/a | yes | yes |
+
+Without the native module — in Expo Go, or on iOS — `isSupported` is false, every call is a no-op, and the settings screen says so instead of pretending. Focus tracking still works everywhere via `AppState`, which is the same signal as the web's Page Visibility API, so [mobile/src/useFocusSession.ts](mobile/src/useFocusSession.ts) is a direct port.
 
 Timing is timestamp-based rather than tick-based, which matters more here than on the web: a backgrounded React Native app has its timers suspended outright, so counting ticks would under-report distraction to near zero.
 
@@ -118,6 +168,7 @@ SQLite via Drizzle, file-based at `incline.db` (override with `INCLINE_DB_PATH`)
 | `POST /api/distraction-events` | Log one distraction live, mid-session |
 | `GET /api/distraction-list?user_id=` | Android package names to watch (`PUT` to replace) |
 | `GET /api/study-spots?user_id=` | Verified locations for the session-start check-in |
+| `GET /api/recap?user_id=` | 7-day totals, streak, reason counts, guess-vs-actual gap |
 
 **Growth is computed server-side.** `POST /api/sessions` loads the companion, runs [`applySession()`](src/lib/companion.ts) — the same pure function the web app runs, imported not reimplemented — and returns the delta. Three clients each growing their own local pet would produce three different pets, and `pet_growth_delta` would just echo whatever the device already decided.
 
@@ -125,17 +176,23 @@ The server also refuses to take a client's word on two things: `verified_minutes
 
 Spots are seeded from `BONUS_ZONES` in [`src/lib/zones.ts`](src/lib/zones.ts), so all three platforms measure against the same building centres. Recalibrating on site means editing that file and re-running `db:setup`.
 
-### The two distraction models
+### The three distraction models
 
-Android and iOS report genuinely different events under the same name, and [`src/lib/api/contract.ts`](src/lib/api/contract.ts) is the one place they're reconciled:
+The same word covers genuinely different events, and [`src/lib/api/contract.ts`](src/lib/api/contract.ts) is the one place they're reconciled so the growth rules only ever see one shape:
 
 | | Web | Android | iOS |
 | --- | --- | --- | --- |
-| What "distraction" means | tab hidden | restricted app foregrounded | *a* restricted app opened |
-| `app_identifier` | n/a | package name | **always null** — Apple never says which |
-| `bypassed` | n/a | user tapped "5 more minutes" | always false — Apple owns the shield |
+| What "distraction" means | tab hidden | restricted app opened, *or* app backgrounded | app backgrounded |
+| `app_identifier` | n/a | package name from the blocker | always null |
+| `bypassed` | n/a | tapped "5 more minutes" | always false — no block screen |
+| `reason` | n/a | from the check-in | from the check-in |
 
-A distraction is penalised if **it was bypassed, or it lasted past the 5s grace window**. The second clause matters: without it iOS would be strictly easier than Android, since an iOS user *cannot* press bypass and would never lose HP at all.
+Penalty precedence, in order:
+
+1. **A stated reason wins.** Only `distraction` costs HP; `emergency` and `task` cost nothing regardless of how long the stretch was.
+2. **Otherwise** it's penalised if it was bypassed or ran past the 5s grace window — the fallback for blocker events, where nobody was asked.
+
+That ordering is the whole point of the check-in. Without it, answering honestly would change nothing.
 
 ### Not production-ready
 

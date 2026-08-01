@@ -9,9 +9,9 @@ import { parseDistractionEventRequest } from "@/lib/api/contract";
  * Logs a single distraction as it happens, mid-session.
  *
  * This exists alongside the `distraction_events` array on POST /api/sessions
- * because the two happen at different times: Android posts here the moment a
- * user taps "5 more minutes" on the block overlay, while the session array is
- * the record written at session end.
+ * because the two happen at different times: the client posts here the moment
+ * the user answers the return check-in, while the session array is the record
+ * written at session end.
  *
  * `session_id` is nullable — a live event is logged before the session row
  * exists. Those rows are backfilled by nothing right now; they are kept for
@@ -41,10 +41,12 @@ export async function POST(request: Request) {
         id,
         userId: req.user_id,
         sessionId: req.session_id,
-        appIdentifier: req.app_identifier,
         timestamp: Date.parse(req.timestamp),
         durationSeconds: req.duration_seconds,
+        appLabel: req.app_label,
         bypassed: req.bypassed,
+        reason: req.reason,
+        guessedSeconds: req.guessed_seconds,
         createdAt: Date.now(),
       })
       .run();

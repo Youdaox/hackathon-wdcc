@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import type { Companion } from "./api";
 
 export const colors = {
   bg: "#fbf7f0",
@@ -21,23 +20,10 @@ export const colors = {
 
 export const roundedFont = Platform.select({
   ios: "Arial Rounded MT Bold",
-  android: "sans-serif-rounded",
   default: undefined,
 });
 
-export const MOOD_LABEL: Record<Companion["mood"], string> = {
-  happy: "Thriving",
-  neutral: "Steady",
-  sad: "Wilting",
-  sick: "Struggling",
-};
 
-export function moodColor(mood: Companion["mood"]): string {
-  if (mood === "happy") return colors.accent;
-  if (mood === "neutral") return colors.text;
-  if (mood === "sad") return colors.warn;
-  return colors.bad;
-}
 
 /** mm:ss, or h:mm:ss once a session runs past an hour. */
 export function formatDuration(ms: number): string {

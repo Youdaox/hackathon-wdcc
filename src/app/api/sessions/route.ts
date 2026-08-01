@@ -5,6 +5,7 @@ import { companions, distractionEvents, sessions, studySpots } from "@/lib/db/sc
 import { applySession, uid } from "@/lib/companion";
 import { ensureCompanion } from "@/lib/api/users";
 import {
+  evaluatePledge,
   parseSessionRequest,
   toWebDistraction,
   type SessionResponse,
@@ -52,10 +53,22 @@ export async function POST(request: Request) {
       if (spot) xpMultiplier = spot.multiplier;
     }
 
+    // A broken pledge forfeits the XP but keeps the HP consequences: the
+    // session still happened, it just earned nothing. Zeroing focused time
+    // rather than the result means levels can't creep up on a forfeit.
+    const pledge = evaluatePledge(
+      req.committed_minutes ?? 0,
+      req.verified_minutes,
+      req.distraction_events,
+    );
+
     const distractions = req.distraction_events.map(toWebDistraction);
     const result = applySession(
       companion,
-      { focusedMs: req.verified_minutes * 60_000, distractions },
+      {
+        focusedMs: pledge.voided ? 0 : req.verified_minutes * 60_000,
+        distractions,
+      },
       xpMultiplier,
     );
 
@@ -78,6 +91,8 @@ export async function POST(request: Request) {
           xpEarned: result.xpEarned,
           hpDelta: result.hpDelta,
           xpMultiplier,
+          committedMinutes: req.committed_minutes ?? 0,
+          voided: pledge.voided,
           createdAt: now,
         })
         .run();
@@ -88,10 +103,12 @@ export async function POST(request: Request) {
             id: uid(),
             userId: req.user_id,
             sessionId,
-            appIdentifier: event.app_identifier,
             timestamp: Date.parse(event.timestamp),
             durationSeconds: event.duration_seconds,
-            bypassed: event.bypassed,
+            appLabel: event.app_label ?? null,
+            bypassed: event.bypassed === true,
+            reason: event.reason ?? null,
+            guessedSeconds: event.guessed_seconds ?? null,
             createdAt: now,
           })
           .run();
@@ -108,6 +125,8 @@ export async function POST(request: Request) {
     return NextResponse.json<SessionResponse>({
       session_id: sessionId,
       pet_growth_delta: result.xpEarned,
+      voided: pledge.voided,
+      void_reason: pledge.reason,
     });
   } catch (error) {
     console.error("[sessions] failed to record session:", error);

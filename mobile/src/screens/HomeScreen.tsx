@@ -15,6 +15,8 @@ type HomeScreenProps = {
   state: FocusState;
   multiplier: number;
   busy: boolean;
+  pledge: number;
+  onPledgeChange: (minutes: number) => void;
   notice: string | null;
   refreshing: boolean;
   onRefresh: () => void;
@@ -68,6 +70,8 @@ export function HomeScreen(props: HomeScreenProps) {
         state={props.state}
         multiplier={props.multiplier}
         busy={props.busy}
+        pledge={props.pledge}
+        onPledgeChange={props.onPledgeChange}
         onStart={props.onStart}
         onStop={props.onStop}
       />

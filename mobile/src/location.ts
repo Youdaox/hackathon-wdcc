@@ -13,7 +13,7 @@ import type { StudySpot } from "./api";
 const EARTH_RADIUS_M = 6_371_000;
 
 /** Great-circle distance in metres. */
-export function distanceMeters(
+function distanceMeters(
   lat1: number,
   lng1: number,
   lat2: number,
@@ -94,7 +94,3 @@ export async function getReading(): Promise<Reading | null> {
   }
 }
 
-export function formatDistance(metres: number): string {
-  if (metres < 1000) return `${Math.round(metres)}m`;
-  return `${(metres / 1000).toFixed(1)}km`;
-}

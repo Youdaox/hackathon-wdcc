@@ -5,8 +5,8 @@ import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core
  * Server-side schema for the mobile sync contract.
  *
  * The web MVP keeps its own copy of everything in localStorage and is still
- * authoritative for its own device. These tables exist so Android and iOS —
- * which have no localStorage to share — can sync against one companion.
+ * authoritative for its own device. These tables exist so the iOS app — which
+ * has no localStorage to share — can sync against one companion.
  *
  * Timestamps are stored as epoch milliseconds (integers) to match the web
  * model in `src/lib/types.ts`, not as SQLite datetimes. The API speaks ISO8601
@@ -48,11 +48,7 @@ export const companions = sqliteTable("companions", {
 });
 
 /**
- * A completed focus session, from any platform.
- *
- * `platform` and the nullable `app_identifier` on distraction events are the
- * schema-level accommodation for the Android/iOS asymmetry: Android reports
- * which app was opened, iOS can only report that *a* restricted app was.
+ * A completed focus session, from either client.
  */
 export const sessions = sqliteTable(
   "sessions",
@@ -67,25 +63,33 @@ export const sessions = sqliteTable(
     verifiedMinutes: real("verified_minutes").notNull(),
     locationVerified: integer("location_verified", { mode: "boolean" }).notNull(),
     locationName: text("location_name"),
-    platform: text("platform", { enum: ["android", "ios", "web"] }).notNull(),
+    platform: text("platform", { enum: ["ios", "web"] }).notNull(),
     /** Growth the server computed for this session — not client-supplied. */
     xpEarned: integer("xp_earned").notNull(),
     hpDelta: integer("hp_delta").notNull(),
     xpMultiplier: real("xp_multiplier").notNull(),
+    /**
+     * Minutes the user pledged before starting, or 0 for an open session.
+     * A pledge is the whole basis of the forfeit rule below.
+     */
+    committedMinutes: real("committed_minutes").notNull().default(0),
+    /**
+     * True when a pledge was broken. The session is still recorded — the
+     * point is that it happened and earned nothing, not that it vanishes.
+     */
+    voided: integer("voided", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [index("sessions_user_idx").on(table.userId, table.endTime)],
 );
 
 /**
- * One distraction during a session.
+ * One stretch of a session spent away from the app.
  *
- * `appIdentifier` is null on iOS by Apple's design — a DeviceActivityMonitor
- * event tells us a shielded app was opened but never which one. Null here means
- * "not knowable", not "missing data".
- *
- * `bypassed` is Android-only in practice: iOS owns the shield screen, so there
- * is no bypass button to press.
+ * iOS never discloses which app the user switched to, so everything here is
+ * self-reported: `reason` from the return check-in, `appLabel` from a Shortcuts
+ * automation the user set up. Both are honest signals precisely because the
+ * user chose to give them.
  */
 export const distractionEvents = sqliteTable(
   "distraction_events",
@@ -99,34 +103,43 @@ export const distractionEvents = sqliteTable(
      * live, and the session row only exists once the session ends.
      */
     sessionId: text("session_id").references(() => sessions.id, { onDelete: "cascade" }),
-    appIdentifier: text("app_identifier"),
     timestamp: integer("timestamp").notNull(),
     durationSeconds: real("duration_seconds").notNull(),
-    bypassed: integer("bypassed", { mode: "boolean" }).notNull(),
+    /**
+     * Which app pulled them away, when known.
+     *
+     * Unlike the Android package name this replaced, this is *user-supplied*:
+     * it arrives from a Shortcuts automation the user configured themselves,
+     * carrying whatever label they typed. iOS still never tells us. Treated as
+     * a display string only, never matched against anything.
+     */
+    appLabel: text("app_label"),
+    /** True when the user pushed past the intercept screen. */
+    bypassed: integer("bypassed", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Why the user says they left, from the return check-in. Null when the
+     * stretch was too short to be worth asking about.
+     *
+     * This is the diagnostic half of the mechanic: "emergency" eight times in
+     * a week is a pattern worth showing someone, and it can't be inferred from
+     * duration alone.
+     */
+    reason: text("reason", {
+      enum: ["emergency", "task", "distraction", "ended"],
+    }),
+    /**
+     * What the user *guessed* the stretch was, before being shown the real
+     * number. Kept because the gap between guess and actual is the interesting
+     * signal — people are consistently bad at this, and the surprise does more
+     * motivating work than the raw duration.
+     */
+    guessedSeconds: real("guessed_seconds"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
     index("distraction_events_session_idx").on(table.sessionId),
     index("distraction_events_user_idx").on(table.userId, table.timestamp),
   ],
-);
-
-/**
- * Android's distraction list — package names to watch for with
- * UsageStatsManager. iOS does not use this: the user picks apps through
- * Apple's own FamilyActivityPicker and we only ever hold an opaque token.
- */
-export const distractionApps = sqliteTable(
-  "distraction_apps",
-  {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    appIdentifier: text("app_identifier").notNull(),
-    createdAt: integer("created_at").notNull(),
-  },
-  (table) => [index("distraction_apps_user_idx").on(table.userId)],
 );
 
 /**

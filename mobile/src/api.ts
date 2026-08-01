@@ -2,10 +2,10 @@ import { Platform } from "react-native";
 import { API_BASE_URL, USER_ID } from "./config";
 
 /**
- * The server's contract accepts exactly android | ios | web, which is what
+ ios | ios | web, which is what
  * Platform.OS reports on every target Expo Go runs on.
  */
-const PLATFORM = Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios";
+const PLATFORM = Platform.OS === "web" ? "web" : "ios";
 
 /**
  * Client for the Incline sync API.
@@ -39,11 +39,27 @@ export interface StudySpot {
 export interface DistractionRecord {
   startedAt: number;
   durationMs: number;
+  /** User-supplied app label from a Shortcuts intercept. */
+  appLabel?: string | null;
+  /** True when the user pushed past the intercept screen. */
+  bypassed?: boolean;
+  /** What the user said on the return check-in. Null if they weren't asked. */
+  reason?: AwayReason | null;
+  /** Their guess, in seconds, before the real number was revealed. */
+  guessedSeconds?: number | null;
 }
+
+/**
+ * Why the user left. Only "distraction" costs HP — the server decides that,
+ * the client just reports what was said.
+ */
+export type AwayReason = "emergency" | "task" | "distraction" | "ended";
 
 export interface SessionResult {
   session_id: string;
   pet_growth_delta: number;
+  voided: boolean;
+  void_reason: "left-early" | "bypassed" | null;
 }
 
 const TIMEOUT_MS = 8_000;
@@ -86,15 +102,15 @@ export async function fetchStudySpots(): Promise<StudySpot[]> {
  * Posts a finished session. The server computes growth — this returns what the
  * pet actually gained, which is not something the app tries to predict.
  *
- * `app_identifier` is always null and `bypassed` always false: Expo Go can see
- * that the user left Incline, but never where they went, and has no block
- * screen to bypass. The server's penalty rule accounts for exactly this case.
+ * The app can see that the user left Incline, never where they went — iOS does
+ * not disclose that to third-party apps.
  */
 export function postSession(params: {
   startedAt: number;
   endedAt: number;
   focusedMs: number;
   locationName: string | null;
+  pledgeMinutes: number;
   distractions: DistractionRecord[];
 }): Promise<SessionResult> {
   return request<SessionResult>("/api/sessions", {
@@ -107,12 +123,66 @@ export function postSession(params: {
       location_verified: params.locationName !== null,
       location_name: params.locationName,
       platform: PLATFORM,
+      committed_minutes: params.pledgeMinutes,
       distraction_events: params.distractions.map((d) => ({
-        app_identifier: null,
         timestamp: new Date(d.startedAt).toISOString(),
         duration_seconds: d.durationMs / 1000,
-        bypassed: false,
+        app_label: d.appLabel ?? null,
+        bypassed: d.bypassed ?? false,
+        reason: d.reason ?? null,
+        guessed_seconds: d.guessedSeconds ?? null,
       })),
     }),
   });
+}
+
+
+/**
+ * Logs a check-in answer the moment it's given, rather than waiting for the
+ * session to end — a self-reported distraction shouldn't be lost if the
+ * session never ends cleanly.
+ */
+export function logDistractionEvent(event: {
+  durationMs: number;
+  appLabel?: string | null;
+  bypassed?: boolean;
+  reason?: AwayReason | null;
+  guessedSeconds?: number | null;
+}): Promise<{ event_id: string }> {
+  return request<{ event_id: string }>("/api/distraction-events", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: USER_ID,
+      session_id: null,
+      timestamp: new Date().toISOString(),
+      duration_seconds: event.durationMs / 1000,
+      app_label: event.appLabel ?? null,
+      bypassed: event.bypassed ?? false,
+      reason: event.reason ?? null,
+      guessed_seconds: event.guessedSeconds ?? null,
+    }),
+  });
+}
+
+export interface RecapDay {
+  date: string;
+  label: string;
+  focused_minutes: number;
+  distracted_minutes: number;
+  sessions: number;
+}
+
+export interface Recap {
+  days: RecapDay[];
+  reasons: Record<AwayReason, number>;
+  study_days: number;
+  streak: number;
+  total_focused_minutes: number;
+  total_distracted_minutes: number;
+  /** Positive means the user under-estimates how long they were gone. */
+  guess_gap_seconds: number | null;
+}
+
+export function fetchRecap(): Promise<Recap> {
+  return request<Recap>(`/api/recap?user_id=${encodeURIComponent(USER_ID)}`);
 }

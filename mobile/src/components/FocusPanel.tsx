@@ -1,17 +1,29 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { FocusState } from "../useFocusSession";
+import { PLEDGE_ABANDON_MS } from "../config";
 import { colors, formatDuration, roundedFont } from "../theme";
+
+const PLEDGES = [0, 15, 25, 50];
+
+function clockOf(ts: number): string {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 export function FocusPanel({
   state,
   multiplier,
   busy,
+  pledge,
+  onPledgeChange,
   onStart,
   onStop,
 }: {
   state: FocusState;
   multiplier: number;
   busy: boolean;
+  pledge: number;
+  onPledgeChange: (minutes: number) => void;
   onStart: () => void;
   onStop: () => void;
 }) {
@@ -30,6 +42,44 @@ export function FocusPanel({
             <Text style={styles.stat}>{penalised} breaks · {multiplier}x</Text>
           </View>
         </View>
+      )}
+
+      {!state.running && (
+        <View style={styles.pledgeRow}>
+          {PLEDGES.map((minutes) => (
+            <Pressable
+              key={minutes}
+              onPress={() => onPledgeChange(minutes)}
+              style={({ pressed }) => [
+                styles.pledgeChip,
+                pledge === minutes && styles.pledgeChipOn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.pledgeText, pledge === minutes && styles.pledgeTextOn]}>
+                {minutes === 0 ? "Open" : `${minutes}m`}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {!state.running && pledge > 0 && (
+        <Text style={styles.pledgeNote}>
+          Leave for more than {Math.round(PLEDGE_ABANDON_MS / 1000)}s, or stop early, and this
+          session earns nothing.
+        </Text>
+      )}
+
+      {state.running && state.pledgeMinutes > 0 && (
+        <Text style={styles.pledgeNote}>
+          {state.away
+            ? `Get back within ${Math.round(PLEDGE_ABANDON_MS / 1000)}s or the pledge dies.`
+            : `Pledged ${state.pledgeMinutes} minutes — ${Math.max(
+                0,
+                Math.ceil(state.pledgeMinutes - state.focusedMs / 60_000),
+              )} to go${state.endsAt ? `, due by ${clockOf(state.endsAt)}` : ""}.`}
+        </Text>
       )}
 
       <Pressable
@@ -66,6 +116,27 @@ const styles = StyleSheet.create({
   liveLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 11, letterSpacing: 0.9 },
   clock: { color: colors.text, fontSize: 30, fontWeight: "700", fontVariant: ["tabular-nums"] },
   liveStats: { alignItems: "flex-end", gap: 4 },
+  pledgeRow: { flexDirection: "row", gap: 8 },
+  pledgeChip: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pledgeChipOn: { backgroundColor: colors.accentPale, borderColor: colors.accent },
+  pledgeText: { color: colors.muted, fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
+  pledgeTextOn: { color: colors.text },
+  pledgeNote: {
+    color: colors.muted,
+    fontFamily: roundedFont,
+    fontSize: 12,
+    textAlign: "center",
+    lineHeight: 17,
+  },
   stat: { color: colors.muted, fontFamily: roundedFont, fontSize: 12 },
   button: {
     minHeight: 66,

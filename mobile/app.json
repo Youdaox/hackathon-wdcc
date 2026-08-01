@@ -2,28 +2,29 @@
   "expo": {
     "name": "Incline",
     "slug": "incline",
+    "scheme": "incline",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "platforms": ["ios"],
     "splash": {
-      "backgroundColor": "#0f1511"
+      "backgroundColor": "#fbf7f0"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "nz.ac.auckland.incline",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Incline checks once, at the moment you start a session, to see whether you're at a verified study spot. It never tracks you in the background."
+        "NSLocationWhenInUseUsageDescription": "Incline checks once, at the moment you start a session, to see whether you're at a verified study spot. It never tracks you in the background.",
+        "//": "The dev backend is plain http on a LAN address. Expo Go already permits this; the exception only matters if this is ever built as a standalone app.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
-    "android": {
-      "package": "nz.ac.auckland.incline",
-      "edgeToEdgeEnabled": true,
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
-    },
     "extra": {
-      "//": "Point this at the machine running `npm run dev` in the repo root. Expo Go reads it at runtime via expo-constants, so changing it only needs a reload, not a rebuild.",
-      "apiBaseUrl": "http://172.20.10.67:3000"
+      "//": "Point this at the machine running `pnpm dev` in the repo root. Read at runtime via expo-constants, so changing it is a reload, not a rebuild.",
+      "apiBaseUrl": "http://192.168.1.14:3000"
     }
   }
 }

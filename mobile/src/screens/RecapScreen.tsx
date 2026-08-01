@@ -1,33 +1,70 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { Companion } from "../api";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { Companion, Recap } from "../api";
 import { colors, roundedFont } from "../theme";
 
-const WEEK = [
-  { day: "Wed", focus: 76, distracted: 24 },
-  { day: "Thu", focus: 92, distracted: 10 },
-  { day: "Fri", focus: 44, distracted: 50 },
-  { day: "Sat", focus: 20, distracted: 16 },
-  { day: "Sun", focus: 56, distracted: 20 },
-  { day: "Mon", focus: 82, distracted: 12 },
-  { day: "Tue", focus: 65, distracted: 35 },
-];
+const GOAL_DAYS = 5;
 
-export function RecapScreen({ companion }: { companion: Companion | null }) {
+const REASON_COPY: Record<string, string> = {
+  emergency: "something urgent",
+  task: "needed for the task",
+  distraction: "plain distraction",
+};
+
+export function RecapScreen({
+  companion,
+  recap,
+  refreshing,
+  onRefresh,
+}: {
+  companion: Companion | null;
+  recap: Recap | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
   const name = companion?.name ?? "Fern";
-  const focusedMinutes = Math.round((companion?.total_focused_ms ?? 42 * 60_000) / 60_000);
-  const totalFocused = WEEK.reduce((total, day) => total + day.focus, 0);
-  const totalDistracted = WEEK.reduce((total, day) => total + day.distracted, 0);
-  const averageFocus = Math.round((totalFocused / (totalFocused + totalDistracted)) * 100);
+  const week = recap?.days ?? [];
+  const totalFocused = recap?.total_focused_minutes ?? 0;
+  const totalDistracted = recap?.total_distracted_minutes ?? 0;
+  const denominator = totalFocused + totalDistracted;
+  const averageFocus = denominator === 0 ? 0 : Math.round((totalFocused / denominator) * 100);
+  const studyDays = recap?.study_days ?? 0;
+
+  // The pattern line is the diagnostic payoff: a reason someone leaned on
+  // repeatedly is worth naming, and it can't be read off a duration chart.
+  const topReason = recap
+    ? (Object.entries(recap.reasons) as [string, number][])
+        .filter(([key]) => key !== "ended")
+        .sort((a, b) => b[1] - a[1])[0]
+    : undefined;
 
   return (
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />
+      }
+    >
       <Text style={styles.pageTitle}>Your week</Text>
 
       <View style={styles.summaryCard}>
-        <Text style={styles.cardTitle}>Today, honestly</Text>
+        <Text style={styles.cardTitle}>This week, honestly</Text>
         <Text style={styles.summaryText}>
-          {name} drifted for about 0 minutes today — totally normal. {focusedMinutes} verified minutes still went in the bank.
+          {denominator === 0
+            ? `No sessions logged yet. Start one and ${name} will keep track.`
+            : `${totalFocused} verified minutes in the bank, ${totalDistracted} spent away. That's normal — the point is knowing.`}
         </Text>
+        {recap?.guess_gap_seconds != null && recap.guess_gap_seconds > 10 && (
+          <Text style={styles.summaryText}>
+            You underestimate your time away by about {Math.round(recap.guess_gap_seconds)}s each
+            time.
+          </Text>
+        )}
+        {topReason && topReason[1] > 0 && (
+          <Text style={styles.summaryText}>
+            Most common reason: {REASON_COPY[topReason[0]] ?? topReason[0]} ({topReason[1]}x).
+          </Text>
+        )}
       </View>
 
       <View style={styles.chartCard}>
@@ -43,12 +80,14 @@ export function RecapScreen({ companion }: { companion: Companion | null }) {
           <Legend color={colors.sand} label="Distracted" />
         </View>
         <View style={styles.chart}>
-          {WEEK.map((entry) => {
-            const total = entry.focus + entry.distracted;
-            const focusPct = Math.round((entry.focus / total) * 100);
-            const distractedPct = 100 - focusPct;
+          {week.map((entry) => {
+            const total = entry.focused_minutes + entry.distracted_minutes;
+            // A day with no data reads as an empty column rather than
+            // vanishing, so the week always has seven bars.
+            const focusPct = total === 0 ? 0 : Math.round((entry.focused_minutes / total) * 100);
+            const distractedPct = total === 0 ? 0 : 100 - focusPct;
             return (
-              <View key={entry.day} style={styles.dayColumn}>
+              <View key={entry.date} style={styles.dayColumn}>
                 <View style={styles.barTrack}>
                   <View style={[styles.distractedBar, { flex: distractedPct }]}>
                     <Text style={styles.distractedPercent}>{distractedPct}%</Text>
@@ -57,7 +96,7 @@ export function RecapScreen({ companion }: { companion: Companion | null }) {
                     <Text style={styles.focusPercent}>{focusPct}%</Text>
                   </View>
                 </View>
-                <Text style={styles.dayLabel}>{entry.day}</Text>
+                <Text style={styles.dayLabel}>{entry.label}</Text>
               </View>
             );
           })}
@@ -68,7 +107,7 @@ export function RecapScreen({ companion }: { companion: Companion | null }) {
         <View style={styles.goalHeader}>
           <View>
             <Text style={styles.cardTitle}>Weekly focus goal</Text>
-            <Text style={styles.goalCount}>5 of 7 study days</Text>
+            <Text style={styles.goalCount}>{studyDays} of 7 study days</Text>
           </View>
           <View style={styles.targetIcon}>
             <View style={styles.targetMiddle}>
@@ -78,10 +117,17 @@ export function RecapScreen({ companion }: { companion: Companion | null }) {
         </View>
         <View style={styles.goalSegments}>
           {Array.from({ length: 7 }, (_, index) => (
-            <View key={index} style={[styles.goalSegment, index < 5 && styles.goalSegmentDone]} />
+            <View
+              key={index}
+              style={[styles.goalSegment, index < studyDays && styles.goalSegmentDone]}
+            />
           ))}
         </View>
-        <Text style={styles.goalMessage}>Two more focused days to complete your goal. You’re nearly there.</Text>
+        <Text style={styles.goalMessage}>
+          {studyDays >= GOAL_DAYS
+            ? `Goal met — ${studyDays} study days, ${recap?.streak ?? 0} in a row.`
+            : `${GOAL_DAYS - studyDays} more focused ${GOAL_DAYS - studyDays === 1 ? "day" : "days"} to complete your goal.`}
+        </Text>
       </View>
     </ScrollView>
   );
