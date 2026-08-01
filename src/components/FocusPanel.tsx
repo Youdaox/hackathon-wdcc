@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { GazeCalibrationOverlay } from "@/components/GazeCalibration";
 import { useIncline } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
@@ -106,7 +107,45 @@ export function FocusPanel() {
           </Button>
         </div>
       </div>
+
+      <EyeTrackingToggle />
     </section>
+  );
+}
+
+/**
+ * Opt-in for the webcam. Deliberately worded around what actually happens —
+ * the camera opens only during a session and no video leaves the device.
+ */
+function EyeTrackingToggle() {
+  const { eyeEnabled, setEyeEnabled, gazeCalibration, setGazeCalibration } = useIncline();
+
+  return (
+    <div className="mt-6 flex items-start justify-between gap-4 border-t border-line-soft pt-5">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold">Eye tracking</div>
+        <p className="mt-0.5 text-xs text-muted">
+          {eyeEnabled
+            ? "Your webcam opens when a session starts and closes when it ends. Frames are processed on your device only."
+            : "Use your webcam to notice when your eyes wander off screen."}
+        </p>
+        {eyeEnabled && gazeCalibration !== "none" && (
+          <button
+            onClick={() => setGazeCalibration("none")}
+            className="mt-1.5 text-[11px] font-semibold text-faint transition-colors hover:text-muted"
+          >
+            {gazeCalibration === "done" ? "Recalibrate" : "Calibrate for better accuracy"}
+          </button>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant={eyeEnabled ? "ghost" : "outline"}
+        onClick={() => setEyeEnabled(!eyeEnabled)}
+      >
+        {eyeEnabled ? "Turn off" : "Turn on"}
+      </Button>
+    </div>
   );
 }
 
@@ -118,8 +157,9 @@ interface LiveProps {
 }
 
 function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
-  const { currentZone } = useIncline();
+  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes } = useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const away = active.isHidden || active.isGazeAway;
   const focusRatio =
     active.focusedMs + active.distractedMs > 0
       ? active.focusedMs / (active.focusedMs + active.distractedMs)
@@ -130,31 +170,39 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   return (
     <section
       className={`card relative overflow-hidden p-8 transition-colors ${
-        active.isHidden ? "border-clay/60" : "border-moss/30"
+        away ? "border-clay/60" : "border-moss/30"
       }`}
     >
+      {/* Only asked for once, and only while the camera is actually coming up. */}
+      {gazeCalibration === "none" && (gazeStatus === "loading" || gazeStatus === "tracking") && (
+        <GazeCalibrationOverlay />
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="eyebrow">{active.course}</div>
           <h2 className="mt-2 text-2xl font-extrabold">{active.title}</h2>
         </div>
-        <span
-          className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
-            active.isHidden ? "bg-clay/15 text-clay" : "bg-moss/15 text-moss"
-          }`}
-        >
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${active.isHidden ? "bg-clay" : "animate-pulse bg-moss"}`}
-          />
-          {active.isHidden ? "Away" : "Focused"}
-        </span>
+            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              away ? "bg-clay/15 text-clay" : "bg-moss/15 text-moss"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${away ? "bg-clay" : "animate-pulse bg-moss"}`}
+            />
+            {active.isHidden ? "Away" : active.isGazeAway ? "Eyes off screen" : "Focused"}
+          </span>
+          {eyeEnabled && <GazeStatusChip status={gazeStatus} calibration={gazeCalibration} />}
+        </div>
       </div>
 
       <div className="mt-8 text-center">
         <div className="eyebrow">{remainingMs !== null ? "Time remaining" : "Elapsed"}</div>
         <div
           className={`tabular mt-1 font-mono text-[5.5rem] font-bold leading-none tracking-tight ${
-            active.isHidden ? "text-clay" : "text-ink"
+            away ? "text-clay" : "text-ink"
           }`}
         >
           {formatDuration(remainingMs ?? elapsedMs)}
@@ -193,7 +241,26 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
             {penalized} distraction{penalized === 1 ? "" : "s"} logged this session
           </p>
         )}
+        {gazeEpisodes > 0 && !active.isGazeAway && (
+          <p className="text-xs text-faint">
+            Eyes drifted {gazeEpisodes} time{gazeEpisodes === 1 ? "" : "s"}
+          </p>
+        )}
       </div>
+
+      {/* The warning. Loud on purpose — it has to land in peripheral vision,
+          because by definition the user isn't looking straight at it. */}
+      {active.isGazeAway && (
+        <div className="animate-rise mt-6 flex items-center gap-3 rounded-xl border border-clay/50 bg-clay/10 px-4 py-3">
+          <span className="text-xl">👀</span>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-clay">Eyes back on the screen</div>
+            <div className="text-xs text-muted">
+              This time is counting as distraction until you&apos;re back.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 flex items-center justify-center gap-3">
         <Button size="lg" onClick={onEnd}>
@@ -215,5 +282,33 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Small, quiet line about what the camera is doing. Never blocks anything. */
+function GazeStatusChip({
+  status,
+  calibration,
+}: {
+  status: ReturnType<typeof useIncline>["gazeStatus"];
+  calibration: ReturnType<typeof useIncline>["gazeCalibration"];
+}) {
+  const LABELS: Record<typeof status, string | null> = {
+    off: null,
+    loading: "Starting camera…",
+    tracking: calibration === "done" ? "Eye tracking on" : "Watching for you to look away",
+    denied: "Camera blocked",
+    unsupported: "No camera",
+    error: "Camera unavailable",
+  };
+
+  const label = LABELS[status];
+  if (!label) return null;
+
+  const warn = status === "denied" || status === "error" || status === "unsupported";
+  return (
+    <span className={`text-[11px] font-semibold ${warn ? "text-amber" : "text-faint"}`}>
+      {label}
+    </span>
   );
 }

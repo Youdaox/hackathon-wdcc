@@ -47,12 +47,17 @@ export interface Companion {
   createdAt: number;
 }
 
-/** One hidden-tab stretch during a session. */
+/** What pulled the user away: the tab went hidden, or their gaze left the screen. */
+export type AwayReason = "hidden" | "gaze";
+
+/** One stretch of being away during a session. */
 export interface DistractionEvent {
   startedAt: number;
   durationMs: number;
   /** Short blips are forgiven — they cost focus time but not HP. */
   penalized: boolean;
+  /** What started the stretch. Absent on sessions recorded before eye tracking. */
+  reason?: AwayReason;
 }
 
 /** A finished focus session. The live session is held in memory until it ends. */
@@ -95,8 +100,12 @@ export interface ActiveSession {
   distractions: DistractionEvent[];
   /** True while the tab is hidden. */
   isHidden: boolean;
-  /** When the current hidden stretch began, if any. */
-  hiddenSince: number | null;
+  /** True while eye tracking says the user's gaze has left the screen. */
+  isGazeAway: boolean;
+  /** When the current away stretch began, if any. Either signal can start one. */
+  awaySince: number | null;
+  /** Which signal started the current away stretch. */
+  awayReason: AwayReason | null;
   /** Flat XP earned from a correct recall check this session. */
   bonusXp: number;
 }

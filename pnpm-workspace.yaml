@@ -1,0 +1,19 @@
+# pnpm blocks dependency build scripts by default. These four genuinely need
+# theirs, so each is allowed explicitly rather than turning the check off:
+#
+#   better-sqlite3  native binding — the backend can't open a database without it
+#   esbuild         platform binary, pulled in by drizzle-kit
+#   sharp           Next.js image optimization
+#   unrs-resolver   native resolver used by eslint-config-next
+#
+# The Expo app is a workspace package too, so one `pnpm install` at the root
+# sets up both projects.
+packages:
+  - mobile
+
+allowBuilds:
+  better-sqlite3: true
+  core-js: false
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
