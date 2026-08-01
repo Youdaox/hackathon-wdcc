@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Incline — grow through focus",
+    name: "Incline - Grow Through Focus",
     short_name: "Incline",
     description:
       "A companion that grows on verified, undistracted study time, tied to your real class schedule.",
