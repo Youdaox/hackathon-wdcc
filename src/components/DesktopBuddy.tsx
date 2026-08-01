@@ -28,6 +28,7 @@ declare global {
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
+const DRAG_SPEECH_DELAY_MS = 600;
 const SPEECH_EVERY_N_IDLES = 3;
 const SPEECH_DURATION_MS = 3000;
 
@@ -48,10 +49,14 @@ export function DesktopBuddy() {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const idleCountRef = useRef(0);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dragSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bubbleText, setBubbleText] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => clearTimeout(speechTimeoutRef.current);
+    return () => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -123,7 +128,11 @@ export function DesktopBuddy() {
     }),
     (dragging) => {
       clearTimeout(speechTimeoutRef.current);
-      setBubbleText(dragging ? DRAG_SPEECH_LINE : null);
+      clearTimeout(dragSpeechTimeoutRef.current);
+      setBubbleText(null);
+      if (dragging) {
+        dragSpeechTimeoutRef.current = setTimeout(() => setBubbleText(DRAG_SPEECH_LINE), DRAG_SPEECH_DELAY_MS);
+      }
     },
     // The Pig sprite's box-shadow pixel art is too expensive to rescale every
     // frame — see useWander's enableSquish doc comment.

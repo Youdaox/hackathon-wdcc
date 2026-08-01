@@ -19,6 +19,7 @@ declare global {
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
+const DRAG_SPEECH_DELAY_MS = 600;
 const SPEECH_EVERY_N_IDLES = 3;
 const SPEECH_DURATION_MS = 3000;
 
@@ -33,10 +34,14 @@ export default function OverlayPage() {
   const draggingRef = useRef(false);
   const idleCountRef = useRef(0);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dragSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bubbleText, setBubbleText] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => clearTimeout(speechTimeoutRef.current);
+    return () => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+    };
   }, []);
 
   // The dashboard layout paints an opaque background; undo that here so the
@@ -82,7 +87,13 @@ export default function OverlayPage() {
       // click-through-ing the window mid-drag.
       if (dragging) window.overlayAPI?.setIgnoreMouseEvents(false);
       clearTimeout(speechTimeoutRef.current);
-      setBubbleText(dragging ? DRAG_SPEECH_LINE : null);
+      clearTimeout(dragSpeechTimeoutRef.current);
+      if (dragging) {
+        setBubbleText(null);
+        dragSpeechTimeoutRef.current = setTimeout(() => setBubbleText(DRAG_SPEECH_LINE), DRAG_SPEECH_DELAY_MS);
+      } else {
+        setBubbleText(null);
+      }
     },
     // The Pig sprite's box-shadow pixel art is too expensive to rescale every
     // frame — see useWander's enableSquish doc comment.
