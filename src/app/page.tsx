@@ -5,7 +5,6 @@ import { CanvasCard } from "@/components/CanvasCard";
 import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
 import { DesktopBuddy } from "@/components/DesktopBuddy";
-import { FocusPanel } from "@/components/FocusPanel";
 import { LocationCard } from "@/components/LocationCard";
 import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
