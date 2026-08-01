@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Server-side schema for the mobile sync contract.
@@ -39,6 +39,21 @@ export const authSessions = sqliteTable(
   (table) => [index("auth_sessions_user_idx").on(table.userId)],
 );
 
+/** Mutual, account-backed connections used to limit encouragement sharing. */
+export const friendships = sqliteTable(
+  "friendships",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    friendId: text("friend_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("friendships_user_idx").on(table.userId),
+    uniqueIndex("friendships_pair_unique").on(table.userId, table.friendId),
+  ],
+);
+
 /**
  * One companion per user. Mirrors the `Companion` interface field-for-field so
  * `applySession()` from `src/lib/companion.ts` can run against a row directly
@@ -57,6 +72,9 @@ export const companions = sqliteTable("companions", {
   color: text("color").notNull().default("pink"),
   /** Cosmetic worn accessory — see PigAccessory in src/lib/types.ts. */
   accessory: text("accessory").notNull().default("none"),
+  checkInEmotion: text("check_in_emotion"),
+  checkInAt: integer("check_in_at"),
+  nextCheckInAt: integer("next_check_in_at"),
   level: integer("level").notNull(),
   /** XP toward the *current* level only, not lifetime. */
   xp: integer("xp").notNull(),

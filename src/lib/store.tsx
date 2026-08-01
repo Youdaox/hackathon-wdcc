@@ -116,10 +116,19 @@ interface InclineContextValue {
 
 const InclineContext = createContext<InclineContextValue | null>(null);
 
+function hasAvatarCustomization(companion: Companion) {
+  return companion.name !== "Oinky"
+    || companion.color !== "pink"
+    || companion.accessory !== "none"
+    || companion.checkInEmotion !== null;
+}
+
 export function InclineProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useDemoAuth();
   const [hydrated, setHydrated] = useState(false);
   const [hydratedUserId, setHydratedUserId] = useState<string | null>(null);
+  /** Prevents a local cache from overwriting the shared profile before it loads. */
+  const [profileLoadedForUser, setProfileLoadedForUser] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<StudyBlock[]>([]);
   const [companion, setCompanion] = useState<Companion>(() => createCompanion());
   const [sessions, setSessions] = useState<FocusSession[]>([]);
@@ -139,6 +148,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser) {
       setHydrated(false);
       setHydratedUserId(null);
+      setProfileLoadedForUser(null);
       setBlocks([]);
       setCompanion(createCompanion());
       setSessions([]);
@@ -147,32 +157,55 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     const userKey = (key: string) => forUser(key, currentUser.id);
     setHydrated(false);
     setHydratedUserId(null);
+    setProfileLoadedForUser(null);
     setBlocks(loadJSON<StudyBlock[]>(userKey(STORAGE_KEYS.schedule), []));
     const loadedCompanion = loadJSON<Companion>(userKey(STORAGE_KEYS.companion), createCompanion());
     // Older saves predate coat/accessory customization, or may carry a coat
     // color that's since been retired (grey/brown) — fall back to defaults.
-    setCompanion(
-      applyIdleDecay({
-        ...loadedCompanion,
-        color: PIG_COLOR_VALUES.includes(loadedCompanion.color) ? loadedCompanion.color : "pink",
-        accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
-          ? loadedCompanion.accessory
-          : "none",
-        checkInEmotion: loadedCompanion.checkInEmotion !== null
-          && AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
-          ? loadedCompanion.checkInEmotion
-          : null,
-        checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
-        nextCheckInAt:
-          typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
-      }),
-    );
+    const localCompanion = applyIdleDecay({
+      ...loadedCompanion,
+      color: PIG_COLOR_VALUES.includes(loadedCompanion.color) ? loadedCompanion.color : "pink",
+      accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
+        ? loadedCompanion.accessory
+        : "none",
+      checkInEmotion: loadedCompanion.checkInEmotion !== null
+        && AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
+        ? loadedCompanion.checkInEmotion
+        : null,
+      checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
+      nextCheckInAt:
+        typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
+    });
+    setCompanion(localCompanion);
     setSessions(loadJSON<FocusSession[]>(userKey(STORAGE_KEYS.sessions), []));
     setGeoEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.geo), false));
     setEyeEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.eye), false));
     setGazeCalibration(loadJSON<GazeCalibration>(userKey(STORAGE_KEYS.eyeCalibration), "none"));
     setHydrated(true);
     setHydratedUserId(currentUser.id);
+    let active = true;
+    void fetch("/api/profile/companion")
+      .then((response) => response.ok ? response.json() as Promise<{ companion: Companion }> : null)
+      .then((payload) => {
+        if (!active || !payload) return;
+        // Focus/schedule data remains local today; only profile fields are
+        // shared so loading a popup cannot replace an in-progress web profile.
+        const sharedProfile = hasAvatarCustomization(payload.companion) || !hasAvatarCustomization(localCompanion)
+          ? {
+              ...localCompanion,
+              name: payload.companion.name,
+              color: payload.companion.color,
+              accessory: payload.companion.accessory,
+              checkInEmotion: payload.companion.checkInEmotion,
+              checkInAt: payload.companion.checkInAt,
+              nextCheckInAt: payload.companion.nextCheckInAt,
+            }
+          : localCompanion;
+        setCompanion(sharedProfile);
+        setProfileLoadedForUser(currentUser.id);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
   }, [currentUser]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -184,6 +217,25 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.companion, currentUser.id), companion);
   }, [companion, currentUser, hydrated, hydratedUserId]);
+
+  // The database profile is shared by the browser, Electron dashboard, and
+  // its popup/overlay windows. Only avatar preferences belong here; focus
+  // sessions remain account-local until they have a dedicated sync flow.
+  useEffect(() => {
+    if (!currentUser || profileLoadedForUser !== currentUser.id) return;
+    void fetch("/api/profile/companion", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: companion.name,
+        color: companion.color,
+        accessory: companion.accessory,
+        checkInEmotion: companion.checkInEmotion,
+        checkInAt: companion.checkInAt,
+        nextCheckInAt: companion.nextCheckInAt,
+      }),
+    }).catch(() => undefined);
+  }, [companion, currentUser, profileLoadedForUser]);
 
   useEffect(() => {
     if (hydrated && currentUser && hydratedUserId === currentUser.id) saveJSON(forUser(STORAGE_KEYS.sessions, currentUser.id), sessions);

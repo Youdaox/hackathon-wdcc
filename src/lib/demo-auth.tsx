@@ -4,15 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 export type DemoUser = { id: string; username: string; name: string; initials: string };
 
-/** Familiar local people remain available as community recipients. */
-export const DEMO_USERS: DemoUser[] = [
-  { id: "user-1", username: "alice", name: "Alice", initials: "AL" },
-  { id: "user-2", username: "bob", name: "Bob", initials: "BO" },
-  { id: "user-3", username: "charlie", name: "Charlie", initials: "CH" },
-  { id: "user-4", username: "diana", name: "Diana", initials: "DI" },
-  { id: "user-5", username: "ethan", name: "Ethan", initials: "ET" },
-];
-
 interface DemoAuthValue {
   currentUser: DemoUser | null;
   ready: boolean;

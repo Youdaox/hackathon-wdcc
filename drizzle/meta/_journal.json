@@ -22,6 +22,20 @@
       "when": 1785570000000,
       "tag": "0002_local_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785571000000,
+      "tag": "0003_friendships",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785572000000,
+      "tag": "0004_companion_profile_sync",
+      "breakpoints": true
     }
   ]
 }
