@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useWander } from "@/hooks/useWander";
+import { useIncline } from "@/lib/store";
+import { moodFor } from "@/lib/companion";
+import { Pig } from "@/components/Pig";
 
 declare global {
   interface Window {
@@ -16,8 +20,7 @@ declare global {
   }
 }
 
-const WALK_SPEED = 1.4; // px per animation frame
-const DUCK_SIZE = 96;
+const PET_SIZE = 96;
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running
@@ -27,14 +30,12 @@ const DUCK_SIZE = 96;
  * window — Chrome/Edge only, and bordered, but needs no native shell.
  */
 export function DesktopBuddy() {
+  const { companion } = useIncline();
   const [isElectron, setIsElectron] = useState(false);
   const [electronOverlayOpen, setElectronOverlayOpen] = useState(false);
   const [pipSupported, setPipSupported] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const posRef = useRef(0);
-  const dirRef = useRef(1);
-  const frameRef = useRef<number>(0);
+  const petRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsElectron(Boolean(window.electronAPI?.isElectron));
@@ -53,6 +54,25 @@ export function DesktopBuddy() {
     pip.document.body.style.overflow = "hidden";
     pip.document.body.style.background = "transparent";
     pip.document.documentElement.style.background = "transparent";
+
+    // The Pig component is styled entirely through the app's CSS classes, not
+    // inline styles, so the popped-out window needs its own copy of the
+    // stylesheet to render it correctly.
+    [...document.styleSheets].forEach((styleSheet) => {
+      try {
+        const rules = [...styleSheet.cssRules].map((rule) => rule.cssText).join("");
+        const style = pip.document.createElement("style");
+        style.textContent = rules;
+        pip.document.head.appendChild(style);
+      } catch {
+        if (styleSheet.href) {
+          const link = pip.document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = styleSheet.href;
+          pip.document.head.appendChild(link);
+        }
+      }
+    });
 
     pip.addEventListener("pagehide", () => setPipWindow(null));
     setPipWindow(pip);
@@ -76,30 +96,10 @@ export function DesktopBuddy() {
     }
   }
 
-  useEffect(() => {
-    if (!pipWindow) return;
-    const win = pipWindow;
-
-    function tick() {
-      const el = imgRef.current;
-      if (el) {
-        const maxX = win.innerWidth - DUCK_SIZE;
-        posRef.current += WALK_SPEED * dirRef.current;
-        if (posRef.current <= 0) {
-          posRef.current = 0;
-          dirRef.current = 1;
-        } else if (posRef.current >= maxX) {
-          posRef.current = maxX;
-          dirRef.current = -1;
-        }
-        el.style.transform = `translateX(${posRef.current}px) scaleX(${dirRef.current})`;
-      }
-      frameRef.current = requestAnimationFrame(tick);
-    }
-
-    frameRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, [pipWindow]);
+  useWander(petRef, PET_SIZE, Boolean(pipWindow), () => ({
+    width: pipWindow?.innerWidth ?? 0,
+    height: pipWindow?.innerHeight ?? 0,
+  }));
 
   useEffect(() => {
     return () => {
@@ -123,20 +123,32 @@ export function DesktopBuddy() {
       {!isElectron &&
         pipWindow &&
         createPortal(
-          <img
-            ref={imgRef}
-            src="/placeholder.png"
-            alt="Desktop buddy"
+          <div
+            ref={petRef}
+            role="img"
+            aria-label="Desktop buddy"
             style={{
               position: "absolute",
-              bottom: 8,
+              top: 0,
               left: 0,
-              width: DUCK_SIZE,
-              height: DUCK_SIZE,
-              objectFit: "contain",
+              width: PET_SIZE,
+              height: PET_SIZE,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               willChange: "transform",
+              userSelect: "none",
             }}
-          />,
+          >
+            <Pig
+              mood={moodFor(companion.hp)}
+              level={companion.level}
+              color={companion.color}
+              accessory={companion.accessory}
+              hp={companion.hp}
+              size={PET_SIZE}
+            />
+          </div>,
           pipWindow.document.body,
         )}
     </>
