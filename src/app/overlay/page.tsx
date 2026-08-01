@@ -6,6 +6,7 @@ declare global {
   interface Window {
     overlayAPI?: {
       setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
+      ready: () => void;
     };
   }
 }
@@ -32,7 +33,20 @@ export default function OverlayPage() {
     const prevBodyBg = body.style.background;
     html.style.background = "transparent";
     body.style.background = "transparent";
+
+    // Two frames guarantees the transparent style has actually been painted
+    // before we tell Electron it's safe to reveal the window.
+    let raf1 = 0;
+    let raf2 = 0;
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        window.overlayAPI?.ready();
+      });
+    });
+
     return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
       html.style.background = prevHtmlBg;
       body.style.background = prevBodyBg;
     };
