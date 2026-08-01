@@ -1,4 +1,4 @@
-import type { ActiveSession, Companion, Mood, PigColor } from "./types";
+import type { ActiveSession, AvatarEmotion, Companion, Mood, PigColor } from "./types";
 import { uid } from "./storage";
 
 /**
@@ -48,6 +48,8 @@ export function createCompanion(name = "Oinky", color: PigColor = "pink"): Compa
     species: "pig",
     color,
     accessory: "none",
+    checkInEmotion: null,
+    checkInAt: null,
     level: 1,
     xp: 0,
     hp: 100,
@@ -62,6 +64,13 @@ export function moodFor(hp: number): Mood {
   if (hp >= 50) return "neutral";
   if (hp >= 25) return "sad";
   return "sick";
+}
+
+/** Low health takes priority; otherwise, show the feeling from the latest check-in. */
+export function avatarStateFor(hp: number, emotion: AvatarEmotion | null): string {
+  if (hp < 25) return "needs-care";
+  if (hp < 50) return "needs-energy";
+  return emotion ?? moodFor(hp);
 }
 
 export const MOOD_LABEL: Record<Mood, string> = {
