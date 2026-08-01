@@ -7,12 +7,15 @@ import * as Linking from "expo-linking";
 import {
   type AwayReason,
   type Companion,
+  type PigAccessory,
+  type PigColor,
   type Recap,
   type StudySpot,
   fetchCompanion,
   fetchRecap,
   fetchStudySpots,
   logDistractionEvent,
+  patchCompanion,
   postSession,
 } from "./src/api";
 import { BottomNav, type TabName } from "./src/components/BottomNav";
@@ -219,6 +222,21 @@ export default function App() {
     void handleStop();
   }, [state.abandoned, handleStop]);
 
+  /**
+   * Coat and accessory live on the server, not in local state — the web reads
+   * the same row, so a pig recoloured here is recoloured there. Applied
+   * optimistically so the swatch responds instantly.
+   */
+  const handleCustomise = useCallback(
+    (patch: { color?: PigColor; accessory?: PigAccessory }) => {
+      setCompanion((current) => (current ? { ...current, ...patch } : current));
+      void patchCompanion(patch)
+        .then(load)
+        .catch(() => setNotice("Couldn't save that change."));
+    },
+    [load],
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -244,6 +262,7 @@ export default function App() {
               onRefresh={onRefresh}
               onCheckIn={checkIn}
               pledge={pledge}
+              onCustomise={handleCustomise}
               onPledgeChange={setPledge}
               onStart={handleStart}
               onStop={handleStop}

@@ -1,5 +1,5 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { Sprout } from "../components/Sprout";
+import { Pig } from "../components/Pig";
 import { colors, formatDuration, roundedFont } from "../theme";
 
 /**
@@ -33,7 +33,7 @@ export function InterceptScreen({
   return (
     <Modal visible animationType="fade" presentationStyle="fullScreen">
       <View style={styles.root}>
-        <Sprout size={120} stage={2} happy={false} />
+        <Pig mood="sad" level={4} size={120} />
 
         <Text style={styles.title}>{app} can wait</Text>
         <Text style={styles.body}>

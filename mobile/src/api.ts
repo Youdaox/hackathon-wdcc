@@ -16,9 +16,17 @@ const PLATFORM = Platform.OS === "web" ? "web" : "ios";
  * only ever deals in numbers.
  */
 
+export type PigColor = "pink" | "purple" | "blue";
+export type PigAccessory = "none" | "glasses" | "flower";
+export type AvatarEmotion = "happy" | "sad" | "angry" | "calm" | "excited";
+
 export interface Companion {
   name: string;
   species: string;
+  color: PigColor;
+  accessory: PigAccessory;
+  check_in_emotion: AvatarEmotion | null;
+  next_check_in_at: string | null;
   level: number;
   xp: number;
   xp_needed: number;
@@ -181,6 +189,19 @@ export interface Recap {
   total_distracted_minutes: number;
   /** Positive means the user under-estimates how long they were gone. */
   guess_gap_seconds: number | null;
+}
+
+/** Updates coat, accessory, emotion or name. Growth stays server-owned. */
+export function patchCompanion(patch: {
+  color?: PigColor;
+  accessory?: PigAccessory;
+  check_in_emotion?: AvatarEmotion | null;
+  name?: string;
+}): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/api/companion", {
+    method: "PATCH",
+    body: JSON.stringify({ user_id: USER_ID, ...patch }),
+  });
 }
 
 export function fetchRecap(): Promise<Recap> {

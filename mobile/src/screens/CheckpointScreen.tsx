@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { AwayReason } from "../api";
 import type { PendingCheckpoint } from "../useFocusSession";
-import { Sprout } from "../components/Sprout";
+import { Pig } from "../components/Pig";
 import { colors, roundedFont } from "../theme";
 
 /**
@@ -95,7 +95,7 @@ export function CheckpointScreen({
     <Modal visible animationType="slide" presentationStyle="fullScreen">
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Sprout size={104} stage={2} happy={false} />
+          <Pig mood="sad" level={4} size={104} />
 
           {!revealed ? (
             <>

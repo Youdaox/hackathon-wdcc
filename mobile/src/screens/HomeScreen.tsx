@@ -16,6 +16,7 @@ type HomeScreenProps = {
   multiplier: number;
   busy: boolean;
   pledge: number;
+  onCustomise: (patch: { color?: import("../api").PigColor; accessory?: import("../api").PigAccessory }) => void;
   onPledgeChange: (minutes: number) => void;
   notice: string | null;
   refreshing: boolean;
@@ -48,11 +49,11 @@ export function HomeScreen(props: HomeScreenProps) {
         </View>
         <View style={styles.badge}>
           <View style={styles.badgeDot} />
-          <Text style={styles.badgeText}>Rare Sprout</Text>
+          <Text style={styles.badgeText}>Rare Coat</Text>
         </View>
       </View>
 
-      <CompanionCard companion={props.companion} />
+      <CompanionCard companion={props.companion} onCustomise={props.onCustomise} />
 
       <View style={styles.metricRow}>
         <MetricCard value={focusedMinutes} unit="min" label="Focused today" />

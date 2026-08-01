@@ -1,5 +1,8 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Sprout } from "../components/Sprout";
+import { Pig, type PigColor } from "../components/Pig";
+
+/** Rotates coats so the leaderboard reads as different pigs, not one repeated. */
+const COATS: PigColor[] = ["pink", "purple", "blue"];
 import { colors, roundedFont } from "../theme";
 
 const RANKS = [
@@ -27,7 +30,7 @@ export function RanksScreen() {
             ]}
           >
             <Text style={[styles.rank, entry.rank === 1 && styles.first]}>{entry.rank}</Text>
-            <Sprout size={34} stage={entry.stage} flower={entry.flower} emotion={entry.emotion} />
+            <Pig mood="happy" level={entry.stage * 3} size={40} color={COATS[entry.rank % 3]} />
             <View style={styles.person}>
               <Text style={styles.name}>{entry.name}</Text>
               <Text style={styles.streak}>{entry.streak} day streak · {entry.emotion}</Text>
