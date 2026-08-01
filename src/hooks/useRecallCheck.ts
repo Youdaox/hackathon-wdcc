@@ -82,7 +82,8 @@ export function useRecallCheck(active: ActiveSession | null, onCorrect: () => vo
   useEffect(() => {
     if (!active) return;
     if (firedFor.current === active.id) return;
-    if (active.isHidden) return; // they're away — wait until they're back
+    // They're away — hidden tab or eyes off screen — so wait until they're back.
+    if (active.isHidden || active.isGazeAway) return;
     if (active.focusedMs < threshold.current) return;
 
     firedFor.current = active.id;

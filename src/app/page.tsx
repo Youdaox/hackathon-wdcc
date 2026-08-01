@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CanvasCard } from "@/components/CanvasCard";
 import { CompanionCard } from "@/components/CompanionCard";
 import { FocusPanel } from "@/components/FocusPanel";
 import { LocationCard } from "@/components/LocationCard";
@@ -44,6 +45,7 @@ export default function Dashboard() {
           <div className="space-y-6">
             <FocusPanel />
             <SchedulePanel />
+            <CanvasCard />
           </div>
           <div className="space-y-6">
             <CompanionCard />
@@ -67,7 +69,10 @@ function Footer() {
 
   return (
     <footer className="mt-10 flex items-center justify-between border-t border-line-soft pt-5 text-xs text-faint">
-      <span>Focus is verified with the Page Visibility API. Everything is stored locally.</span>
+      <span>
+        Focus is verified with the Page Visibility API, and with your webcam if you turn eye tracking
+        on. Everything — video included — stays on your device.
+      </span>
       <button
         onClick={() => (confirming ? resetEverything() : setConfirming(true))}
         onBlur={() => setConfirming(false)}
@@ -88,6 +93,7 @@ function LoadingState() {
       <div className="space-y-6">
         <div className="card h-72 animate-pulse" />
         <div className="card h-80 animate-pulse" />
+        <div className="card h-64 animate-pulse" />
       </div>
       <div className="space-y-6">
         <div className="card h-96 animate-pulse" />

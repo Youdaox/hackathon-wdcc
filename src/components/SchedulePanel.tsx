@@ -157,7 +157,14 @@ function BlockRow({ block, isNow, canStart, onStart, onEdit, onDelete }: RowProp
               </span>
             )}
           </div>
-          <div className="truncate text-xs text-faint">{block.course}</div>
+          <div className="flex items-center gap-1.5 text-xs text-faint">
+            <span className="truncate">{block.course}</span>
+            {block.source === "canvas" && (
+              <span className="shrink-0 rounded bg-surface-2 px-1.5 py-px text-[10px] font-semibold text-muted">
+                Canvas
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
