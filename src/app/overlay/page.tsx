@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useWander } from "@/hooks/useWander";
+import { useIncline } from "@/lib/store";
+import { moodFor } from "@/lib/companion";
+import { Pig } from "@/components/Pig";
 
 declare global {
   interface Window {
@@ -11,18 +15,16 @@ declare global {
   }
 }
 
-const WALK_SPEED = 1.4; // px per animation frame
-const DUCK_SIZE = 96;
+const PET_SIZE = 96;
 
 /**
  * Full-viewport, transparent-background page meant to be loaded only by the Electron
  * overlay shell (see electron/main.js) — not part of the normal dashboard flow.
  */
 export default function OverlayPage() {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const posRef = useRef(0);
-  const dirRef = useRef(1);
-  const frameRef = useRef<number>(0);
+  const { companion } = useIncline();
+  const petRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
 
   // The dashboard layout paints an opaque background; undo that here so the
   // Electron window's transparency shows through.
@@ -52,35 +54,32 @@ export default function OverlayPage() {
     };
   }, []);
 
-  useEffect(() => {
-    function tick() {
-      const el = imgRef.current;
-      if (el) {
-        const maxX = window.innerWidth - DUCK_SIZE;
-        posRef.current += WALK_SPEED * dirRef.current;
-        if (posRef.current <= 0) {
-          posRef.current = 0;
-          dirRef.current = 1;
-        } else if (posRef.current >= maxX) {
-          posRef.current = maxX;
-          dirRef.current = -1;
-        }
-        el.style.transform = `translateX(${posRef.current}px) scaleX(${dirRef.current})`;
-      }
-      frameRef.current = requestAnimationFrame(tick);
-    }
-    frameRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, []);
+  useWander(
+    petRef,
+    PET_SIZE,
+    true,
+    () => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }),
+    (dragging) => {
+      draggingRef.current = dragging;
+      // Pointer capture keeps drag events routed to the pet even once the
+      // cursor leaves its bounds — don't let hit-testing fight that by
+      // click-through-ing the window mid-drag.
+      if (dragging) window.overlayAPI?.setIgnoreMouseEvents(false);
+    },
+  );
 
   // Hit-testing: the Electron window ignores the mouse by default (click-through
   // to whatever's underneath). We forward mousemove events into this page, check
-  // whether the cursor is over the duck, and toggle ignoreMouseEvents accordingly.
+  // whether the cursor is over the pet, and toggle ignoreMouseEvents accordingly.
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
+      if (draggingRef.current) return;
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      const overDuck = el?.id === "duck";
-      window.overlayAPI?.setIgnoreMouseEvents(!overDuck, { forward: true });
+      const overPet = Boolean(el?.closest("#pet"));
+      window.overlayAPI?.setIgnoreMouseEvents(!overPet, { forward: true });
     }
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
@@ -88,22 +87,33 @@ export default function OverlayPage() {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "transparent" }}>
-      <img
-        id="duck"
-        ref={imgRef}
-        src="/placeholder.png"
-        alt="Desktop buddy"
+      <div
+        id="pet"
+        ref={petRef}
+        role="img"
+        aria-label="Desktop buddy"
         style={{
           position: "absolute",
-          bottom: 8,
+          top: 0,
           left: 0,
-          width: DUCK_SIZE,
-          height: DUCK_SIZE,
-          objectFit: "contain",
+          width: PET_SIZE,
+          height: PET_SIZE,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           willChange: "transform",
-          cursor: "pointer",
+          userSelect: "none",
         }}
-      />
+      >
+        <Pig
+          mood={moodFor(companion.hp)}
+          level={companion.level}
+          color={companion.color}
+          accessory={companion.accessory}
+          hp={companion.hp}
+          size={PET_SIZE}
+        />
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { InclineProvider } from "@/lib/store";
+import { DemoAuthProvider } from "@/lib/demo-auth";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
@@ -43,7 +44,7 @@ export default function RootLayout({
       className={`${bricolage.variable} ${inter.variable} ${jetbrains.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <InclineProvider>{children}</InclineProvider>
+        <DemoAuthProvider><InclineProvider>{children}</InclineProvider></DemoAuthProvider>
       </body>
     </html>
   );

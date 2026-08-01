@@ -6,11 +6,18 @@ import { DomainError } from "@/lib/leaderboard/service";
 export async function GET(request: Request) {
   try {
     const { userId } = identity(request);
-    const rawLimit = Number(new URL(request.url).searchParams.get("limit") ?? 50);
+    const searchParams = new URL(request.url).searchParams;
+    const rawLimit = Number(searchParams.get("limit") ?? 50);
+    const direction = searchParams.get("direction") ?? "received";
+    if (direction !== "received" && direction !== "sent") {
+      throw new DomainError("INVALID_DIRECTION", "direction must be received or sent.");
+    }
     if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
       throw new DomainError("INVALID_LIMIT", "limit must be an integer between 1 and 100.");
     }
-    return NextResponse.json({ encouragements: await leaderboardService.getInbox(userId, rawLimit) });
+    return NextResponse.json({
+      encouragements: await leaderboardService.getEncouragementHistory(userId, direction, rawLimit),
+    });
   } catch (error) { return errorResponse(error); }
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CanvasCard } from "@/components/CanvasCard";
 import { FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
@@ -14,14 +15,19 @@ import { GrowthTimeline } from "@/components/GrowthTimeline";
 import { InstallAppButton } from "@/components/InstallAppButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
+import { useDemoAuth } from "@/lib/demo-auth";
+import { DemoLogin } from "@/components/DemoLogin";
 
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
+  const { currentUser, logout } = useDemoAuth();
 
   useEffect(() => {
     window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
     return () => window.electronAPI?.setBackgroundTracking(false);
   }, [active, eyeEnabled]);
+
+  if (!currentUser) return <DemoLogin />;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
@@ -36,6 +42,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/community#leaderboards" className="rounded-full bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-moss-deep">Community Leaderboards</Link>
           <InstallAppButton />
           <ThemeToggle />
           <div
@@ -48,6 +55,7 @@ export default function Dashboard() {
             />
             {active ? "Session running" : "Idle"}
           </div>
+          <button onClick={logout} className="rounded-full border border-clay/30 px-3 py-1.5 text-xs font-semibold text-clay hover:bg-clay/10">Log out</button>
         </div>
       </header>
 
