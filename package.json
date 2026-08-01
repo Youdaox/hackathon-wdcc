@@ -4,12 +4,13 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
-    "db:setup": "node --experimental-strip-types scripts/db-setup.ts"
+    "db:setup": "node --experimental-strip-types scripts/db-setup.ts",
+    "electron": "electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -28,7 +29,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.4",
     "drizzle-kit": "^0.31.10",
+    "electron": "^43.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
     "tailwindcss": "^4",

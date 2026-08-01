@@ -9,6 +9,10 @@ declare global {
       requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
       window: Window | null;
     };
+    electronAPI?: {
+      isElectron: boolean;
+      toggleOverlay: () => Promise<boolean>;
+    };
   }
 }
 
@@ -16,23 +20,28 @@ const WALK_SPEED = 1.4; // px per animation frame
 const DUCK_SIZE = 96;
 
 /**
- * Floats `placeholder.png` in a Document Picture-in-Picture window, which Chrome/Edge
- * keep on top of every other window (not just other tabs) — the closest thing to a
- * real desktop overlay a web app can produce without a native shell.
+ * "Let the duck out" toggles a desktop overlay. When the dashboard is running
+ * inside the Electron shell (electron/main.js), it asks the main process to
+ * open/close the real, borderless, click-through overlay window. In a plain
+ * browser tab (no Electron), it falls back to a Document Picture-in-Picture
+ * window — Chrome/Edge only, and bordered, but needs no native shell.
  */
 export function DesktopBuddy() {
+  const [isElectron, setIsElectron] = useState(false);
+  const [electronOverlayOpen, setElectronOverlayOpen] = useState(false);
+  const [pipSupported, setPipSupported] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
-  const [supported, setSupported] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const posRef = useRef(0);
   const dirRef = useRef(1);
   const frameRef = useRef<number>(0);
 
   useEffect(() => {
-    setSupported("documentPictureInPicture" in window);
+    setIsElectron(Boolean(window.electronAPI?.isElectron));
+    setPipSupported("documentPictureInPicture" in window);
   }, []);
 
-  async function openBuddy() {
+  async function openPip() {
     if (!window.documentPictureInPicture) return;
     const pip = await window.documentPictureInPicture.requestWindow({
       width: 240,
@@ -49,9 +58,22 @@ export function DesktopBuddy() {
     setPipWindow(pip);
   }
 
-  function closeBuddy() {
+  function closePip() {
     pipWindow?.close();
     setPipWindow(null);
+  }
+
+  async function toggle() {
+    if (isElectron) {
+      const open = await window.electronAPI!.toggleOverlay();
+      setElectronOverlayOpen(open);
+      return;
+    }
+    if (pipWindow) {
+      closePip();
+    } else {
+      await openPip();
+    }
   }
 
   useEffect(() => {
@@ -86,17 +108,20 @@ export function DesktopBuddy() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!supported) return null;
+  if (!isElectron && !pipSupported) return null;
+
+  const isOpen = isElectron ? electronOverlayOpen : Boolean(pipWindow);
 
   return (
     <>
       <button
-        onClick={pipWindow ? closeBuddy : openBuddy}
+        onClick={toggle}
         className="fixed bottom-6 right-6 z-50 rounded-full border border-line bg-surface px-4 py-2 text-xs font-semibold text-muted shadow-lg transition-colors hover:text-ink"
       >
-        {pipWindow ? "Bring the duck home" : "Let the duck out"}
+        {isOpen ? "Bring the duck home" : "Let the duck out"}
       </button>
-      {pipWindow &&
+      {!isElectron &&
+        pipWindow &&
         createPortal(
           <img
             ref={imgRef}
