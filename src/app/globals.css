@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/*
+  Incline design tokens.
+  Warm green-black ground so the companion's greens read as *growth* rather than
+  UI chrome. High contrast throughout — this has to survive a projector.
+*/
+@theme {
+  --color-canvas: #0e1211;
+  --color-surface: #161b19;
+  --color-surface-2: #1e2522;
+  --color-line: #2a332e;
+  --color-line-soft: #222a26;
+
+  --color-ink: #eaf1ec;
+  --color-muted: #8b9c92;
+  --color-faint: #5f6f66;
+
+  --color-moss: #6fdda0;
+  --color-moss-deep: #2b6d4a;
+  --color-citrus: #d9e86e;
+  --color-amber: #f5b860;
+  --color-clay: #ee7c63;
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --radius-card: 1.25rem;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    /* Two soft light sources: moss from the upper left, amber warmth low right. */
+    background-image:
+      radial-gradient(60rem 40rem at 12% -8%, rgba(111, 221, 160, 0.09), transparent 62%),
+      radial-gradient(48rem 34rem at 92% 108%, rgba(245, 184, 96, 0.07), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Timer digits must not jitter as they count. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  ::selection {
+    background: rgba(111, 221, 160, 0.3);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-moss);
+    outline-offset: 2px;
+    border-radius: 0.35rem;
+  }
+}
+
+@layer utilities {
+  /* Eyebrow labels: small, wide-tracked, quiet. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  /* Slow, organic pulse for the companion while a session is running. */
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: translateY(0) scale(1);
+    }
+    50% {
+      transform: translateY(-6px) scale(1.035);
+    }
+  }
+  .animate-breathe {
+    animation: breathe 4.5s ease-in-out infinite;
+  }
+
+  @keyframes shiver {
+    0%,
+    100% {
+      transform: translateX(0) rotate(0deg);
+    }
+    25% {
+      transform: translateX(-3px) rotate(-2deg);
+    }
+    75% {
+      transform: translateX(3px) rotate(2deg);
+    }
+  }
+  .animate-shiver {
+    animation: shiver 0.4s ease-in-out infinite;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-rise {
+    animation: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-breathe,
+    .animate-shiver,
+    .animate-rise {
+      animation: none;
+    }
+  }
+}
