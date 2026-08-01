@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { errorResponse, identity, jsonObject } from "@/lib/leaderboard/http";
 import { leaderboardService } from "@/lib/leaderboard";
 import { DomainError } from "@/lib/leaderboard/service";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { friendships } from "@/lib/db/schema";
 
 export async function GET(request: Request) {
   try {
@@ -29,6 +32,10 @@ export async function POST(request: Request) {
       throw new DomainError("INVALID_RECIPIENT", "recipientId is required and must be at most 100 characters.");
     }
     const recipientName = typeof body.recipientName === "string" ? body.recipientName.slice(0, 80) : undefined;
+    const friendship = db.select({ id: friendships.id }).from(friendships)
+      .where(and(eq(friendships.userId, sender.userId), eq(friendships.friendId, body.recipientId.trim())))
+      .get();
+    if (!friendship) throw new DomainError("FRIEND_REQUIRED", "Add this person as a friend before sending encouragement.", 403);
     const result = await leaderboardService.sendEncouragement(
       sender.userId, sender.displayName, body.recipientId.trim(), recipientName,
     );

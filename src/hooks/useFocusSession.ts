@@ -6,6 +6,7 @@ import { RULES } from "@/lib/companion";
 import { uid } from "@/lib/storage";
 
 export const LIVE_SESSION_KEY = "incline.activeSession.v1";
+export const liveSessionKeyForUser = (userId: string) => `${LIVE_SESSION_KEY}.${userId}`;
 /** A restored session with a gap longer than this is treated as abandoned. */
 const RESUME_CUTOFF_MS = 10 * 60_000;
 
@@ -41,7 +42,7 @@ function isAway(session: Pick<ActiveSession, "isHidden" | "isGazeAway">): boolea
  * tracked separately: switching tabs *while* looking away is one distraction,
  * not two, and the user only ever sees one timer.
  */
-export function useFocusSession(onComplete: (session: FocusSession) => void) {
+export function useFocusSession(onComplete: (session: FocusSession) => void, storageKey = LIVE_SESSION_KEY) {
   const [active, setActive] = useState<ActiveSession | null>(null);
   /** Clock sampled on each tick; keeps `Date.now()` out of the render path. */
   const [now, setNow] = useState(0);
@@ -49,6 +50,9 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
   const lastFlushAt = useRef<number>(0);
   const activeRef = useRef<ActiveSession | null>(null);
   const onCompleteRef = useRef(onComplete);
+  // A session belongs to the account that started it. Changing the key means
+  // logout or an account switch, so it must never be copied or resumed.
+  const sessionStorageKeyRef = useRef(storageKey);
 
   // Refs are synced in effects, never during render, so they always reflect
   // the last committed state by the time a timer or handler reads them.
@@ -161,8 +165,8 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
     setActive(null);
     activeRef.current = null;
     lastFlushAt.current = 0;
-    window.localStorage.removeItem(LIVE_SESSION_KEY);
-  }, []);
+    window.localStorage.removeItem(storageKey);
+  }, [storageKey]);
 
   const end = useCallback(() => {
     const at = Date.now();
@@ -238,21 +242,39 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
   // --- Crash/refresh resilience ---------------------------------------------
   useEffect(() => {
     if (!active) return;
+    // On an account change, wait for the key-change effect below to discard
+    // the old session instead of writing it into the new account's key.
+    if (sessionStorageKeyRef.current !== storageKey) return;
     const payload: Persisted = { session: active, lastFlushAt: lastFlushAt.current };
-    window.localStorage.setItem(LIVE_SESSION_KEY, JSON.stringify(payload));
-  }, [active]);
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [active, storageKey]);
 
   // localStorage can only be read after hydration, so restoring state here is
   // unavoidable — and it runs at most once, on mount.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const raw = window.localStorage.getItem(LIVE_SESSION_KEY);
-    if (!raw) return;
+    const accountChanged = sessionStorageKeyRef.current !== storageKey;
+    if (accountChanged) {
+      // A logout is an explicit boundary: don't leave a recoverable session
+      // behind, and never count the time spent away from the account.
+      window.localStorage.removeItem(sessionStorageKeyRef.current);
+      sessionStorageKeyRef.current = storageKey;
+      lastFlushAt.current = 0;
+      activeRef.current = null;
+      setActive(null);
+      setNow(0);
+      return;
+    }
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      setActive(null);
+      return;
+    }
     try {
       const { session, lastFlushAt: savedFlush } = JSON.parse(raw) as Persisted;
       const gap = Date.now() - savedFlush;
       if (gap > RESUME_CUTOFF_MS) {
-        window.localStorage.removeItem(LIVE_SESSION_KEY);
+        window.localStorage.removeItem(storageKey);
         return;
       }
       // The tab was gone, so the gap counts as time away — the same rule as any
@@ -282,9 +304,9 @@ export function useFocusSession(onComplete: (session: FocusSession) => void) {
         awayReason: document.hidden ? "hidden" : null,
       });
     } catch {
-      window.localStorage.removeItem(LIVE_SESSION_KEY);
+      window.localStorage.removeItem(storageKey);
     }
-  }, []);
+  }, [storageKey]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const elapsedMs = active ? Math.max(0, now - active.startedAt) : 0;

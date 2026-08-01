@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions, users } from "@/lib/db/schema";
 import { applyIdleDecay, createCompanion } from "@/lib/companion";
-import { PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type Companion } from "@/lib/types";
+import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type Companion } from "@/lib/types";
 
 /**
  * Ensures a user and companion row exist, and returns the companion with
@@ -15,7 +15,15 @@ import { PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type Companion } from "@/lib/ty
 export function ensureCompanion(userId: string): Companion {
   const now = Date.now();
 
-  db.insert(users).values({ id: userId, createdAt: now }).onConflictDoNothing().run();
+  // API-only/mobile callers are retained as local records; browser accounts
+  // are created through the password flow and already exist before this runs.
+  db.insert(users).values({
+    id: userId,
+    username: `device_${userId}`,
+    passwordHash: "external-device-account",
+    displayName: userId,
+    createdAt: now,
+  }).onConflictDoNothing().run();
 
   const existing = db.select().from(companions).where(eq(companions.userId, userId)).get();
 
@@ -28,6 +36,9 @@ export function ensureCompanion(userId: string): Companion {
         species: fresh.species,
         color: fresh.color,
         accessory: fresh.accessory,
+        checkInEmotion: fresh.checkInEmotion,
+        checkInAt: fresh.checkInAt,
+        nextCheckInAt: fresh.nextCheckInAt,
         level: fresh.level,
         xp: fresh.xp,
         hp: fresh.hp,
@@ -54,11 +65,11 @@ export function ensureCompanion(userId: string): Companion {
     accessory: PIG_ACCESSORY_VALUES.includes(existing.accessory as Companion["accessory"])
       ? (existing.accessory as Companion["accessory"])
       : "none",
-    // Mobile check-ins are intentionally local for now; its sync contract
-    // does not yet include a profile-preference mutation.
-    checkInEmotion: null,
-    checkInAt: null,
-    nextCheckInAt: null,
+    checkInEmotion: AVATAR_EMOTIONS.includes(existing.checkInEmotion as Companion["checkInEmotion"])
+      ? (existing.checkInEmotion as Companion["checkInEmotion"])
+      : null,
+    checkInAt: existing.checkInAt,
+    nextCheckInAt: existing.nextCheckInAt,
     level: existing.level,
     xp: existing.xp,
     hp: existing.hp,
