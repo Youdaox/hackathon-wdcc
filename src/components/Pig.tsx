@@ -109,6 +109,11 @@ export function Pig({
     "--pig-line": coat.line,
     width: size,
     height: size,
+    // The pixel artwork remains a 128px canvas even when its layout box is
+    // smaller. Anchor and offset that canvas so mini avatars stay centred.
+    left: (size - FRAME) / 2,
+    top: size - FRAME,
+    transformOrigin: `${FRAME / 2}px ${FRAME}px`,
     transform: `scale(${scale})`,
   } as CSSProperties;
 
