@@ -27,10 +27,33 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  --radius-card: 1.25rem;
+  --radius-card: 1.75rem;
 }
 
 @layer base {
+  [data-theme="dark"] {
+    --color-canvas: #101412;
+    --color-surface: #18201c;
+    --color-surface-2: #222b26;
+    --color-line: #303b34;
+    --color-line-soft: #28332d;
+
+    --color-ink: #edf3ee;
+    --color-muted: #a4b3a9;
+    --color-faint: #728178;
+
+    --color-moss: #72cf8c;
+    --color-moss-deep: #3f8856;
+    --color-citrus: #c4da84;
+    --color-amber: #e0ae6c;
+    --color-clay: #f08d73;
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
   html {
     background-color: var(--color-canvas);
     color: var(--color-ink);
@@ -83,6 +106,7 @@
     background-color: var(--color-surface);
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
+    box-shadow: 0 1px 2px rgba(59, 51, 41, 0.02), 0 10px 30px rgba(59, 51, 41, 0.025);
   }
 
   /* Slow, organic pulse for the companion while a session is running. */
@@ -159,23 +183,32 @@
     transform-origin: bottom center;
   }
 
+  /* Wraps the sprite + every accessory/milestone/mood decoration so they all
+     ride the same state motion (wobble, shiver, keeling over) instead of the
+     sprite moving while accessories stay pinned in place. Same 128x128 box
+     as .pig-stage, so every child's existing absolute coordinates hold. */
+  .pig-figure {
+    position: absolute;
+    inset: 0;
+  }
+  .pig-state-sick .pig-figure {
+    animation: pig-wobble 3.4s ease-in-out infinite;
+  }
+  .pig-state-hungry .pig-figure {
+    animation: pig-hungry-shiver 2.8s ease-in-out infinite;
+  }
+  /* Fainted: the whole sprite keels over onto its side. Origin is the
+     visual center of the 128x128 painted sprite, not the 4x4 source box. */
+  .pig-state-fainted .pig-figure {
+    transform: rotate(70deg) translate(-2px, 8px);
+    transform-origin: 64px 64px;
+  }
+
   .pig-px {
     position: absolute;
     top: 0;
     left: 0;
     transition: box-shadow 0.15s steps(1);
-  }
-  .pig-state-sick .pig-px {
-    animation: pig-wobble 3.4s ease-in-out infinite;
-  }
-  .pig-state-hungry .pig-px {
-    animation: pig-hungry-shiver 2.8s ease-in-out infinite;
-  }
-  /* Fainted: the whole sprite keels over onto its side. Origin is the
-     visual center of the 128x128 painted sprite, not the 4x4 source box. */
-  .pig-state-fainted .pig-px {
-    transform: rotate(70deg) translate(-2px, 8px);
-    transform-origin: 64px 64px;
   }
 
   @keyframes pig-wobble {
@@ -431,8 +464,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .pig-sparkle,
-    .pig-state-sick .pig-px,
-    .pig-state-hungry .pig-px,
+    .pig-state-sick .pig-figure,
+    .pig-state-hungry .pig-figure,
     .pig-zzz {
       animation: none;
     }

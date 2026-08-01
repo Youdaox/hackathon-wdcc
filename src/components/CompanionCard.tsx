@@ -149,7 +149,11 @@ function AccessoryPicker({
   onChange: (accessory: PigAccessory) => void;
 }) {
   return (
-    <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Accessory">
+    <div
+      className="mt-2 flex flex-wrap items-center justify-center gap-1.5"
+      role="group"
+      aria-label="Accessory"
+    >
       {PIG_ACCESSORIES.map((a) => (
         <button
           key={a.value}
