@@ -75,6 +75,12 @@ export const companions = sqliteTable("companions", {
   checkInEmotion: text("check_in_emotion"),
   checkInAt: integer("check_in_at"),
   nextCheckInAt: integer("next_check_in_at"),
+  lastMeal: text("last_meal"),
+  lastMealAt: integer("last_meal_at"),
+  lastWaterAt: integer("last_water_at"),
+  nextWaterCheckAt: integer("next_water_check_at"),
+  foodBreakMissed: integer("food_break_missed", { mode: "boolean" }).notNull().default(false),
+  waterBreakMissed: integer("water_break_missed", { mode: "boolean" }).notNull().default(false),
   level: integer("level").notNull(),
   /** XP toward the *current* level only, not lifetime. */
   xp: integer("xp").notNull(),
