@@ -10,7 +10,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:setup": "node --experimental-strip-types scripts/db-setup.ts",
-    "electron": "electron ."
+    "electron": "set ELECTRON_RUN_AS_NODE=&& electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
