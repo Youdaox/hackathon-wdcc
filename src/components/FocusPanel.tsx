@@ -157,7 +157,8 @@ interface LiveProps {
 }
 
 function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
-  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes } = useIncline();
+  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
+    useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const away = active.isHidden || active.isGazeAway;
   const focusRatio =
@@ -192,7 +193,14 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
             <span
               className={`h-1.5 w-1.5 rounded-full ${away ? "bg-clay" : "animate-pulse bg-moss"}`}
             />
-            {active.isHidden ? "Away" : active.isGazeAway ? "Eyes off screen" : "Focused"}
+            {active.isHidden
+              ? "Away"
+              : active.isGazeAway
+                ? // "Eyes off screen" was asserted for every cause, including the
+                  // user having walked out of frame entirely. Name what was
+                  // actually detected, and fall back only when it's since changed.
+                  (gazeReason && REASON_COPY[gazeReason]) || "Not focused"
+                : "Focused"}
           </span>
           {eyeEnabled && <GazeStatusChip status={gazeStatus} calibration={gazeCalibration} />}
         </div>
@@ -254,7 +262,13 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         <div className="animate-rise mt-6 flex items-center gap-3 rounded-xl border border-clay/50 bg-clay/10 px-4 py-3">
           <span className="text-xl">👀</span>
           <div className="min-w-0">
-            <div className="text-sm font-bold text-clay">Eyes back on the screen</div>
+            <div className="text-sm font-bold text-clay">
+              {gazeReason === "absent"
+                ? "Come back to your session"
+                : gazeReason === "eyes-closed"
+                  ? "Still with us?"
+                  : "Eyes back on the screen"}
+            </div>
             <div className="text-xs text-muted">
               This time is counting as distraction until you&apos;re back.
             </div>
@@ -285,8 +299,17 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   );
 }
 
+/** What the live signal is doing, in the user's terms rather than the tracker's. */
+const REASON_COPY: Record<NonNullable<ReturnType<typeof useIncline>["gazeReason"]>, string> = {
+  absent: "Can't see you",
+  turned: "Head turned away",
+  "eyes-closed": "Eyes closed",
+  "off-screen": "Looking off screen",
+};
+
 export function CameraOverlay() {
-  const { active, eyeEnabled, gazeStatus, gazeCalibration, gazePoint, gazeWandering } = useIncline();
+  const { active, eyeEnabled, gazeStatus, gazeCalibration, gazePoint, gazeReason, gazeWandering } =
+    useIncline();
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -316,15 +339,39 @@ export function CameraOverlay() {
               ? "Camera unavailable"
               : "Idle";
 
-  const dotStyle =
-    gazePoint && viewport.width > 0 && viewport.height > 0
-      ? {
-          left: `${Math.min(100, Math.max(0, (gazePoint.x / viewport.width) * 100))}%`,
-          top: `${Math.min(100, Math.max(0, (gazePoint.y / viewport.height) * 100))}%`,
-        }
-      : undefined;
+  // Only the calibrated regression produces a coordinate worth drawing. Before
+  // the dots are done the tracker is running on head pose alone, and plotting an
+  // untrained prediction would be inventing precision we explicitly don't have.
+  const showDot = gazeCalibration === "done" && gazePoint !== null;
+  const measured = viewport.width > 0 && viewport.height > 0;
 
-  const statusTone = gazeWandering ? "bg-clay" : gazeStatus === "tracking" ? "bg-moss" : "bg-citrus";
+  // The previous version clamped these to the box, which erased the single
+  // thing this panel exists to show — a gaze leaving the screen looked
+  // identical to a gaze resting on the edge. So "outside" is judged on the true
+  // fraction, and only the *drawn* position is clamped, into the frame's
+  // padding rather than onto its edge. Predictions can land hundreds of pixels
+  // past the viewport, and an genuinely unclamped dot would sail off across the
+  // page.
+  const fx = showDot && measured ? gazePoint.x / viewport.width : 0.5;
+  const fy = showDot && measured ? gazePoint.y / viewport.height : 0.5;
+  const outside = fx < 0 || fx > 1 || fy < 0 || fy > 1;
+  const inGutter = (f: number) => Math.min(1.09, Math.max(-0.09, f));
+
+  const statusTone = gazeWandering
+    ? "bg-clay"
+    : gazeReason
+      ? "bg-amber"
+      : gazeStatus === "tracking"
+        ? "bg-moss"
+        : "bg-citrus";
+
+  const caption = gazeReason
+    ? REASON_COPY[gazeReason]
+    : showDot
+      ? "Eyes on screen"
+      : gazeStatus === "tracking"
+        ? "Watching your head position"
+        : "Waiting for the camera";
 
   return (
     <div className="pointer-events-none fixed right-4 top-4 z-50 w-57.5 rounded-2xl border border-white/10 bg-slate-950/75 p-3 shadow-lg backdrop-blur">
@@ -338,30 +385,45 @@ export function CameraOverlay() {
         <span className={`h-2.5 w-2.5 rounded-full ${statusTone}`} />
       </div>
 
-      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2">
-        <div className="relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-surface-2/90">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_55%)]" />
-          <div className="absolute inset-0 border border-white/10" />
-          {gazePoint && dotStyle ? (
+      {/* The screen map. Padded, so a gaze that lands just off the screen has
+          somewhere to be drawn instead of being squashed against the frame. */}
+      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4">
+        <div
+          className="relative"
+          // Matches the real viewport's shape rather than a hardcoded 16:9.
+          // A fixed ratio silently distorted every position on any window that
+          // wasn't widescreen — the dot drifted further from truth the further
+          // the window got from 16:9.
+          style={{ aspectRatio: measured ? `${viewport.width} / ${viewport.height}` : "16 / 9" }}
+        >
+          <div className="absolute inset-0 rounded-lg border border-white/25 bg-surface-2/90">
+            <div className="absolute inset-0 rounded-lg bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_55%)]" />
+          </div>
+
+          {showDot ? (
             <span
-              className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-citrus shadow-[0_0_0_4px_rgba(255,203,70,0.18)]"
-              style={dotStyle}
+              className={`absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-[left,top] duration-150 ease-out ${
+                outside
+                  ? "border-clay bg-clay/80 shadow-[0_0_0_4px_rgba(200,90,60,0.22)]"
+                  : "border-white bg-citrus shadow-[0_0_0_4px_rgba(255,203,70,0.18)]"
+              }`}
+              // Overflow is deliberately not hidden: the dot is allowed to sit
+              // outside the frame, because that is exactly what it means.
+              style={{ left: `${inGutter(fx) * 100}%`, top: `${inGutter(fy) * 100}%` }}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-center text-[11px] text-faint">
-              {gazeStatus === "loading" ? "Starting camera…" : "Waiting for gaze data"}
+            <div className="absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] leading-snug text-faint">
+              {gazeStatus === "loading"
+                ? "Starting camera…"
+                : gazeStatus === "tracking"
+                  ? "Calibrate to see where you're looking"
+                  : "No gaze data"}
             </div>
           )}
         </div>
       </div>
 
-      <div className="mt-2 text-[11px] text-faint">
-        {gazePoint
-          ? `Eye location: ${Math.round(gazePoint.x)}, ${Math.round(gazePoint.y)}`
-          : gazeWandering
-            ? "Eyes are drifting off screen"
-            : "Your current eye position will appear here"}
-      </div>
+      <div className={`mt-2 text-[11px] ${gazeReason ? "text-clay" : "text-faint"}`}>{caption}</div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CanvasCard } from "@/components/CanvasCard";
 import { CameraOverlay, FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
+import { DesktopBuddy } from "@/components/DesktopBuddy";
 import { LocationCard } from "@/components/LocationCard";
 import { RecallCheck } from "@/components/RecallCheck";
 import { SchedulePanel } from "@/components/SchedulePanel";
@@ -58,6 +59,7 @@ export default function Dashboard() {
       <Footer />
       <RecallCheck />
       <SessionSummary />
+      <DesktopBuddy />
       {eyeEnabled && active && <CameraOverlay />}
     </main>
   );
