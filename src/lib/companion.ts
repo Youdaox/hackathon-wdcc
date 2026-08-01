@@ -1,4 +1,4 @@
-import type { ActiveSession, Companion, Mood } from "./types";
+import type { ActiveSession, Companion, Mood, PigColor } from "./types";
 import { uid } from "./storage";
 
 /**
@@ -21,13 +21,15 @@ export const RULES = {
   maxHp: 100,
 } as const;
 
-export function createCompanion(name = "Pip"): Companion {
+export function createCompanion(name = "Oinky", color: PigColor = "pink"): Companion {
   return {
     name,
-    species: "sprout",
+    species: "pig",
+    color,
+    accessory: "none",
     level: 1,
     xp: 0,
-    hp: RULES.maxHp,
+    hp: 100,
     totalFocusedMs: 0,
     lastSessionAt: null,
     createdAt: Date.now(),
@@ -41,20 +43,11 @@ export function moodFor(hp: number): Mood {
   return "sick";
 }
 
-/** Emoji stand-in for real art — cheap to swap for an SVG later. */
-export function faceFor(mood: Mood, level: number): string {
-  if (mood === "sick") return "🥀";
-  if (mood === "sad") return "🌱";
-  if (level >= 8) return mood === "happy" ? "🌳" : "🪴";
-  if (level >= 4) return mood === "happy" ? "🪴" : "🌿";
-  return mood === "happy" ? "🌿" : "🌱";
-}
-
 export const MOOD_LABEL: Record<Mood, string> = {
-  happy: "Thriving",
-  neutral: "Steady",
-  sad: "Wilting",
-  sick: "Struggling",
+  happy: "Healthy",
+  neutral: "Content",
+  sad: "Hungry",
+  sick: "Sick",
 };
 
 /** XP earned by a session's focused time, before any multiplier. */

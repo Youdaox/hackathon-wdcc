@@ -3,8 +3,9 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { useIncline } from "@/lib/store";
-import { MOOD_LABEL, faceFor, levelProgress, moodFor, reactionFor } from "@/lib/companion";
+import { MOOD_LABEL, levelProgress, moodFor, reactionFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
+import { Pig } from "@/components/Pig";
 
 export function SessionSummary() {
   const { outcome, dismissOutcome } = useIncline();
@@ -48,9 +49,14 @@ export function SessionSummary() {
               Level up
             </span>
           )}
-          <span className="text-[6rem] leading-none" role="img" aria-hidden>
-            {faceFor(mood, growth.companion.level)}
-          </span>
+          <Pig
+            mood={mood}
+            level={growth.companion.level}
+            color={growth.companion.color}
+            accessory={growth.companion.accessory}
+            hp={growth.companion.hp}
+            size={110}
+          />
         </div>
 
         <p className="mx-auto mt-4 max-w-sm text-sm text-muted">

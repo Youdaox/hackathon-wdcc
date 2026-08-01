@@ -9,7 +9,15 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Companion, FocusSession, StudyBlock } from "./types";
+import {
+  PIG_COLOR_VALUES,
+  PIG_ACCESSORY_VALUES,
+  type Companion,
+  type FocusSession,
+  type PigAccessory,
+  type PigColor,
+  type StudyBlock,
+} from "./types";
 import { STORAGE_KEYS, clearAll, loadJSON, saveJSON, uid } from "./storage";
 import { applyIdleDecay, applySession, createCompanion, type GrowthResult } from "./companion";
 import { LIVE_SESSION_KEY, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
@@ -32,6 +40,8 @@ interface InclineContextValue {
   removeBlock: (id: string) => void;
   companion: Companion;
   renameCompanion: (name: string) => void;
+  setCompanionColor: (color: PigColor) => void;
+  setCompanionAccessory: (accessory: PigAccessory) => void;
   sessions: FocusSession[];
   todaysSessions: FocusSession[];
   active: ReturnType<typeof useFocusSession>["active"];
@@ -76,7 +86,18 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setBlocks(loadJSON<StudyBlock[]>(STORAGE_KEYS.schedule, []));
-    setCompanion(applyIdleDecay(loadJSON<Companion>(STORAGE_KEYS.companion, createCompanion())));
+    const loadedCompanion = loadJSON<Companion>(STORAGE_KEYS.companion, createCompanion());
+    // Older saves predate coat/accessory customization, or may carry a coat
+    // color that's since been retired (grey/brown) — fall back to defaults.
+    setCompanion(
+      applyIdleDecay({
+        ...loadedCompanion,
+        color: PIG_COLOR_VALUES.includes(loadedCompanion.color) ? loadedCompanion.color : "pink",
+        accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
+          ? loadedCompanion.accessory
+          : "none",
+      }),
+    );
     setSessions(loadJSON<FocusSession[]>(STORAGE_KEYS.sessions, []));
     setGeoEnabled(loadJSON<boolean>(STORAGE_KEYS.geo, false));
     setHydrated(true);
@@ -177,6 +198,14 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion((prev) => ({ ...prev, name: name.trim() || prev.name }));
   }, []);
 
+  const setCompanionColor = useCallback((color: PigColor) => {
+    setCompanion((prev) => ({ ...prev, color }));
+  }, []);
+
+  const setCompanionAccessory = useCallback((accessory: PigAccessory) => {
+    setCompanion((prev) => ({ ...prev, accessory }));
+  }, []);
+
   const resetEverything = useCallback(() => {
     clearAll();
     window.localStorage.removeItem(LIVE_SESSION_KEY);
@@ -201,6 +230,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       removeBlock,
       companion,
       renameCompanion,
+      setCompanionColor,
+      setCompanionAccessory,
       sessions,
       todaysSessions,
       active,
@@ -228,6 +259,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       removeBlock,
       companion,
       renameCompanion,
+      setCompanionColor,
+      setCompanionAccessory,
       sessions,
       todaysSessions,
       active,

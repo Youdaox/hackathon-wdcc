@@ -7,7 +7,7 @@ type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-moss text-canvas hover:bg-[#8ce9b6] active:bg-moss shadow-[0_6px_20px_-8px_rgba(111,221,160,0.7)]",
+    "bg-moss text-canvas hover:bg-moss-deep active:bg-moss shadow-[0_6px_20px_-8px_rgba(79,158,116,0.45)]",
   outline: "border border-line bg-surface-2 text-ink hover:border-moss/60 hover:text-moss",
   ghost: "text-muted hover:text-ink hover:bg-surface-2",
   danger: "border border-clay/40 text-clay hover:bg-clay/10",
