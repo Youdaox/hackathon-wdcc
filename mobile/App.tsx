@@ -1,26 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import { type Companion, type StudySpot, fetchCompanion, fetchStudySpots, postSession } from "./src/api";
+import { BottomNav, type TabName } from "./src/components/BottomNav";
 import { type SpotMatch, activeSpot, getReading, nearestSpot } from "./src/location";
-import { useFocusSession } from "./src/useFocusSession";
-import { CompanionCard } from "./src/components/CompanionCard";
-import { FocusPanel } from "./src/components/FocusPanel";
-import { LocationCard } from "./src/components/LocationCard";
+import { HomeScreen } from "./src/screens/HomeScreen";
+import { RanksScreen } from "./src/screens/RanksScreen";
+import { RecapScreen } from "./src/screens/RecapScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { colors } from "./src/theme";
+import { useFocusSession } from "./src/useFocusSession";
 
-/**
- * Incline — Expo Go build.
- *
- * This app verifies focus and syncs it; it does not enforce anything. Expo Go
- * has no access to app blocking on either platform, so the cost of leaving is
- * emotional rather than punitive — which is the same bargain the web app makes.
- */
 export default function App() {
   const { state, start, stop } = useFocusSession();
-
+  const [tab, setTab] = useState<TabName>("home");
   const [companion, setCompanion] = useState<Companion | null>(null);
   const [spots, setSpots] = useState<StudySpot[]>([]);
   const [match, setMatch] = useState<SpotMatch | null>(null);
@@ -36,8 +31,6 @@ export default function App() {
       setSpots(nextSpots);
       setNotice(null);
     } catch (error) {
-      // The backend being unreachable is the single most likely demo failure,
-      // so name it plainly instead of leaving an empty screen.
       setNotice(error instanceof Error ? `Can't reach the server — ${error.message}` : "Can't reach the server.");
     }
   }, []);
@@ -72,10 +65,7 @@ export default function App() {
 
     setBusy(true);
     try {
-      // Re-derive the spot at session end rather than trusting the check-in
-      // from the start: the rule is where you *finish*, matching the web app.
       const insideSpot = match?.inside ? activeSpot(match.spot.lat, match.spot.lng, spots) : null;
-
       const result = await postSession({
         startedAt: finished.startedAt,
         endedAt: finished.endedAt,
@@ -83,19 +73,10 @@ export default function App() {
         locationName: insideSpot?.name ?? null,
         distractions: finished.distractions,
       });
-
-      setNotice(
-        result.pet_growth_delta > 0
-          ? `+${result.pet_growth_delta} XP synced.`
-          : "Session synced — not enough focus for XP this time.",
-      );
+      setNotice(result.pet_growth_delta > 0 ? `+${result.pet_growth_delta} XP synced.` : "Session synced.");
       await load();
     } catch (error) {
-      setNotice(
-        error instanceof Error
-          ? `Session not synced — ${error.message}`
-          : "Session not synced.",
-      );
+      setNotice(error instanceof Error ? `Session not synced — ${error.message}` : "Session not synced.");
     } finally {
       setBusy(false);
     }
@@ -109,33 +90,33 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />
-          }
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>Incline</Text>
-            <Text style={styles.subtitle}>Verified focus only</Text>
-          </View>
-
-          <CompanionCard companion={companion} />
-
-          <FocusPanel
-            state={state}
-            multiplier={multiplier}
-            busy={busy}
-            onStart={start}
-            onStop={handleStop}
-          />
-
-          <LocationCard spots={spots} match={match} checking={checking} onCheckIn={checkIn} />
-
-          {notice && <Text style={styles.notice}>{notice}</Text>}
-        </ScrollView>
+      <StatusBar style="dark" />
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.screen}>
+          {tab === "home" && (
+            <HomeScreen
+              companion={companion}
+              spots={spots}
+              match={match}
+              checking={checking}
+              state={state}
+              multiplier={multiplier}
+              busy={busy}
+              notice={notice}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              onCheckIn={checkIn}
+              onStart={start}
+              onStop={handleStop}
+            />
+          )}
+          {tab === "recap" && <RecapScreen companion={companion} />}
+          {tab === "ranks" && <RanksScreen />}
+          {tab === "settings" && <SettingsScreen />}
+        </View>
+        <SafeAreaView edges={["bottom"]} style={styles.navSafe}>
+          <BottomNav active={tab} onChange={setTab} />
+        </SafeAreaView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -143,15 +124,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 18, gap: 14, paddingBottom: 40 },
-  header: { gap: 2, marginBottom: 2 },
-  title: { color: colors.text, fontSize: 30, fontWeight: "700", letterSpacing: -0.5 },
-  subtitle: { color: colors.muted, fontSize: 14 },
-  notice: {
-    color: colors.muted,
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 19,
-    paddingHorizontal: 8,
-  },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  navSafe: { backgroundColor: colors.surface },
 });
