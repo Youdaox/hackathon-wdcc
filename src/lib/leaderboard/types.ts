@@ -22,12 +22,18 @@ export interface Encouragement {
   dayKey: string;
 }
 
+export interface EncouragementHistoryRecord extends Encouragement {
+  senderName: string;
+  recipientName: string;
+}
+
 export interface TaskCompletion {
   id: string;
   userId: string;
   taskId: string;
   completedAt: string;
   dayKey: string;
+  encouragementPointsAwarded: number;
 }
 
 export interface LeaderboardEntry {
@@ -45,4 +51,6 @@ export interface EncouragementBalance {
   earned: number;
   used: number;
   available: number;
+  taskPoints: number;
+  maxTaskPoints: number;
 }

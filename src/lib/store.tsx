@@ -137,7 +137,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
           ? loadedCompanion.accessory
           : "none",
-        checkInEmotion: AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
+        checkInEmotion: loadedCompanion.checkInEmotion !== null
+          && AVATAR_EMOTIONS.includes(loadedCompanion.checkInEmotion)
           ? loadedCompanion.checkInEmotion
           : null,
         checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
