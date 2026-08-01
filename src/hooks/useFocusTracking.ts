@@ -13,7 +13,9 @@ import {
   AttentionWindow,
   GAZE_RULES,
   isOnScreen,
+  playReturnChime,
   playWanderChime,
+  releaseChimes,
   GazeSmoother,
   type GazeCalibration,
 } from "@/lib/gaze";
@@ -322,6 +324,7 @@ export function useFocusTracking(enabled: boolean, calibration: GazeCalibration)
     return () => {
       cancelled = true;
       if (started) shutdown(started);
+      releaseChimes();
     };
   }, [enabled]);
 
@@ -348,7 +351,12 @@ export function useFocusTracking(enabled: boolean, calibration: GazeCalibration)
       // reasons that have nothing to do with the user's eyes. Visibility is
       // already tracked as its own distraction signal — freeze here instead of
       // double-counting, and restart the debounce when the tab comes back.
-      if (document.hidden) {
+      // Same freeze as a hidden tab, for the same reason: while the calibration
+      // overlay is up the user is clicking dots, not studying, and chiming at
+      // them for looking at a dot near the edge of the screen would be both
+      // wrong and the first thing they ever hear from this feature. The store
+      // already declines to score these ticks; this makes them silent too.
+      if (document.hidden || calibration === "none") {
         attentionWindow.reset(now, true);
         sample.current = { ...sample.current, at: now, faceAt: now, eyesClosedSince: 0 };
         return;
@@ -398,6 +406,7 @@ export function useFocusTracking(enabled: boolean, calibration: GazeCalibration)
         playWanderChime();
       } else if (wandering.current && onScreenNow && steadyMs >= GAZE_RULES.settleMs) {
         next = false;
+        playReturnChime();
         // Spend the budget so the very next tick can't immediately re-fire on
         // the off-screen time that triggered the episode we just cleared.
         attentionWindow.reset(now, true);
