@@ -93,7 +93,7 @@ export const companions = pgTable("companions", {
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   species: text("species").notNull(),
-  /** Cosmetic coat color — see PigColor in src/lib/types.ts. */
+  /** Cosmetic coat color — see CompanionColor in src/lib/types.ts. Valid values depend on `species`. */
   color: text("color").notNull().default("pink"),
   /** Cosmetic worn accessory — see PigAccessory in src/lib/types.ts. */
   accessory: text("accessory").notNull().default("none"),

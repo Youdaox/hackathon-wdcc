@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useIncline } from "@/lib/store";
-import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
+import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor, xpFromFocusedMs } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { useNow } from "@/hooks/useNow";
-import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
-import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
+import { PIG_ACCESSORIES } from "@/components/Pig";
+import { ANIMAL_SPECIES_OPTIONS, AnimalSprite, COLOR_OPTIONS_BY_SPECIES } from "@/components/AnimalSprite";
+import type { AnimalSpecies, AvatarEmotion, CompanionColor, Mood, PigAccessory } from "@/lib/types";
 
 const CHECK_INS: { emotion: AvatarEmotion; label: string; icon: string }[] = [
   { emotion: "happy", label: "Happy", icon: "☺" },
@@ -41,6 +42,7 @@ export function CompanionCard() {
     companion,
     active,
     renameCompanion,
+    setCompanionSpecies,
     setCompanionColor,
     setCompanionAccessory,
     checkInWithCompanion,
@@ -64,6 +66,9 @@ export function CompanionCard() {
   );
   const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);
   const hasPrompt = checkInDue || mealCheckDue || waterBreakDue;
+  const liveXp = active ? xpFromFocusedMs(active.focusedMs) : 0;
+  const projectedXp = progress.xp + liveXp;
+  const projectedPct = Math.min(100, (projectedXp / progress.needed) * 100);
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">
@@ -80,7 +85,8 @@ export function CompanionCard() {
           }}
         />
         <div className="relative" aria-label={`${companion.name} is ${avatarState.replace("-", " ")}`}>
-          <Pig
+          <AnimalSprite
+            species={companion.species}
             mood={mood}
             level={companion.level}
             color={companion.color}
@@ -92,7 +98,8 @@ export function CompanionCard() {
         </div>
       </div>
 
-      <ColorPicker value={companion.color} onChange={setCompanionColor} />
+      <SpeciesPicker value={companion.species} onChange={setCompanionSpecies} />
+      <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
       <AccessoryPicker value={companion.accessory} onChange={setCompanionAccessory} />
 
       {editing ? (
@@ -169,8 +176,8 @@ export function CompanionCard() {
       <div className="mt-6 w-full space-y-4">
         <Meter
           label="XP"
-          value={`${progress.xp} / ${progress.needed}`}
-          pct={progress.pct}
+          value={active ? `${progress.xp} + ${liveXp} / ${progress.needed}` : `${progress.xp} / ${progress.needed}`}
+          pct={active ? projectedPct : progress.pct}
           barClass="bg-moss"
         />
         <Meter
@@ -215,16 +222,32 @@ function WellbeingPrompt({
   );
 }
 
+function SpeciesPicker({ value, onChange }: { value: AnimalSpecies; onChange: (species: AnimalSpecies) => void }) {
+  return (
+    <div className="mt-5 flex items-center gap-2" role="group" aria-label="Animal">
+      {ANIMAL_SPECIES_OPTIONS.map((species) => (
+        <button key={species.value} type="button" onClick={() => onChange(species.value)} title={species.label}
+          aria-label={species.label} aria-pressed={value === species.value}
+          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-lg transition-transform hover:scale-110 ${value === species.value ? "border-ink bg-surface-2" : "border-line"}`}>
+          {species.emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ColorPicker({
+  species,
   value,
   onChange,
 }: {
-  value: PigColor;
-  onChange: (color: PigColor) => void;
+  species: AnimalSpecies;
+  value: CompanionColor;
+  onChange: (color: CompanionColor) => void;
 }) {
   return (
     <div className="mt-4 flex items-center gap-2" role="group" aria-label="Coat color">
-      {PIG_COLORS.map((c) => (
+      {COLOR_OPTIONS_BY_SPECIES[species].map((c) => (
         <button
           key={c.value}
           type="button"

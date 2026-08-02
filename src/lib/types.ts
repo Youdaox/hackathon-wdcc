@@ -38,19 +38,40 @@ export const AVATAR_EMOTIONS: AvatarEmotion[] = ["happy", "sad", "angry", "calm"
 
 export type Meal = "breakfast" | "lunch" | "dinner";
 
-/** Pastel coat options for the pig companion. */
+/** Pastel coat options for the pig. */
 export type PigColor = "pink" | "purple" | "blue";
 export const PIG_COLOR_VALUES: PigColor[] = ["pink", "purple", "blue"];
+
+export type CowColor = "sky" | "mint" | "lilac";
+export const COW_COLOR_VALUES: CowColor[] = ["sky", "mint", "lilac"];
+
+export type RaccoonColor = "slate" | "charcoal" | "taupe";
+export const RACCOON_COLOR_VALUES: RaccoonColor[] = ["slate", "charcoal", "taupe"];
 
 /** Cosmetic accessory worn by the pig — purely visual, no gameplay effect. */
 export type PigAccessory = "none" | "glasses" | "flower";
 export const PIG_ACCESSORY_VALUES: PigAccessory[] = ["none", "glasses", "flower"];
 
+export type AnimalSpecies = "pig" | "cow" | "raccoon";
+export const ANIMAL_SPECIES_VALUES: AnimalSpecies[] = ["pig", "cow", "raccoon"];
+
+export type CompanionColor = PigColor | CowColor | RaccoonColor;
+export const COMPANION_COLOR_VALUES_BY_SPECIES: Record<AnimalSpecies, CompanionColor[]> = {
+  pig: PIG_COLOR_VALUES,
+  cow: COW_COLOR_VALUES,
+  raccoon: RACCOON_COLOR_VALUES,
+};
+export const ALL_COMPANION_COLOR_VALUES: CompanionColor[] = [
+  ...PIG_COLOR_VALUES,
+  ...COW_COLOR_VALUES,
+  ...RACCOON_COLOR_VALUES,
+];
+
 export interface Companion {
   name: string;
-  species: string;
-  /** Coat color — purely cosmetic. */
-  color: PigColor;
+  species: AnimalSpecies;
+  /** Coat color — purely cosmetic. Which values are valid depends on `species`. */
+  color: CompanionColor;
   /** Worn accessory — purely cosmetic. */
   accessory: PigAccessory;
   checkInEmotion: AvatarEmotion | null;
