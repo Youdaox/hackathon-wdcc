@@ -2,6 +2,7 @@
 
 import { useIncline } from "@/lib/store";
 import { formatCompact } from "@/lib/time";
+import { XpReward } from "@/components/XpReward";
 
 export function TodaySummary() {
   const { todaysSessions, active } = useIncline();
@@ -33,7 +34,10 @@ export function TodaySummary() {
           <div className="mt-4 grid grid-cols-3 gap-3">
             <Stat label="Focused" value={formatCompact(focusedMs)} accent="text-moss" />
             <Stat label="Distracted" value={formatCompact(distractedMs)} accent="text-clay" />
-            <Stat label="XP earned" value={String(xp)} accent="text-citrus" />
+            <div className="rounded-xl bg-surface-2/60 px-3 py-3">
+              <XpReward amount={xp} />
+              <div className="eyebrow mt-0.5">XP earned</div>
+            </div>
           </div>
 
           <div className="mt-5 flex h-1.5 overflow-hidden rounded-full bg-surface-2">
@@ -49,9 +53,7 @@ export function TodaySummary() {
                   <span className="tabular shrink-0 text-xs text-faint">
                     {formatCompact(session.focusedMs)}
                   </span>
-                  <span className="tabular w-12 shrink-0 text-right text-xs font-semibold text-citrus">
-                    +{session.xpEarned} XP
-                  </span>
+                  <XpReward amount={session.xpEarned} className="shrink-0" />
                 </li>
               ))}
             </ul>

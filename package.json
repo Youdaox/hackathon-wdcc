@@ -4,13 +4,13 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && cross-env ELECTRON_RUN_AS_NODE= electron .\"",
+    "dev": "concurrently -k -s first \"next dev\" \"wait-on http://localhost:3000 && set ELECTRON_RUN_AS_NODE=&& electron .\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:setup": "node --env-file=.env.local --experimental-strip-types scripts/db-setup.ts",
-    "electron": "cross-env ELECTRON_RUN_AS_NODE= electron ."
+    "electron": "set ELECTRON_RUN_AS_NODE=&& electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

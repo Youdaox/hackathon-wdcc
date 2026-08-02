@@ -7,6 +7,7 @@ import { MOOD_LABEL, levelProgress, moodFor, reactionFor } from "@/lib/companion
 import { formatCompact } from "@/lib/time";
 import { AnimalSprite } from "@/components/AnimalSprite";
 import { FocusTimeline } from "@/components/FocusTimeline";
+import { XpReward } from "@/components/XpReward";
 
 export function SessionSummary() {
   const { outcome, dismissOutcome } = useIncline();
@@ -69,7 +70,10 @@ export function SessionSummary() {
         <div className="mt-7 grid grid-cols-3 gap-3">
           <Stat label="Focused" value={formatCompact(session.focusedMs)} accent="text-moss" />
           <Stat label="Away" value={formatCompact(session.distractedMs)} accent="text-clay" />
-          <Stat label="XP gained" value={`+${session.xpEarned}`} accent="text-citrus" />
+          <div className="rounded-xl bg-surface-2/60 px-3 py-4">
+            <XpReward amount={session.xpEarned} className="text-base" />
+            <div className="eyebrow mt-1">XP gained</div>
+          </div>
         </div>
 
         <div className="mt-6 text-left">

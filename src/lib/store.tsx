@@ -261,8 +261,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   }, [companion, currentUser, hydrated, hydratedUserId]);
 
   // The database profile is shared by the browser, Electron dashboard, and
-  // its popup/overlay windows. Only avatar preferences belong here; focus
-  // sessions remain account-local until they have a dedicated sync flow.
+  // its popup/overlay windows. Focus sessions sync separately on completion
+  // so the community focus leaderboard can aggregate them.
   useEffect(() => {
     if (!currentUser || profileLoadedForUser !== currentUser.id) return;
     void fetch("/api/profile/companion", {
@@ -323,6 +323,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     companionRef.current = companion;
   }, [companion]);
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   // The session hook knows nothing about location, so the zone bonus is
   // resolved here, at the moment the session lands.
@@ -375,6 +379,30 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion(growth.companion);
     setSessions((all) => [recorded, ...all].slice(0, 200));
     setOutcome({ session: recorded, growth });
+    // Community comparisons use the shared session store. Keep the local-first
+    // experience intact if this best-effort sync is unavailable.
+    const user = currentUserRef.current;
+    if (user) {
+      void fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          start_time: new Date(recorded.startedAt).toISOString(),
+          end_time: new Date(recorded.endedAt).toISOString(),
+          verified_minutes: recorded.focusedMs / 60_000,
+          location_verified: recorded.xpMultiplier > 1,
+          location_name: recorded.zoneName ?? null,
+          platform: "web",
+          distraction_events: recorded.distractions.map((event) => ({
+            app_identifier: null,
+            timestamp: new Date(event.startedAt).toISOString(),
+            duration_seconds: event.durationMs / 1000,
+            bypassed: event.penalized,
+          })),
+        }),
+      }).catch(() => { /* The local session remains authoritative for this device. */ });
+    }
   }, []);
 
   const liveSessionKey = currentUser ? liveSessionKeyForUser(currentUser.id) : LIVE_SESSION_KEY;
