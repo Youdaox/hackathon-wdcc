@@ -110,8 +110,8 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    ensureCompanion(userId);
-    db.update(companions).set(patch).where(eq(companions.userId, userId)).run();
+    await ensureCompanion(userId);
+    await db.update(companions).set(patch).where(eq(companions.userId, userId));
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[companion] patch failed:", error);

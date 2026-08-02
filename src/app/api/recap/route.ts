@@ -29,17 +29,15 @@ export async function GET(request: Request) {
     midnight.setHours(0, 0, 0, 0);
     const since = midnight.getTime() - 6 * DAY_MS;
 
-    const rows = db
+    const rows = await db
       .select()
       .from(sessions)
-      .where(and(eq(sessions.userId, userId), gte(sessions.endTime, since)))
-      .all();
+      .where(and(eq(sessions.userId, userId), gte(sessions.endTime, since)));
 
-    const events = db
+    const events = await db
       .select()
       .from(distractionEvents)
-      .where(and(eq(distractionEvents.userId, userId), gte(distractionEvents.timestamp, since)))
-      .all();
+      .where(and(eq(distractionEvents.userId, userId), gte(distractionEvents.timestamp, since)));
 
     // Seven buckets, oldest first, so a quiet day still renders as an empty
     // column instead of vanishing from the chart.

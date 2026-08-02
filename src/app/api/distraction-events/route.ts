@@ -43,7 +43,6 @@ export async function POST(request: Request) {
         sessionId: req.session_id,
         timestamp: Date.parse(req.timestamp),
         durationSeconds: req.duration_seconds,
-        appLabel: req.app_label,
         appIdentifier: req.app_identifier,
         bypassed: req.bypassed,
         reason: req.reason,
