@@ -39,7 +39,9 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<DirectoryUser[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeTone, setNoticeTone] = useState<"success" | "error">("success");
   const [refreshing, setRefreshing] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -54,6 +56,7 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
       setSent(s);
       setBalance(b);
     } catch (e) {
+      setNoticeTone("error");
       setNotice(
         e instanceof Error ? `Couldn't load your community — ${e.message}` : "Couldn't load your community.",
       );
@@ -82,29 +85,36 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
   const onAdd = async (user: DirectoryUser) => {
     try {
       await addFriend(user.id);
+      setNoticeTone("success");
       setNotice(`Added ${user.name}.`);
       setQuery("");
       setResults([]);
       await load();
     } catch (e) {
+      setNoticeTone("error");
       setNotice(e instanceof Error ? e.message : "Couldn't add that person.");
     }
   };
 
-  // Who has already been cheered today. Read from the server's own dayKey
-  // rather than tracked locally, so it survives a reload and can't disagree
-  // with the allowance the server is enforcing.
-  const cheeredToday = new Set(
-    sent.filter((e) => e.dayKey === balance?.date).map((e) => e.recipientId),
-  );
-
   const onCheer = async (friend: Friend) => {
+    if (balance !== null && balance.available <= 0) {
+      setNoticeTone("error");
+      setNotice("No cheers left today. Complete a task to earn another one.");
+      return;
+    }
+
+    setNotice(null);
+    setSendingId(friend.id);
     try {
       await sendEncouragement(friend.id, friend.name);
+      setNoticeTone("success");
       setNotice(`Sent ${friend.name} a cheer.`);
       await load();
     } catch (e) {
+      setNoticeTone("error");
       setNotice(e instanceof Error ? e.message : "Couldn't send that.");
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -130,6 +140,20 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
         <Text style={[styles.subtitle, { color: c.muted }]}>
           {balance.available} cheer{balance.available === 1 ? "" : "s"} left today.
         </Text>
+      )}
+      {notice && (
+        <View
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.notice,
+            {
+              backgroundColor: noticeTone === "success" ? c.surface2 : c.surface,
+              borderColor: noticeTone === "success" ? c.moss : c.citrus,
+            },
+          ]}
+        >
+          <Text style={[styles.noticeText, { color: c.ink }]}>{notice}</Text>
+        </View>
       )}
 
       <Card title="Find people">
@@ -164,29 +188,43 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
             No friends yet. Search above — cheers are worth points on the leaderboard.
           </Text>
         )}
-        {friends.map((friend) => (
-          <View key={friend.id} style={styles.row}>
-            <Avatar initials={friend.initials} />
-            <Text style={[styles.name, { color: c.ink }]}>{friend.name}</Text>
-            {cheeredToday.has(friend.id) ? (
-              <View style={[styles.cheer, styles.cheered, { borderColor: c.line }]}>
-                <Text style={[styles.cheerText, { color: c.muted }]}>Cheered ✓</Text>
+        {friends.map((friend) => {
+          const sentToday = sent.some(
+            (item) => item.dayKey === balance?.date && item.recipientId === friend.id,
+          );
+          const sending = sendingId === friend.id;
+          const outOfCheers = balance !== null && balance.available <= 0;
+          return (
+            <View key={friend.id} style={styles.row}>
+              <Avatar initials={friend.initials} />
+              <View style={styles.friendCopy}>
+                <Text style={[styles.friendName, { color: c.ink }]}>{friend.name}</Text>
+                {sentToday && (
+                  <Text style={[styles.sentLabel, { color: c.faint }]}>Cheered today ✓</Text>
+                )}
               </View>
-            ) : (
               <Pressable
                 onPress={() => onCheer(friend)}
-                disabled={balance !== null && balance.available <= 0}
+                disabled={sending}
+                accessibilityHint={
+                  outOfCheers ? "Complete a task to earn another cheer" : "Send encouragement"
+                }
                 style={({ pressed }) => [
                   styles.cheer,
-                  { backgroundColor: c.moss },
-                  (pressed || (balance !== null && balance.available <= 0)) && styles.dim,
+                  {
+                    backgroundColor: outOfCheers ? c.surface2 : c.moss,
+                    borderColor: outOfCheers ? c.line : c.moss,
+                  },
+                  (pressed || sending) && styles.dim,
                 ]}
               >
-                <Text style={[styles.cheerText, { color: c.surface }]}>Cheer</Text>
+                <Text style={[styles.cheerText, { color: outOfCheers ? c.muted : c.surface }]}>
+                  {sending ? "Sending…" : "Cheer"}
+                </Text>
               </Pressable>
-            )}
-          </View>
-        ))}
+            </View>
+          );
+        })}
       </Card>
 
       <Card title="Leaderboard">
@@ -217,8 +255,6 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
           </Text>
         ))}
       </Card>
-
-      {notice && <Text style={[styles.notice, { color: c.muted }]}>{notice}</Text>}
     </ScrollView>
   );
 }
@@ -260,13 +296,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 46 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   avatarText: { fontFamily: roundedFont, fontSize: 13, fontWeight: "800" },
+  friendCopy: { flex: 1, gap: 2 },
   name: { flex: 1, fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
+  friendName: { fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
+  sentLabel: { fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
   rank: { width: 24, fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
   points: { fontFamily: roundedFont, fontSize: 13, fontVariant: ["tabular-nums"] },
   action: { fontFamily: roundedFont, fontSize: 14, fontWeight: "800" },
-  cheer: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999 },
-  cheered: { backgroundColor: "transparent", borderWidth: 1 },
+  cheer: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   cheerText: { fontFamily: roundedFont, fontSize: 13, fontWeight: "800" },
-  notice: { fontFamily: roundedFont, fontSize: 13, textAlign: "center" },
+  notice: {
+    borderRadius: radius.control,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  noticeText: { fontFamily: roundedFont, fontSize: 13, lineHeight: 18, textAlign: "center" },
   dim: { opacity: 0.55 },
 });

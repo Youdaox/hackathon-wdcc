@@ -91,7 +91,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(body?.error ?? `request failed (${response.status})`);
+      const apiError = body?.error;
+      const message =
+        typeof apiError === "string"
+          ? apiError
+          : typeof apiError?.message === "string"
+            ? apiError.message
+            : `request failed (${response.status})`;
+      throw new Error(message);
     }
     return body as T;
   } finally {
