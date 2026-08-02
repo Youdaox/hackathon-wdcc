@@ -188,7 +188,7 @@ function PlantStatus({ paused, pickups }: { paused: boolean; pickups: number }) 
         <Text style={styles.plantSubtitle}>
           {paused
             ? `Verified focus is paused · ${pickups} ${pickups === 1 ? "pickup" : "pickups"}`
-            : "Keep it still and let Fern grow"}
+            : "Keep it still and let your focus grow"}
         </Text>
       </View>
     </View>

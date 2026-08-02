@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import type { StudyBlock, StudySpot } from "../api";
 import type { SpotMatch } from "../location";
-import { colors, roundedFont } from "../theme";
+import { radius, roundedFont, useTheme } from "../theme";
 
 /** The next-session card doubles as the explicit, user-triggered location check-in. */
 const DAY_MIN = 1440;
@@ -47,6 +47,7 @@ export function LocationCard({
   checking: boolean;
   onCheckIn: () => void;
 }) {
+  const { colors: c } = useTheme();
   const upcoming = nextBlock(blocks);
   const defaultSpot = spots.find((spot) => /kate/i.test(spot.name)) ?? spots[0];
   const place = match?.inside ? match.spot.name : defaultSpot?.name ?? "Kate Edger";
@@ -58,56 +59,81 @@ export function LocationCard({
       accessibilityLabel={
         upcoming ? `Check in to ${upcoming.block.title}` : "Check in to a study spot"
       }
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: c.surface, borderColor: c.line },
+        pressed && styles.pressed,
+      ]}
     >
-      <View style={styles.iconTile}>
+      <View style={[styles.accentBar, { backgroundColor: c.amber }]} />
+      <View style={[styles.iconTile, { backgroundColor: c.peachPale }]}>
         {checking ? (
-          <ActivityIndicator size="small" color={colors.peach} />
+          <ActivityIndicator size="small" color={c.amber} />
         ) : (
-          <View style={styles.calendarGlyph} />
+          <View style={[styles.calendarGlyph, { borderColor: c.amber }]}>
+            <View style={[styles.calendarTop, { backgroundColor: c.amber }]} />
+            <View style={styles.calendarDots}>
+              <View style={[styles.calendarDot, { backgroundColor: c.amber }]} />
+              <View style={[styles.calendarDot, { backgroundColor: c.amber }]} />
+            </View>
+          </View>
         )}
       </View>
       <View style={styles.copy}>
-        <Text style={styles.title} numberOfLines={1}>
-          {upcoming ? upcoming.block.title : "No study block scheduled"}
-        </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {match?.inside
-            ? `${match.spot.multiplier}x check-in ready`
-            : upcoming
-              ? whenLabel(upcoming.inMinutes)
-              : "Add one in Schedule"}{" "}
-          · {place}
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: c.ink }]} numberOfLines={1}>
+            {upcoming ? upcoming.block.title : "No study block scheduled"}
+          </Text>
+          <View style={[styles.timePill, { backgroundColor: c.surface2 }]}>
+            <Text style={[styles.timeText, { color: match?.inside ? c.moss : c.muted }]}>
+              {match?.inside
+                ? `${match.spot.multiplier}× READY`
+                : upcoming
+                  ? whenLabel(upcoming.inMinutes).toUpperCase()
+                  : "OPEN"}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.place, { color: c.faint }]} numberOfLines={1}>
+          {upcoming?.block.course ? `${upcoming.block.course} · ` : ""}
+          {place}
         </Text>
       </View>
+      <Text style={[styles.chevron, { color: c.faint }]}>›</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 66,
-    borderRadius: 20,
+    minHeight: 84,
+    borderRadius: radius.control,
     borderWidth: 1,
-    borderColor: "#f3cbb5",
-    backgroundColor: "#fff5e9",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
+    overflow: "hidden",
   },
+  accentBar: { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
   pressed: { opacity: 0.7 },
   iconTile: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.peachPale,
+    width: 48,
+    height: 48,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
   },
-  calendarGlyph: { width: 18, height: 17, borderRadius: 4, backgroundColor: colors.peach },
+  calendarGlyph: { width: 22, height: 21, borderRadius: 5, borderWidth: 2, overflow: "hidden" },
+  calendarTop: { height: 5, width: "100%" },
+  calendarDots: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
+  calendarDot: { width: 3, height: 3, borderRadius: 2 },
   copy: { flex: 1, gap: 2 },
-  title: { color: colors.text, fontFamily: roundedFont, fontSize: 16, fontWeight: "800" },
-  subtitle: { color: colors.muted, fontFamily: roundedFont, fontSize: 14, fontWeight: "600" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  title: { flex: 1, fontFamily: roundedFont, fontSize: 15, fontWeight: "900" },
+  timePill: { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 4 },
+  timeText: { fontFamily: roundedFont, fontSize: 7, fontWeight: "900", letterSpacing: 0.5 },
+  place: { fontFamily: roundedFont, fontSize: 11, fontWeight: "700" },
+  chevron: { fontFamily: roundedFont, fontSize: 26, fontWeight: "500", marginLeft: -3 },
 });

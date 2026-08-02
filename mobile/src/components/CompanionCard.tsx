@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import type { AvatarEmotion, Companion } from "../api";
 import { hpCostForAway } from "../config";
 import { radius, roundedFont, type Palette, useTheme } from "../theme";
@@ -65,8 +66,6 @@ export function CompanionCard({
   const stage = stageForLevel(companion.level);
   const emotion = companion.check_in_emotion;
   const selected = emotion ? CHECK_INS.find((item) => item.emotion === emotion) : null;
-  const nextCheckIn = companion.next_check_in_at ? Date.parse(companion.next_check_in_at) : null;
-  const checkInDue = nextCheckIn === null || !Number.isFinite(nextCheckIn) || nextCheckIn <= Date.now();
   const displayMood: Mood =
     hp <= 25 ? "sick" : hp <= 50 ? "sad" : emotion ? EMOTION_MOOD[emotion] : companion.mood;
   const accent = emotionColor(emotion, c);
@@ -116,7 +115,7 @@ export function CompanionCard({
             <Text style={[styles.question, { color: c.ink }]}>How are you feeling?</Text>
           </View>
           <Text style={[styles.checkInHint, { color: c.faint }]}>
-            {checkInDue ? "Pick one" : "Change anytime"}
+            {emotion ? "Change anytime" : "Pick one"}
           </Text>
         </View>
 
@@ -130,7 +129,10 @@ export function CompanionCard({
                 accessibilityRole="radio"
                 accessibilityLabel={item.label}
                 accessibilityState={{ checked: active }}
-                onPress={() => onMoodChange(item.emotion)}
+                onPress={() => {
+                  void Haptics.selectionAsync().catch(() => {});
+                  onMoodChange(item.emotion);
+                }}
                 style={({ pressed }) => [
                   styles.moodOption,
                   { backgroundColor: c.surface, borderColor: active ? optionAccent : c.line },
@@ -174,7 +176,7 @@ export function CompanionCard({
 }
 
 function BreathingSprite({ draining, children }: { draining: boolean; children: React.ReactNode }) {
-  const breath = useRef(new Animated.Value(0)).current;
+  const [breath] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -233,7 +235,7 @@ function Meter({
   fill: string;
 }) {
   const { colors: c } = useTheme();
-  const width = useRef(new Animated.Value(Math.max(0, Math.min(100, pct)))).current;
+  const [width] = useState(() => new Animated.Value(Math.max(0, Math.min(100, pct))));
 
   useEffect(() => {
     Animated.timing(width, {

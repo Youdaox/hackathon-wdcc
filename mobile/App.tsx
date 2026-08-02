@@ -35,7 +35,7 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { type Account, currentAccount, signOut } from "./src/auth";
 import { GEO_OPT_IN_KEY } from "./src/config";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
-import { colors } from "./src/theme";
+import { useTheme } from "./src/theme";
 import { useFocusSession } from "./src/useFocusSession";
 import { type PlantSessionSummary, usePlantMode } from "./src/usePlantMode";
 import { useRecallCheck } from "./src/useRecallCheck";
@@ -43,6 +43,7 @@ import { useRecallCheck } from "./src/useRecallCheck";
 const LAST_PLANT_SUMMARY_KEY = "incline.lastPlantSummary.v1";
 
 export default function App() {
+  const { colors: c, isDark } = useTheme();
   const { state, start, stop, setPlantActive, resolveCheckpoint, addBonusXp } =
     useFocusSession();
   const handlePlantedChange = useCallback(
@@ -336,7 +337,7 @@ export default function App() {
   if (!account) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark ? "light" : "dark"} />
         <LoginScreen onSignedIn={setAccount} />
       </SafeAreaProvider>
     );
@@ -344,9 +345,9 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <SafeAreaView style={styles.safe} edges={["top"]}>
-        <View style={styles.screen}>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <SafeAreaView style={[styles.safe, { backgroundColor: c.canvas }]} edges={["top"]}>
+        <View style={[styles.screen, { backgroundColor: c.canvas }]}>
           {tab === "home" && (
             <HomeScreen
               companion={companion}
@@ -363,6 +364,8 @@ export default function App() {
               onCheckIn={checkIn}
               recall={recall}
               pledge={pledge}
+              focusedTodayMinutes={recap?.days.at(-1)?.focused_minutes ?? 0}
+              streak={recap?.streak ?? 0}
               onMoodChange={(emotion) => handleCustomise({ check_in_emotion: emotion })}
               onPledgeChange={setPledge}
               onStart={handleStart}
@@ -397,7 +400,7 @@ export default function App() {
             />
           )}
         </View>
-        <SafeAreaView edges={["bottom"]} style={styles.navSafe}>
+        <SafeAreaView edges={["bottom"]} style={[styles.navSafe, { backgroundColor: c.surface }]}>
           <BottomNav active={tab} onChange={setTab} />
         </SafeAreaView>
 
@@ -416,6 +419,7 @@ export default function App() {
         {plantSetup && (
           <PlantSetupScreen
             state={plantState}
+            companion={companion}
             onCancel={cancelPlantSetup}
             onContinueWithoutSensor={continueWithoutPlantMode}
           />
@@ -426,7 +430,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  screen: { flex: 1, backgroundColor: colors.bg },
-  navSafe: { backgroundColor: colors.surface },
+  safe: { flex: 1 },
+  screen: { flex: 1 },
+  navSafe: {},
 });
