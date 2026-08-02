@@ -108,6 +108,7 @@ export async function POST(request: Request) {
     return NextResponse.json<SessionResponse>({
       session_id: sessionId,
       pet_growth_delta: result.xpEarned,
+      companion: result.companion,
     });
   } catch (error) {
     console.error("[sessions] failed to record session:", error);

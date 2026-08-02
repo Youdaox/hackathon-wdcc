@@ -6,6 +6,7 @@ import { useDemoAuth, type DemoUser } from "@/lib/demo-auth";
 import { DemoLogin } from "@/components/DemoLogin";
 import { XpReward } from "@/components/XpReward";
 import { formatCompact } from "@/lib/time";
+import { useIncline } from "@/lib/store";
 
 type Period = "week" | "month";
 type Notice = { kind: "success" | "error"; message: string } | null;
@@ -35,6 +36,7 @@ async function request<T>(url: string, init?: RequestInit, user?: DemoUser | nul
 
 export function EncouragementDashboard() {
   const { currentUser, logout } = useDemoAuth();
+  const { syncCompanion } = useIncline();
   const [balance, setBalance] = useState<EncouragementBalance | null>(null);
   const [received, setReceived] = useState<EncouragementHistoryRecord[]>([]);
   const [boards, setBoards] = useState<Record<Period, LeaderboardEntry[]>>({ week: [], month: [] });
@@ -85,7 +87,7 @@ export function EncouragementDashboard() {
 
   async function sendEncouragement(friend: CommunityUser) {
     setBusy(friend.id); setNotice(null);
-    try { const result = await request<{ balance: EncouragementBalance }>("/api/encouragements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientId: friend.id, recipientName: friend.name }) }, currentUser); setBalance(result.balance); setNotice({ kind: "success", message: `Encouragement sent to ${friend.name}. +4 community XP.` }); await load(); }
+    try { const result = await request<{ balance: EncouragementBalance; xpAwarded: number; companion: import("@/lib/types").Companion }>("/api/encouragements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientId: friend.id, recipientName: friend.name }) }, currentUser); syncCompanion(result.companion); setBalance(result.balance); setNotice({ kind: "success", message: `Encouragement sent to ${friend.name}. +${result.xpAwarded} XP.` }); await load(); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to send encouragement." }); }
     finally { setBusy(null); }
   }
@@ -93,7 +95,7 @@ export function EncouragementDashboard() {
   async function completeTask() {
     if (!activeTask || !currentUser) return;
     setBusy("task"); setNotice(null);
-    try { const result = await request<{ balance: EncouragementBalance; encouragementPointsAwarded: number }>("/api/tasks/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: `wellbeing-${currentUser.id}-${Date.now()}` }) }, currentUser); setBalance(result.balance); setActiveTask(null); setNotice({ kind: "success", message: result.encouragementPointsAwarded ? "Task completed. You earned an encouragement point." : "Task completed." }); }
+    try { const result = await request<{ balance: EncouragementBalance; encouragementPointsAwarded: number; xpAwarded: number; companion: import("@/lib/types").Companion }>("/api/tasks/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: `wellbeing-${currentUser.id}-${Date.now()}` }) }, currentUser); syncCompanion(result.companion); setBalance(result.balance); setActiveTask(null); setNotice({ kind: "success", message: `Task completed. +${result.xpAwarded} XP${result.encouragementPointsAwarded ? " and an encouragement point" : ""}.` }); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to complete the task." }); }
     finally { setBusy(null); }
   }

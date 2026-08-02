@@ -5,6 +5,9 @@ import { DomainError } from "@/lib/leaderboard/service";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { friendships } from "@/lib/db/schema";
+import { awardAccountXp } from "@/lib/api/account-xp";
+
+const SENT_ENCOURAGEMENT_XP = 4;
 
 export async function GET(request: Request) {
   try {
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
     const result = await leaderboardService.sendEncouragement(
       sender.userId, sender.displayName, body.recipientId.trim(), recipientName,
     );
-    return NextResponse.json(result, { status: 201 });
+    const companion = await awardAccountXp(sender.userId, SENT_ENCOURAGEMENT_XP);
+    return NextResponse.json({ ...result, xpAwarded: SENT_ENCOURAGEMENT_XP, companion }, { status: 201 });
   } catch (error) { return errorResponse(error); }
 }

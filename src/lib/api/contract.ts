@@ -1,4 +1,5 @@
 import type { DistractionEvent as WebDistractionEvent } from "@/lib/types";
+import type { Companion } from "@/lib/types";
 import { RULES } from "@/lib/companion";
 
 /**
@@ -43,6 +44,7 @@ export interface SessionRequest {
 export interface SessionResponse {
   session_id: string;
   pet_growth_delta: number;
+  companion: Companion;
 }
 
 export interface DistractionEventRequest {

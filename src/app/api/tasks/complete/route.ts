@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { leaderboardService } from "@/lib/leaderboard";
 import { errorResponse, identity, jsonObject } from "@/lib/leaderboard/http";
 import { DomainError } from "@/lib/leaderboard/service";
+import { awardAccountXp } from "@/lib/api/account-xp";
+
+const WELLBEING_TASK_XP = 6;
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +16,7 @@ export async function POST(request: Request) {
     const result = await leaderboardService.completeTask(
       user.userId, user.displayName, body.taskId.trim(),
     );
-    return NextResponse.json(result, { status: 201 });
+    const companion = await awardAccountXp(user.userId, WELLBEING_TASK_XP);
+    return NextResponse.json({ ...result, xpAwarded: WELLBEING_TASK_XP, companion }, { status: 201 });
   } catch (error) { return errorResponse(error); }
 }

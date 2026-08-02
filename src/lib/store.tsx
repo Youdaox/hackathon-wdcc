@@ -77,6 +77,8 @@ interface InclineContextValue {
   /** Upserts Canvas-imported blocks by `externalId`. Returns what changed. */
   importCanvasBlocks: (incoming: CanvasImportBlock[]) => ImportResult;
   companion: Companion;
+  /** Applies the server-authoritative companion after a shared XP award. */
+  syncCompanion: (companion: Companion) => void;
   renameCompanion: (name: string) => void;
   setCompanionSpecies: (species: AnimalSpecies) => void;
   setCompanionColor: (color: CompanionColor) => void;
@@ -147,6 +149,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   const [companion, setCompanion] = useState<Companion>(() => createCompanion());
   const [sessions, setSessions] = useState<FocusSession[]>([]);
   const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
+
+  const syncCompanion = useCallback((next: Companion) => {
+    setCompanion(next);
+  }, []);
   // Opt-in is remembered, so a reload doesn't re-prompt — but we still never
   // ask for location until the user turns it on.
   const [geoEnabled, setGeoEnabled] = useState(false);
@@ -220,8 +226,8 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       .then((response) => response.ok ? response.json() as Promise<{ companion: Companion }> : null)
       .then((payload) => {
         if (!active || !payload) return;
-        // Focus/schedule data remains local today; only profile fields are
-        // shared so loading a popup cannot replace an in-progress web profile.
+        // Schedules remain local, while avatar profile and progression are
+        // shared across the browser, Electron, and community views.
         const avatarProfile = hasAvatarCustomization(payload.companion) || !hasAvatarCustomization(localCompanion)
           ? {
               ...localCompanion,
@@ -236,6 +242,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           : localCompanion;
         const sharedProfile = {
           ...avatarProfile,
+          level: payload.companion.level,
+          xp: payload.companion.xp,
+          hp: payload.companion.hp,
+          totalFocusedMs: payload.companion.totalFocusedMs,
+          lastSessionAt: payload.companion.lastSessionAt,
+          createdAt: payload.companion.createdAt,
           lastMeal: payload.companion.lastMeal,
           lastMealAt: payload.companion.lastMealAt,
           lastWaterAt: payload.companion.lastWaterAt,
@@ -401,9 +413,11 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
             bypassed: event.penalized,
           })),
         }),
-      }).catch(() => { /* The local session remains authoritative for this device. */ });
+      }).then((response) => response.ok ? response.json() as Promise<{ companion: Companion }> : null)
+        .then((payload) => { if (payload?.companion) syncCompanion(payload.companion); })
+        .catch(() => { /* The local session remains authoritative for this device. */ });
     }
-  }, []);
+  }, [syncCompanion]);
 
   const liveSessionKey = currentUser ? liveSessionKeyForUser(currentUser.id) : LIVE_SESSION_KEY;
   const { active, start, end, cancel, elapsedMs, addBonusXp, setEmotionalModifiers, setGazeAway } =
@@ -675,6 +689,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       removeBlock,
       importCanvasBlocks,
       companion,
+      syncCompanion,
       renameCompanion,
       setCompanionSpecies,
       setCompanionColor,
@@ -719,6 +734,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       removeBlock,
       importCanvasBlocks,
       companion,
+      syncCompanion,
       renameCompanion,
       setCompanionSpecies,
       setCompanionColor,
