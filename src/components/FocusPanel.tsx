@@ -9,6 +9,7 @@ import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
 import { DAY_LABELS, formatClock, formatCompact, formatDuration } from "@/lib/time";
 import { awayMsPastGrace, hpLostForAwayMs } from "@/lib/companion";
+import { useStudyMemory } from "@/lib/study-memory/client";
 
 const QUICK_DURATIONS = [15, 25, 50];
 
@@ -114,7 +115,26 @@ export function FocusPanel() {
       </div>
 
       <EyeTrackingToggle />
+      <StudyMemoryToggle />
     </section>
+  );
+}
+
+function StudyMemoryToggle() {
+  const { available, enabled, setEnabled, sources, sourceId, setSourceId } = useStudyMemory();
+  return (
+    <div className="mt-5 border-t border-line-soft pt-5">
+      <div className="flex items-start justify-between gap-4">
+        <div><div className="text-sm font-semibold">AI Study Memory</div><p className="mt-0.5 max-w-lg text-xs text-muted">With your consent, Incline samples the selected screen only during focus mode, sends useful frames to OpenAI, and deletes each frame immediately after processing.</p></div>
+        <Button size="sm" variant={enabled ? "ghost" : "outline"} disabled={!available} onClick={() => setEnabled(!enabled)}>{enabled ? "Turn off" : available ? "Enable" : "Desktop app only"}</Button>
+      </div>
+      {enabled && <label className="mt-3 block text-xs font-semibold text-muted">Capture source
+        <select value={sourceId} onChange={(event) => setSourceId(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink">
+          {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+        </select>
+        <span className="mt-1 block text-[11px] font-normal text-faint">Avoid selecting windows containing messages, passwords, health, banking, or personal records.</span>
+      </label>}
+    </div>
   );
 }
 
@@ -165,6 +185,7 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   const { companion, currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
     useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const memory = useStudyMemory();
   const away = active.isHidden || active.isGazeAway;
   const focusRatio =
     active.focusedMs + active.distractedMs > 0
@@ -268,6 +289,11 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
       )}
 
       <div className="mt-4 flex flex-col items-center gap-1.5">
+        {memory.enabled && memory.available && (
+          <button onClick={memory.state === "paused" ? memory.resume : memory.pause} className="rounded-full bg-citrus/15 px-3 py-1 text-xs font-bold text-citrus">
+            {memory.state === "paused" ? "Resume Study Memory" : `Study Memory on · ${memory.captures} captured · Pause`}
+          </button>
+        )}
         {currentZone && (
           <span className="tabular rounded-full bg-citrus/15 px-3 py-1 text-xs font-bold text-citrus">
             {currentZone.multiplier}× XP · {currentZone.name}

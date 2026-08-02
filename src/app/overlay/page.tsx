@@ -7,12 +7,15 @@ import { moodFor } from "@/lib/companion";
 import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
+import type { Companion } from "@/lib/types";
 
 // Window bridges are declared once in `src/types/electron.d.ts`.
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
 const DRAG_SPEECH_DELAY_MS = 600;
+const LOCK_IN_LINE = "LOCK IN";
+const LOCK_IN_WINDUP_MS = 800;
 const SPEECH_EVERY_N_IDLES = 3;
 const SPEECH_DURATION_MS = 3000;
 
@@ -21,19 +24,28 @@ const SPEECH_DURATION_MS = 3000;
  * overlay shell (see electron/main.js) — not part of the normal dashboard flow.
  */
 export default function OverlayPage() {
-  const { companion } = useIncline();
+  const { companion: localCompanion } = useIncline();
+  // The dashboard pushes live updates over IPC (see electron/main.js) so the
+  // pet's look/mood here doesn't just reflect whatever it was when this
+  // window last opened — this overlay is a separate window with its own
+  // InclineProvider, so its own `companion` wouldn't otherwise pick up
+  // changes made in the dashboard while both are open.
+  const [pushedCompanion, setPushedCompanion] = useState<Companion | null>(null);
+  const companion = pushedCompanion ?? localCompanion;
   const petRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const idleCountRef = useRef(0);
   const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const dragSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lockInTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [bubbleText, setBubbleText] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
       clearTimeout(speechTimeoutRef.current);
       clearTimeout(dragSpeechTimeoutRef.current);
+      clearTimeout(lockInTimeoutRef.current);
     };
   }, []);
 
@@ -65,7 +77,7 @@ export default function OverlayPage() {
     };
   }, []);
 
-  useWander(
+  const { goTo, cancel } = useWander(
     petRef,
     PET_SIZE,
     true,
@@ -100,6 +112,40 @@ export default function OverlayPage() {
     },
     bubbleRef,
   );
+
+  // The main process watches for a target app (Discord, Steam, Snapchat — see
+  // electron/closeApp.js) becoming focused and sends its close button's screen
+  // position — wind up (shake + "LOCK IN"), then walk the pet's center there,
+  // then let main run the actual quit once it arrives.
+  useEffect(() => {
+    return window.overlayAPI?.onTargetAppFocus(({ name, position }) => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+      clearTimeout(lockInTimeoutRef.current);
+      setBubbleText(LOCK_IN_LINE);
+      lockInTimeoutRef.current = setTimeout(() => setBubbleText(null), LOCK_IN_WINDUP_MS);
+      goTo(
+        position.x - PET_SIZE / 2,
+        position.y - PET_SIZE / 2,
+        () => window.overlayAPI?.targetAppReached(name),
+        LOCK_IN_WINDUP_MS,
+      );
+    });
+  }, [goTo]);
+
+  // Tabbed away before the pet reached it — call off the whole pursuit and
+  // drop straight back to normal idle/wandering, without closing anything.
+  useEffect(() => {
+    return window.overlayAPI?.onTargetAppBlur(() => {
+      clearTimeout(lockInTimeoutRef.current);
+      setBubbleText(null);
+      cancel();
+    });
+  }, [cancel]);
+
+  useEffect(() => {
+    return window.overlayAPI?.onCompanionUpdate(setPushedCompanion);
+  }, []);
 
   // Hit-testing: the Electron window ignores the mouse by default (click-through
   // to whatever's underneath). We forward mousemove events into this page, check

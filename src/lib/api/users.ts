@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions, users } from "@/lib/db/schema";
 import { applyIdleDecay, createCompanion } from "@/lib/companion";
-import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type Companion } from "@/lib/types";
+import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type AvatarEmotion, type Companion } from "@/lib/types";
 
 /**
  * Ensures a user and companion row exist, and returns the companion with

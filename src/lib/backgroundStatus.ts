@@ -13,6 +13,35 @@ export interface BackgroundStatus {
   hpAtRisk: number;
 }
 
+export type StudyMemoryDesktopPhase =
+  | "off"
+  | "ready"
+  | "paused"
+  | "capturing"
+  | "processing"
+  | "accepted"
+  | "duplicate"
+  | "excluded"
+  | "error";
+
+export interface StudyMemoryDesktopStatus {
+  enabled: boolean;
+  automaticPaused: boolean;
+  phase: StudyMemoryDesktopPhase;
+  acceptedCaptures: number;
+  sourceName: string | null;
+  message: string | null;
+}
+
+export const IDLE_MEMORY_STATUS: StudyMemoryDesktopStatus = {
+  enabled: false,
+  automaticPaused: false,
+  phase: "off",
+  acceptedCaptures: 0,
+  sourceName: null,
+  message: null,
+};
+
 export const IDLE_STATUS: BackgroundStatus = {
   phase: "idle",
   reason: null,

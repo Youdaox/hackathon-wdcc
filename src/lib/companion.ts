@@ -253,6 +253,17 @@ export function applySession(
   };
 }
 
+/** Adds an already-verified post-session reward without replaying session HP/time. */
+export function awardBonusXp(companion: Companion, amount: number): Companion {
+  let level = companion.level;
+  let xp = companion.xp + Math.max(0, Math.floor(amount));
+  while (xp >= RULES.xpForLevel(level)) {
+    xp -= RULES.xpForLevel(level);
+    level += 1;
+  }
+  return { ...companion, level, xp };
+}
+
 /**
  * Neglect decay, applied once on load. Keeps the stakes real without needing a
  * background job — we just compare against the last completed session.

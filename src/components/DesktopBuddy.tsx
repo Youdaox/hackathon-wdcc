@@ -8,14 +8,25 @@ import { moodFor } from "@/lib/companion";
 import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
+import { closeActivePipWindow, setActivePipWindow } from "@/lib/overlayWindow";
 
-// Window bridges are declared once in `src/types/electron.d.ts`.
+// Electron window bridges are declared once in `src/types/electron.d.ts`.
+// Document Picture-in-Picture isn't in TypeScript's DOM lib yet, and this is
+// the only file that uses it, so it's declared locally instead.
+declare global {
+  interface Window {
+    documentPictureInPicture?: {
+      requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
+      window: Window | null;
+    };
+  }
+}
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
 const DRAG_SPEECH_DELAY_MS = 600;
 const SPEECH_EVERY_N_IDLES = 3;
-const SPEECH_DURATION_MS = 3000;
+const SPEECH_DURATION_MS = 3000;  
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running
@@ -85,12 +96,17 @@ export function DesktopBuddy() {
       }
     });
 
-    pip.addEventListener("pagehide", () => setPipWindow(null));
+    pip.addEventListener("pagehide", () => {
+      setActivePipWindow(null);
+      setPipWindow(null);
+    });
+    setActivePipWindow(pip);
     setPipWindow(pip);
   }
 
   function closePip() {
     pipWindow?.close();
+    setActivePipWindow(null);
     setPipWindow(null);
   }
 
@@ -138,10 +154,17 @@ export function DesktopBuddy() {
 
   useEffect(() => {
     return () => {
-      pipWindow?.close();
+      closeActivePipWindow();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync the pet's look live with the dashboard while both are open — the
+  // Electron overlay is a separate window with its own InclineProvider, so
+  // its `companion` wouldn't otherwise pick up changes made here (color,
+  // accessory, level, mood) until it was closed and reopened.
+  useEffect(() => {
+    if (isElectron) window.electronAPI?.updateCompanion(companion);
+  }, [companion, isElectron]);
 
   if (!isElectron && !pipSupported) return null;
 

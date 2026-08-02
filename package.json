@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "better-sqlite3": "^13.0.2",
     "drizzle-orm": "^0.45.2",
+    "get-windows": "^9.3.0",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.21.2",
     "next": "16.2.12",
