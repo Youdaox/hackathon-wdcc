@@ -646,15 +646,17 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   const respondToMealCheck = useCallback((meal: Meal, ate: boolean) => {
     const at = Date.now();
+    const hpChange = ate ? WELLBEING.mealRecoveryHp : -WELLBEING.mealRecoveryHp;
     setCompanion((prev) => {
       const next = { ...prev, lastMeal: ate ? meal : prev.lastMeal, lastMealAt: ate ? at : prev.lastMealAt, foodBreakMissed: !ate };
-      return ate ? restoreHp(next, WELLBEING.mealRecoveryHp) : next;
+      return restoreHp(next, hpChange);
     });
-    if (ate && hpAnchor.current !== null) hpAnchor.current = Math.min(100, hpAnchor.current + WELLBEING.mealRecoveryHp);
+    if (hpAnchor.current !== null) hpAnchor.current = Math.max(0, Math.min(100, hpAnchor.current + hpChange));
   }, []);
 
   const respondToWaterBreak = useCallback((drank: boolean) => {
     const at = Date.now();
+    const hpChange = drank ? WELLBEING.waterRecoveryHp : -WELLBEING.waterRecoveryHp;
     setCompanion((prev) => {
       const next = {
         ...prev,
@@ -662,9 +664,9 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         nextWaterCheckAt: at + WELLBEING.waterBreakMs,
         waterBreakMissed: !drank,
       };
-      return drank ? restoreHp(next, WELLBEING.waterRecoveryHp) : next;
+      return restoreHp(next, hpChange);
     });
-    if (drank && hpAnchor.current !== null) hpAnchor.current = Math.min(100, hpAnchor.current + WELLBEING.waterRecoveryHp);
+    if (hpAnchor.current !== null) hpAnchor.current = Math.max(0, Math.min(100, hpAnchor.current + hpChange));
   }, []);
 
   const resetEverything = useCallback(() => {
