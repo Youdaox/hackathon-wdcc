@@ -32,6 +32,8 @@ export function SettingsScreen({
   // Seed the field once the companion arrives, without clobbering whatever the
   // user is part-way through typing.
   useEffect(() => {
+    // Sync once when the asynchronously loaded companion name arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (companion?.name && name === "") setName(companion.name);
   }, [companion?.name, name]);
 

@@ -58,6 +58,12 @@ export interface FocusState {
   distractions: DistractionRecord[];
   /** True while the user is away in another app. */
   away: boolean;
+  /** Whether this session requires the phone to remain planted face-down. */
+  plantMode: boolean;
+  /** True while a Plant-to-Focus session is waiting to be planted again. */
+  plantPaused: boolean;
+  /** Deliberate planted-to-lifted transitions during this session. */
+  phonePickups: number;
   /** Set on return when the stretch was long enough to be worth asking about. */
   pending: PendingCheckpoint | null;
 }
@@ -68,6 +74,8 @@ export interface FinishedSession {
   focusedMs: number;
   pledgeMinutes: number;
   bonusXp: number;
+  plantMode: boolean;
+  phonePickups: number;
   distractions: DistractionRecord[];
 }
 
@@ -82,6 +90,9 @@ function idle(): FocusState {
     distractedMs: 0,
     distractions: [],
     away: false,
+    plantMode: false,
+    plantPaused: false,
+    phonePickups: 0,
     pending: null,
   };
 }
@@ -145,6 +156,11 @@ export function useFocusSession() {
         const restored: FocusState = {
           ...parsed.session,
           away: false,
+          plantMode: Boolean(parsed.session.plantMode),
+          // A restored sensor session must be planted again before it earns
+          // more focus; the raw motion stream cannot survive a JS reload.
+          plantPaused: Boolean(parsed.session.plantMode),
+          phonePickups: parsed.session.phonePickups ?? 0,
           distractedMs: parsed.session.distractedMs + gap,
         };
 
@@ -180,7 +196,7 @@ export function useFocusSession() {
     // as focus would let someone farm XP by sitting on the modal.
     if (session.pending) return;
 
-    if (session.away) session.distractedMs += elapsed;
+    if (session.away || session.plantPaused) session.distractedMs += elapsed;
     else session.focusedMs += elapsed;
   }, []);
 
@@ -227,7 +243,7 @@ export function useFocusSession() {
   }, [state.running, flush, publish]);
 
   const start = useCallback(
-    (pledgeMinutes = 0) => {
+    (pledgeMinutes = 0, plantMode = false) => {
       const now = Date.now();
       markRef.current = now;
       ref.current = {
@@ -236,10 +252,30 @@ export function useFocusSession() {
         startedAt: now,
         endsAt: pledgeMinutes > 0 ? now + pledgeMinutes * 60_000 : null,
         pledgeMinutes,
+        plantMode,
+        // Plant sessions only call start after the initial face-down
+        // calibration has completed, so the first stretch begins active.
+        plantPaused: false,
       };
       publish();
     },
     [publish],
+  );
+
+  /** Switches a Plant-to-Focus session between verified and distracted time. */
+  const setPlantActive = useCallback(
+    (planted: boolean) => {
+      const session = ref.current;
+      if (!session.running || !session.plantMode) return;
+      const nextPaused = !planted;
+      if (session.plantPaused === nextPaused) return;
+
+      flush(Date.now());
+      session.plantPaused = nextPaused;
+      if (nextPaused) session.phonePickups += 1;
+      publish();
+    },
+    [flush, publish],
   );
 
   /** Adds flat XP from a correct recall answer. */
@@ -296,6 +332,8 @@ export function useFocusSession() {
       focusedMs: session.focusedMs,
       pledgeMinutes: session.pledgeMinutes,
       bonusXp: session.bonusXp,
+      plantMode: session.plantMode,
+      phonePickups: session.phonePickups,
       // Sub-grace blips cost focus time but shouldn't reach the server as
       // penalties, matching the web app's forgiveness for a stray tap.
       distractions: session.distractions.filter((d) => d.durationMs >= GRACE_MS),
@@ -306,5 +344,5 @@ export function useFocusSession() {
     return finished;
   }, [flush, publish]);
 
-  return { state, start, stop, resolveCheckpoint, addBonusXp };
+  return { state, start, stop, setPlantActive, resolveCheckpoint, addBonusXp };
 }

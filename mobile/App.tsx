@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   type AwayReason,
@@ -23,6 +24,7 @@ import { BottomNav, type TabName } from "./src/components/BottomNav";
 import { type SpotMatch, activeSpot, getReading, nearestSpot } from "./src/location";
 import { CheckpointScreen } from "./src/screens/CheckpointScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { PlantSetupScreen } from "./src/screens/PlantSetupScreen";
 import { RecapScreen } from "./src/screens/RecapScreen";
 import { SessionSummary, type SessionOutcome } from "./src/components/SessionSummary";
 import { CommunityScreen } from "./src/screens/CommunityScreen";
@@ -33,10 +35,24 @@ import { type Account, currentAccount, signOut } from "./src/auth";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
 import { colors } from "./src/theme";
 import { useFocusSession } from "./src/useFocusSession";
+import { type PlantSessionSummary, usePlantMode } from "./src/usePlantMode";
 import { useRecallCheck } from "./src/useRecallCheck";
 
+const LAST_PLANT_SUMMARY_KEY = "incline.lastPlantSummary.v1";
+
 export default function App() {
-  const { state, start, stop, resolveCheckpoint, addBonusXp } = useFocusSession();
+  const { state, start, stop, setPlantActive, resolveCheckpoint, addBonusXp } =
+    useFocusSession();
+  const handlePlantedChange = useCallback(
+    (planted: boolean) => setPlantActive(planted),
+    [setPlantActive],
+  );
+  const {
+    state: plantState,
+    begin: beginPlantMode,
+    confirmSessionStarted: confirmPlantSessionStarted,
+    stop: stopPlantMode,
+  } = usePlantMode({ onPlantedChange: handlePlantedChange });
   const [tab, setTab] = useState<TabName>("home");
   const [companion, setCompanion] = useState<Companion | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
@@ -52,6 +68,8 @@ export default function App() {
   /** Null until the stored session has been checked, so we don't flash the login screen. */
   const [authChecked, setAuthChecked] = useState(false);
   const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
+  const [plantSetup, setPlantSetup] = useState(false);
+  const [lastPlantSummary, setLastPlantSummary] = useState<PlantSessionSummary | null>(null);
 
   // The recall check needs a course to ask about. Until the schedule lands on
   // mobile there's no linked block, so it falls back to general study skills —
@@ -92,8 +110,21 @@ export default function App() {
   useEffect(() => {
     // Only load once signed in — every endpoint resolves the user from the
     // session cookie, so calling them first just yields 401s.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (account) void load();
   }, [account, load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(LAST_PLANT_SUMMARY_KEY)
+      .then((raw) => {
+        if (!cancelled && raw) setLastPlantSummary(JSON.parse(raw) as PlantSessionSummary);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const checkIn = useCallback(async () => {
     setChecking(true);
@@ -113,14 +144,71 @@ export default function App() {
 
   const multiplier = match?.inside ? match.spot.multiplier : 1;
 
-  const handleStart = useCallback(() => {
-    start(pledge);
+  const beginLiveSession = useCallback((plantMode: boolean) => {
+    start(pledge, plantMode);
     void showSessionNotification(Date.now());
   }, [start, pledge]);
+
+  const handleStart = useCallback(() => {
+    setPlantSetup(true);
+    void beginPlantMode();
+  }, [beginPlantMode]);
+
+  const cancelPlantSetup = useCallback(() => {
+    setPlantSetup(false);
+    stopPlantMode();
+  }, [stopPlantMode]);
+
+  const continueWithoutPlantMode = useCallback(() => {
+    setPlantSetup(false);
+    stopPlantMode();
+    beginLiveSession(false);
+  }, [beginLiveSession, stopPlantMode]);
+
+  /* Sensor transitions are external-system events; these effects bridge them
+   * into the session engine at deliberate boundaries. */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!plantSetup || plantState.phase !== "planted") return;
+    confirmPlantSessionStarted();
+    setPlantSetup(false);
+    beginLiveSession(true);
+  }, [plantSetup, plantState.phase, confirmPlantSessionStarted, beginLiveSession]);
+
+  useEffect(() => {
+    if (!account || !state.running || !state.plantMode || plantState.active) return;
+    void beginPlantMode();
+  }, [account, state.running, state.plantMode, plantState.active, beginPlantMode]);
+
+  useEffect(() => {
+    if (
+      state.running &&
+      state.plantMode &&
+      plantState.phase === "planted" &&
+      !plantState.trackingSession
+    ) {
+      confirmPlantSessionStarted();
+    }
+  }, [
+    state.running,
+    state.plantMode,
+    plantState.phase,
+    plantState.trackingSession,
+    confirmPlantSessionStarted,
+  ]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleStop = useCallback(async () => {
     const finished = stop();
     if (!finished) return;
+
+    const plantSummary = finished.plantMode ? stopPlantMode() : null;
+    if (plantSummary) {
+      setLastPlantSummary(plantSummary);
+      void AsyncStorage.setItem(LAST_PLANT_SUMMARY_KEY, JSON.stringify(plantSummary)).catch(
+        () => {},
+      );
+    }
 
     void clearSessionNotification();
 
@@ -153,7 +241,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [stop, state.distractedMs, match, spots, load]);
+  }, [stop, stopPlantMode, state.distractedMs, match, spots, load]);
 
   /**
    * Resolves the return check-in.
@@ -255,6 +343,7 @@ export default function App() {
             <RecapScreen
               companion={companion}
               recap={recap}
+              plantSummary={lastPlantSummary}
               refreshing={refreshing}
               onRefresh={onRefresh}
             />
@@ -291,6 +380,14 @@ export default function App() {
           petName={companion?.name ?? "Fern"}
           onResolve={handleCheckpoint}
         />
+
+        {plantSetup && (
+          <PlantSetupScreen
+            state={plantState}
+            onCancel={cancelPlantSetup}
+            onContinueWithoutSensor={continueWithoutPlantMode}
+          />
+        )}
       </SafeAreaView>
     </SafeAreaProvider>
   );

@@ -31,6 +31,12 @@
     "plugins": [
       "expo-dev-client",
       [
+        "expo-sensors",
+        {
+          "motionPermission": "Allow Incline to detect when you plant your phone face-down for a focus session."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

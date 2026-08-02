@@ -1,6 +1,7 @@
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Companion, Recap } from "../api";
-import { colors, roundedFont } from "../theme";
+import type { PlantSessionSummary } from "../usePlantMode";
+import { colors, formatDuration, roundedFont } from "../theme";
 
 const GOAL_DAYS = 5;
 
@@ -13,11 +14,13 @@ const REASON_COPY: Record<string, string> = {
 export function RecapScreen({
   companion,
   recap,
+  plantSummary,
   refreshing,
   onRefresh,
 }: {
   companion: Companion | null;
   recap: Recap | null;
+  plantSummary: PlantSessionSummary | null;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
@@ -66,6 +69,29 @@ export function RecapScreen({
           </Text>
         )}
       </View>
+
+      {plantSummary && (
+        <View style={styles.plantCard}>
+          <View style={styles.plantCardHeader}>
+            <View>
+              <Text style={styles.cardTitle}>Last planted session</Text>
+              <Text style={styles.plantCardSubtitle}>Face-down focus verification</Text>
+            </View>
+            <View style={styles.plantedBadge}>
+              <Text style={styles.plantedBadgeValue}>{plantSummary.plantedPercentage}%</Text>
+              <Text style={styles.plantedBadgeLabel}>planted</Text>
+            </View>
+          </View>
+          <View style={styles.plantMetrics}>
+            <PlantMetric value={String(plantSummary.phonePickups)} label="Phone pickups" />
+            <View style={styles.metricDivider} />
+            <PlantMetric
+              value={formatDuration(plantSummary.longestPlantedMs)}
+              label="Longest stretch"
+            />
+          </View>
+        </View>
+      )}
 
       <View style={styles.chartCard}>
         <View style={styles.chartHeader}>
@@ -133,6 +159,15 @@ export function RecapScreen({
   );
 }
 
+function PlantMetric({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.plantMetric}>
+      <Text style={styles.plantMetricValue}>{value}</Text>
+      <Text style={styles.plantMetricLabel}>{label}</Text>
+    </View>
+  );
+}
+
 function Legend({ color, label }: { color: string; label: string }) {
   return (
     <View style={styles.legendItem}>
@@ -156,6 +191,31 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   summaryText: { color: colors.muted, fontFamily: roundedFont, fontSize: 15, lineHeight: 23, fontWeight: "600" },
+  plantCard: {
+    minHeight: 158,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.accentPale,
+    backgroundColor: "#f2f9f3",
+    padding: 18,
+  },
+  plantCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  plantCardSubtitle: { color: colors.muted, fontFamily: roundedFont, fontSize: 12, fontWeight: "600", marginTop: 4 },
+  plantedBadge: { alignItems: "flex-end" },
+  plantedBadgeValue: { color: colors.accent, fontFamily: roundedFont, fontSize: 22, fontWeight: "900" },
+  plantedBadgeLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
+  plantMetrics: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    marginTop: 17,
+    paddingVertical: 12,
+  },
+  plantMetric: { flex: 1, alignItems: "center", gap: 3 },
+  plantMetricValue: { color: colors.text, fontFamily: roundedFont, fontSize: 19, fontWeight: "900" },
+  plantMetricLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
+  metricDivider: { width: 1, height: 32, backgroundColor: colors.border },
   chartCard: {
     minHeight: 268,
     borderRadius: 22,

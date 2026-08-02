@@ -65,6 +65,8 @@ export function ScheduleScreen() {
   }, []);
 
   useEffect(() => {
+    // Initial hydration is intentionally owned by this mount effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

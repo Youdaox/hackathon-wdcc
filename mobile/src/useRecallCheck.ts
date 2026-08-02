@@ -38,6 +38,8 @@ export function useRecallCheck(params: {
     if (!running) {
       threshold.current = null;
       fired.current = false;
+      // Resetting is the deliberate response to the external session ending.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ status: "idle" });
       return;
     }
