@@ -3,6 +3,7 @@ import type { Companion, StudySpot } from "../api";
 import type { SpotMatch } from "../location";
 import type { FocusState } from "../useFocusSession";
 import { CompanionCard } from "../components/CompanionCard";
+import { RecallCheck } from "../components/RecallCheck";
 import { FocusPanel } from "../components/FocusPanel";
 import { LocationCard } from "../components/LocationCard";
 import { colors, roundedFont } from "../theme";
@@ -15,6 +16,14 @@ type HomeScreenProps = {
   state: FocusState;
   multiplier: number;
   busy: boolean;
+  pledge: number;
+  recall: {
+    state: import("../useRecallCheck").RecallState;
+    answer: (index: number) => void;
+    dismiss: () => void;
+  };
+  onCustomise: (patch: { color?: import("../api").PigColor; accessory?: import("../api").PigAccessory }) => void;
+  onPledgeChange: (minutes: number) => void;
   notice: string | null;
   refreshing: boolean;
   onRefresh: () => void;
@@ -46,11 +55,11 @@ export function HomeScreen(props: HomeScreenProps) {
         </View>
         <View style={styles.badge}>
           <View style={styles.badgeDot} />
-          <Text style={styles.badgeText}>Rare Sprout</Text>
+          <Text style={styles.badgeText}>Rare Coat</Text>
         </View>
       </View>
 
-      <CompanionCard companion={props.companion} />
+      <CompanionCard companion={props.companion} onCustomise={props.onCustomise} />
 
       <View style={styles.metricRow}>
         <MetricCard value={focusedMinutes} unit="min" label="Focused today" />
@@ -64,10 +73,18 @@ export function HomeScreen(props: HomeScreenProps) {
         onCheckIn={props.onCheckIn}
       />
 
+      <RecallCheck
+        state={props.recall.state}
+        onAnswer={props.recall.answer}
+        onDismiss={props.recall.dismiss}
+      />
+
       <FocusPanel
         state={props.state}
         multiplier={props.multiplier}
         busy={props.busy}
+        pledge={props.pledge}
+        onPledgeChange={props.onPledgeChange}
         onStart={props.onStart}
         onStop={props.onStop}
       />

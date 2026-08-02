@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const user = await registerUser(result.username, result.password);
     const session = await createSession(user.id);
-    const response = NextResponse.json({ user }, { status: 201 });
+    const response = NextResponse.json({ user, token: session.token }, { status: 201 });
     response.cookies.set({ name: "incline_session", value: session.token, path: "/", httpOnly: true, sameSite: "lax", expires: session.expiresAt, secure: process.env.NODE_ENV === "production" });
     return response;
   } catch (error) {

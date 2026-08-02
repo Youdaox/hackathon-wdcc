@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { companions, distractionEvents, sessions, studySpots } from "@/lib/db/schema";
 import { applySession, uid } from "@/lib/companion";
 import { ensureCompanion } from "@/lib/api/users";
+import { requireUserId } from "@/lib/api/identity";
 import {
+  evaluatePledge,
   parseSessionRequest,
   toWebDistraction,
   type SessionResponse,
@@ -37,8 +39,13 @@ export async function POST(request: Request) {
   }
   const req = parsed.value;
 
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  }
+
   try {
-    const companion = await ensureCompanion(req.user_id);
+    const companion = await ensureCompanion(userId);
 
     // The client reports *where* it was; the server decides what that is
     // worth. A device claiming "General Library" cannot invent a multiplier.
@@ -52,10 +59,24 @@ export async function POST(request: Request) {
       if (spot) xpMultiplier = spot.multiplier;
     }
 
+    // A broken pledge forfeits the XP but keeps the HP consequences: the
+    // session still happened, it just earned nothing. Zeroing focused time
+    // rather than the result means levels can't creep up on a forfeit.
+    const pledge = evaluatePledge(
+      req.committed_minutes ?? 0,
+      (Date.parse(req.end_time) - Date.parse(req.start_time)) / 60_000,
+      req.distraction_events,
+    );
+
     const distractions = req.distraction_events.map(toWebDistraction);
     const result = applySession(
       companion,
-      { focusedMs: req.verified_minutes * 60_000, distractions },
+      {
+        focusedMs: pledge.voided ? 0 : req.verified_minutes * 60_000,
+        distractions,
+        // Flat, and forfeited along with everything else on a broken pledge.
+        bonusXp: pledge.voided ? 0 : (req.bonus_xp ?? 0),
+      },
       xpMultiplier,
     );
 
@@ -68,7 +89,7 @@ export async function POST(request: Request) {
       await tx.insert(sessions)
         .values({
           id: sessionId,
-          userId: req.user_id,
+          userId: userId,
           startTime: Date.parse(req.start_time),
           endTime: Date.parse(req.end_time),
           verifiedMinutes: req.verified_minutes,
@@ -78,6 +99,8 @@ export async function POST(request: Request) {
           xpEarned: result.xpEarned,
           hpDelta: result.hpDelta,
           xpMultiplier,
+          committedMinutes: req.committed_minutes ?? 0,
+          voided: pledge.voided,
           createdAt: now,
         })
         ;
@@ -86,12 +109,14 @@ export async function POST(request: Request) {
         await tx.insert(distractionEvents)
           .values({
             id: uid(),
-            userId: req.user_id,
+            userId: userId,
             sessionId,
-            appIdentifier: event.app_identifier,
             timestamp: Date.parse(event.timestamp),
             durationSeconds: event.duration_seconds,
-            bypassed: event.bypassed,
+            appIdentifier: event.app_identifier ?? null,
+            bypassed: event.bypassed === true,
+            reason: event.reason ?? null,
+            guessedSeconds: event.guessed_seconds ?? null,
             createdAt: now,
           })
           ;
@@ -101,13 +126,15 @@ export async function POST(request: Request) {
       // caused it must land together or not at all.
       await tx.update(companions)
         .set(result.companion)
-        .where(eq(companions.userId, req.user_id))
+        .where(eq(companions.userId, userId))
         ;
     });
 
     return NextResponse.json<SessionResponse>({
       session_id: sessionId,
       pet_growth_delta: result.xpEarned,
+      voided: pledge.voided,
+      void_reason: pledge.reason,
       companion: result.companion,
     });
   } catch (error) {

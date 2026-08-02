@@ -3,7 +3,7 @@ import type { Companion } from "@/lib/types";
 import { RULES } from "@/lib/companion";
 
 /**
- * The wire contract the Android and iOS clients speak.
+ * The wire contract the iOS client speaks.
  *
  * Two conversions live here, and both are load-bearing:
  *
@@ -11,8 +11,8 @@ import { RULES } from "@/lib/companion";
  *    internal model uses epoch milliseconds. Converting at the boundary keeps
  *    `applySession()` untouched.
  *
- * 2. **Distraction semantics.** The mobile clients report a *restricted app
- *    being opened*; the web app reports *the tab being hidden*. Same word,
+ * 2. **Distraction semantics.** The iOS app reports *the app being
+ *    backgrounded*; the web app reports *the tab being hidden*. Same idea,
  *    different events. `toWebDistraction()` is the one place that reconciles
  *    them, so the growth rules only ever see one shape.
  *
@@ -22,38 +22,109 @@ import { RULES } from "@/lib/companion";
 
 export type Platform = "android" | "ios" | "web";
 
+/**
+ * Why the user left, as reported by the return check-in.
+ *
+ * The consequences differ on purpose — the point is to tell a real
+ * interruption apart from a drift, which duration alone cannot do.
+ */
+export type AwayReason = "emergency" | "task" | "offline" | "distraction" | "ended";
+
+export const AWAY_REASONS: AwayReason[] = [
+  "emergency",
+  "task",
+  "offline",
+  "distraction",
+  "ended",
+];
+
+/**
+ * Whether a pledged session was broken, and why.
+ *
+ * Measured against **wall-clock** time, not verified focus. That difference
+ * matters: a locked phone reads identically to an app-switch through
+ * AppState, so scoring the pledge on screen time would fail anyone who put
+ * the phone down and studied on paper — the exact behaviour the app should
+ * reward. Elapsed time is the promise; focused time is what earns XP.
+ *
+ * So a pledge breaks two ways, both of them choices the user made:
+ *   - stopping before the time is up
+ *   - admitting, at the check-in, that they were off being distracted
+ *
+ * Being away for an emergency, a task, or with the screen off does not break
+ * it. Computed server-side so a client can't quietly forgive itself.
+ */
+export function evaluatePledge(
+  committedMinutes: number,
+  elapsedMinutes: number,
+  events: WireDistractionEvent[],
+): { voided: boolean; reason: "left-early" | "distracted" | null } {
+  if (committedMinutes <= 0) return { voided: false, reason: null };
+  // A small tolerance: a pledge shouldn't fail because a tap landed a second
+  // early on a timer the user can't control to the millisecond.
+  if (elapsedMinutes + 0.5 < committedMinutes) {
+    return { voided: true, reason: "left-early" };
+  }
+  if (events.some((e) => e.reason === "distraction")) {
+    return { voided: true, reason: "distracted" };
+  }
+  return { voided: false, reason: null };
+}
+
+/** Only a self-reported distraction costs HP. */
+export function isPenalisedReason(reason: AwayReason | null): boolean {
+  return reason === "distraction";
+}
+
 export interface WireDistractionEvent {
-  /** Android package name. Null on iOS — Apple never tells us which app. */
-  app_identifier: string | null;
   timestamp: string;
   duration_seconds: number;
-  bypassed: boolean;
+  /** User-supplied app label from a Shortcuts intercept. Null otherwise. */
+  app_label?: string | null;
+  /** Android package name from the blocker. Null on iOS. */
+  app_identifier?: string | null;
+  /** True when the user pushed past the intercept screen. */
+  bypassed?: boolean;
+  /** Null when the stretch was too short to ask about. */
+  reason?: AwayReason | null;
+  /** What the user guessed before seeing the real number. */
+  guessed_seconds?: number | null;
 }
 
 export interface SessionRequest {
-  user_id: string;
   start_time: string;
   end_time: string;
   verified_minutes: number;
   location_verified: boolean;
   location_name: string | null;
   platform: Platform;
+  /** Minutes pledged up front, or 0 for an open-ended session. */
+  committed_minutes?: number;
+  /** Flat XP from a correct recall check. Never scaled by the location bonus. */
+  bonus_xp?: number;
   distraction_events: WireDistractionEvent[];
 }
 
 export interface SessionResponse {
   session_id: string;
   pet_growth_delta: number;
+  /** True when a pledge was broken and the session earned nothing. */
+  voided: boolean;
+  /** Why it was voided, for the UI to say something specific. */
+  void_reason: "left-early" | "distracted" | null;
+  /** The grown companion, so a client doesn't need a second round trip. */
   companion: Companion;
 }
 
 export interface DistractionEventRequest {
-  user_id: string;
   session_id: string | null;
-  app_identifier: string | null;
   timestamp: string;
   duration_seconds: number;
+  app_label: string | null;
+  app_identifier: string | null;
   bypassed: boolean;
+  reason: AwayReason | null;
+  guessed_seconds: number | null;
 }
 
 /** Result of validating an untrusted body: either a value or a reason. */
@@ -96,31 +167,65 @@ function parseWireDistraction(raw: unknown, index: number): Parsed<WireDistracti
       error: `distraction_events[${index}].duration_seconds must be a number >= 0`,
     };
   }
-  if (typeof e.bypassed !== "boolean") {
+  let appIdentifier: string | null = null;
+  if (e.app_identifier !== undefined && e.app_identifier !== null) {
+    if (typeof e.app_identifier !== "string") {
+      return {
+        ok: false,
+        error: `distraction_events[${index}].app_identifier must be a string or null`,
+      };
+    }
+    appIdentifier = e.app_identifier;
+  }
+
+  let appLabel: string | null = null;
+  if (e.app_label !== undefined && e.app_label !== null) {
+    if (typeof e.app_label !== "string") {
+      return { ok: false, error: `distraction_events[${index}].app_label must be a string or null` };
+    }
+    // Free text straight from a user's Shortcut — clamp it so a pathological
+    // label can't bloat a row or the recap UI.
+    appLabel = e.app_label.slice(0, 60);
+  }
+
+  if (e.bypassed !== undefined && typeof e.bypassed !== "boolean") {
     return { ok: false, error: `distraction_events[${index}].bypassed must be a boolean` };
   }
-  // Absent and explicitly null both mean "not knowable" — that's the normal
-  // iOS case, not a client bug.
-  const appIdentifier =
-    e.app_identifier === undefined || e.app_identifier === null
-      ? null
-      : typeof e.app_identifier === "string"
-        ? e.app_identifier
-        : undefined;
-  if (appIdentifier === undefined) {
-    return {
-      ok: false,
-      error: `distraction_events[${index}].app_identifier must be a string or null`,
-    };
+
+  // Absent and null both mean "nobody was asked" — the normal case for a
+  // stretch below the check-in threshold, not a client bug.
+  let reason: AwayReason | null = null;
+  if (e.reason !== undefined && e.reason !== null) {
+    if (typeof e.reason !== "string" || !AWAY_REASONS.includes(e.reason as AwayReason)) {
+      return {
+        ok: false,
+        error: `distraction_events[${index}].reason must be one of ${AWAY_REASONS.join(", ")}`,
+      };
+    }
+    reason = e.reason as AwayReason;
+  }
+
+  let guessedSeconds: number | null = null;
+  if (e.guessed_seconds !== undefined && e.guessed_seconds !== null) {
+    if (!isFiniteNumber(e.guessed_seconds) || e.guessed_seconds < 0) {
+      return {
+        ok: false,
+        error: `distraction_events[${index}].guessed_seconds must be a number >= 0`,
+      };
+    }
+    guessedSeconds = e.guessed_seconds;
   }
 
   return {
     ok: true,
     value: {
-      app_identifier: appIdentifier,
       timestamp: isoFrom(timestamp),
       duration_seconds: e.duration_seconds,
-      bypassed: e.bypassed,
+      app_label: appLabel,
+      app_identifier: appIdentifier,
+      bypassed: e.bypassed === true,
+      reason,
+      guessed_seconds: guessedSeconds,
     },
   };
 }
@@ -131,9 +236,8 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
   }
   const b = raw as Record<string, unknown>;
 
-  if (!isNonEmptyString(b.user_id)) {
-    return { ok: false, error: "user_id is required" };
-  }
+  // No user_id: the session cookie identifies the caller. Accepting one from
+  // the body would let any client write to any account.
   const startTime = parseIso(b.start_time);
   if (startTime === null) return { ok: false, error: "start_time must be ISO8601" };
   const endTime = parseIso(b.end_time);
@@ -168,6 +272,20 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
   if (!isNonEmptyString(b.platform) || !PLATFORMS.includes(b.platform as Platform)) {
     return { ok: false, error: `platform must be one of ${PLATFORMS.join(", ")}` };
   }
+  let committedMinutes = 0;
+  if (b.committed_minutes !== undefined && b.committed_minutes !== null) {
+    if (!isFiniteNumber(b.committed_minutes) || b.committed_minutes < 0) {
+      return { ok: false, error: "committed_minutes must be a number >= 0" };
+    }
+    committedMinutes = b.committed_minutes;
+  }
+  let bonusXp = 0;
+  if (b.bonus_xp !== undefined && b.bonus_xp !== null) {
+    if (!isFiniteNumber(b.bonus_xp) || b.bonus_xp < 0 || b.bonus_xp > 100) {
+      return { ok: false, error: "bonus_xp must be a number between 0 and 100" };
+    }
+    bonusXp = b.bonus_xp;
+  }
 
   const rawEvents = b.distraction_events ?? [];
   if (!Array.isArray(rawEvents)) {
@@ -183,13 +301,14 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
   return {
     ok: true,
     value: {
-      user_id: b.user_id,
       start_time: isoFrom(startTime),
       end_time: isoFrom(endTime),
       verified_minutes: b.verified_minutes,
       location_verified: b.location_verified,
       location_name: locationName,
       platform: b.platform as Platform,
+      committed_minutes: committedMinutes,
+      bonus_xp: bonusXp,
       distraction_events: events,
     },
   };
@@ -201,14 +320,16 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
   }
   const b = raw as Record<string, unknown>;
 
-  if (!isNonEmptyString(b.user_id)) return { ok: false, error: "user_id is required" };
 
   const event = parseWireDistraction(
     {
-      app_identifier: b.app_identifier ?? null,
       timestamp: b.timestamp,
       duration_seconds: b.duration_seconds,
-      bypassed: b.bypassed,
+      app_label: b.app_label ?? null,
+      app_identifier: b.app_identifier ?? null,
+      bypassed: b.bypassed ?? false,
+      reason: b.reason ?? null,
+      guessed_seconds: b.guessed_seconds ?? null,
     },
     0,
   );
@@ -227,34 +348,39 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
   return {
     ok: true,
     value: {
-      user_id: b.user_id,
       session_id: sessionId,
-      app_identifier: event.value.app_identifier,
       timestamp: event.value.timestamp,
       duration_seconds: event.value.duration_seconds,
-      bypassed: event.value.bypassed,
+      app_label: event.value.app_label ?? null,
+      app_identifier: event.value.app_identifier ?? null,
+      bypassed: event.value.bypassed === true,
+      reason: event.value.reason ?? null,
+      guessed_seconds: event.value.guessed_seconds ?? null,
     },
   };
 }
 
 /**
- * Maps a mobile distraction onto the shape the growth rules expect.
+ * Maps a wire distraction onto the shape the growth rules expect.
  *
  * The `penalized` rule is a game-balance decision, not a mechanical one:
  *
- * - **Bypassing always counts.** You saw the block screen and pushed through
- *   anyway. That is the clearest possible signal of a broken focus session.
- * - **Long opens count even without a bypass.** Without this, iOS would be
- *   strictly easier than Android — Apple owns the shield screen, so an iOS
- *   user *cannot* press bypass and would never be penalised at all.
- * - **Short bounces are forgiven**, matching the web app's grace window for
- *   accidental tab switches.
+ * - **A stated reason always wins.** Someone who stepped out for an emergency
+ *   should not lose HP for it, and the whole point of asking is that the
+ *   answer changes the outcome — otherwise it's a guilt prompt, not a
+ *   diagnostic.
+ * - **Unexplained stretches fall back to duration**, forgiving anything inside
+ *   the grace window so an accidental app-switch isn't punished.
  */
 export function toWebDistraction(event: WireDistractionEvent): WebDistractionEvent {
   const durationMs = event.duration_seconds * 1000;
-  return {
-    startedAt: Date.parse(event.timestamp),
-    durationMs,
-    penalized: event.bypassed || durationMs >= RULES.graceMs,
-  };
+  const reason = event.reason ?? null;
+
+  // A stated reason overrides everything. Someone who stepped out for an
+  // emergency should not lose HP for it, and the whole point of asking is that
+  // the answer changes the outcome — otherwise it's a guilt prompt, not a
+  // diagnostic.
+  const penalized = reason !== null ? isPenalisedReason(reason) : durationMs >= RULES.graceMs;
+
+  return { startedAt: Date.parse(event.timestamp), durationMs, penalized };
 }

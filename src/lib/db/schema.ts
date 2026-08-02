@@ -141,6 +141,10 @@ export const sessions = pgTable(
     xpEarned: integer("xp_earned").notNull(),
     hpDelta: integer("hp_delta").notNull(),
     xpMultiplier: doublePrecision("xp_multiplier").notNull(),
+    /** Minutes pledged before starting, or 0 for an open session. */
+    committedMinutes: doublePrecision("committed_minutes").notNull().default(0),
+    /** True when a pledge was broken — the session happened but earned nothing. */
+    voided: boolean("voided").notNull().default(false),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("sessions_user_idx").on(table.userId, table.endTime)],
@@ -244,6 +248,21 @@ export const distractionEvents = pgTable(
     timestamp: bigint("timestamp", { mode: "number" }).notNull(),
     durationSeconds: doublePrecision("duration_seconds").notNull(),
     bypassed: boolean("bypassed").notNull(),
+    /**
+     * Why the user says they left, from the return check-in. Null when the
+     * stretch was too short to be worth asking about.
+     *
+     * The diagnostic half of the mechanic: "emergency" eight times in a week
+     * is a pattern worth showing someone, and duration alone can't reveal it.
+     */
+    reason: text("reason", {
+      enum: ["emergency", "task", "offline", "distraction", "ended"],
+    }),
+    /**
+     * What the user guessed the stretch was, before being shown the real
+     * number. Kept because the gap between guess and actual is the signal.
+     */
+    guessedSeconds: doublePrecision("guessed_seconds"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
@@ -290,4 +309,32 @@ export const studySpots = pgTable(
       .default(sql`(extract(epoch from now()) * 1000)::bigint`),
   },
   (table) => [index("study_spots_user_idx").on(table.userId)],
+);
+
+/**
+ * Weekly recurring study blocks.
+ *
+ * The web keeps these in localStorage; this table exists so the phone has
+ * something to read, and so a block created on either device shows up on both.
+ * Times are minutes-from-midnight and `days` is a comma-separated 0-6 list,
+ * matching the `StudyBlock` shape the rest of the app already uses.
+ */
+export const studyBlocks = pgTable(
+  "study_blocks",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    course: text("course").notNull(),
+    startMin: integer("start_min").notNull(),
+    endMin: integer("end_min").notNull(),
+    /** e.g. "1,3,5" for Mon/Wed/Fri. */
+    days: text("days").notNull(),
+    source: text("source", { enum: ["manual", "canvas"] }).notNull().default("manual"),
+    externalId: text("external_id"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (table) => [index("study_blocks_user_idx").on(table.userId)],
 );

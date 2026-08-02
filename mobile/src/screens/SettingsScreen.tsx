@@ -1,146 +1,212 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, roundedFont } from "../theme";
+import type { Companion } from "../api";
+import { CHECKPOINT_MIN_MS, GRACE_MS } from "../config";
+import { PIG_ACCESSORIES, PIG_COLORS } from "../components/Pig";
+import { radius, roundedFont, useTheme } from "../theme";
 
-const APPS = [
-  { name: "Instagram", color: "#f5d2bd" },
-  { name: "TikTok", color: "#dcc9af" },
-  { name: "YouTube", color: "#efc1ba" },
-  { name: "X / Twitter", color: "#c7d4df" },
-  { name: "Reddit", color: "#dfc1c1" },
-  { name: "Snapchat", color: "#f1e3b9" },
-  { name: "Netflix", color: "#cfbade" },
-  { name: "Discord", color: "#bfcbe0" },
-];
-
+/**
+ * Settings: the things a user can actually change, plus a plain account of how
+ * focus is measured.
+ *
+ * The honesty section isn't filler. The whole mechanic depends on trusting the
+ * numbers, and someone who doesn't know what's being measured has no reason to
+ * answer the check-in truthfully.
+ */
 export function SettingsScreen({
-  enabled,
-  onToggle,
+  companion,
+  onRename,
+  onCustomise,
+  account,
+  onSignOut,
 }: {
-  enabled: Record<string, boolean>;
-  onToggle: (appName: string, value: boolean) => void;
+  companion: Companion | null;
+  onRename: (name: string) => void;
+  onCustomise: (patch: { color?: Companion["color"]; accessory?: Companion["accessory"] }) => void;
+  account: { displayName: string } | null;
+  onSignOut: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const filtered = useMemo(
-    () => APPS.filter((app) => app.name.toLowerCase().includes(query.trim().toLowerCase())),
-    [query],
-  );
+  const { colors: c } = useTheme();
+  const [name, setName] = useState("");
+
+  // Seed the field once the companion arrives, without clobbering whatever the
+  // user is part-way through typing.
+  useEffect(() => {
+    // Sync once when the asynchronously loaded companion name arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (companion?.name && name === "") setName(companion.name);
+  }, [companion?.name, name]);
+
+  const renameDisabled = !name.trim() || name.trim() === companion?.name;
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.pageTitle}>Restricted apps</Text>
-      <Text style={styles.subtitle}>Blocked apps show the check-in overlay if opened mid-session.</Text>
+    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={[styles.pageTitle, { color: c.ink }]}>Settings</Text>
 
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search apps"
-        placeholderTextColor={colors.nav}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-        style={styles.search}
-      />
+      <Card title="Your companion">
+        <Text style={[styles.label, { color: c.faint }]}>NAME</Text>
+        <View style={styles.nameRow}>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            onSubmitEditing={() => !renameDisabled && onRename(name.trim())}
+            returnKeyType="done"
+            maxLength={24}
+            placeholder="Oinky"
+            placeholderTextColor={c.faint}
+            style={[styles.input, { borderColor: c.line, backgroundColor: c.surface, color: c.ink }]}
+          />
+          <Pressable
+            onPress={() => !renameDisabled && onRename(name.trim())}
+            disabled={renameDisabled}
+            style={({ pressed }) => [
+              styles.saveButton,
+              { backgroundColor: c.moss },
+              (pressed || renameDisabled) && styles.dim,
+            ]}
+          >
+            <Text style={[styles.saveText, { color: c.surface }]}>Save</Text>
+          </Pressable>
+        </View>
 
-      <View style={styles.list}>
-        {filtered.map((app, index) => (
-          <View key={app.name} style={[styles.row, index < filtered.length - 1 && styles.divider]}>
-            <View style={[styles.appIcon, { backgroundColor: app.color }]} />
-            <Text style={styles.appName}>{app.name}</Text>
-            <AppToggle
-              value={Boolean(enabled[app.name])}
-              onValueChange={(value) => onToggle(app.name, value)}
+        <Text style={[styles.label, { color: c.faint, marginTop: 16 }]}>COAT</Text>
+        <View style={styles.row}>
+          {PIG_COLORS.map((option) => (
+            <Pressable
+              key={option.value}
+              accessibilityLabel={`${option.label} coat`}
+              onPress={() => onCustomise({ color: option.value })}
+              style={({ pressed }) => [
+                styles.swatch,
+                { backgroundColor: option.swatch, borderColor: c.line },
+                companion?.color === option.value && { borderColor: c.ink, borderWidth: 3 },
+                pressed && styles.dim,
+              ]}
             />
-          </View>
-        ))}
-        {filtered.length === 0 && <Text style={styles.empty}>No apps found.</Text>}
-      </View>
+          ))}
+        </View>
+
+        <Text style={[styles.label, { color: c.faint, marginTop: 16 }]}>ACCESSORY</Text>
+        <View style={styles.row}>
+          {PIG_ACCESSORIES.map((option) => (
+            <Pressable
+              key={option.value}
+              onPress={() => onCustomise({ accessory: option.value })}
+              style={({ pressed }) => [
+                styles.chip,
+                { borderColor: c.line, backgroundColor: c.surface2 },
+                companion?.accessory === option.value && {
+                  backgroundColor: c.moss,
+                  borderColor: c.moss,
+                },
+                pressed && styles.dim,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: companion?.accessory === option.value ? c.surface : c.muted },
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </Card>
+
+      <Card title="How focus is measured">
+        <Text style={[styles.body, { color: c.muted }]}>
+          Time counts only while Incline is the app on screen. Leave, and the clock keeps running
+          but stops earning — the same rule the web version applies to a hidden tab.
+        </Text>
+        <Text style={[styles.body, { color: c.muted }]}>
+          Away for more than {Math.round(CHECKPOINT_MIN_MS / 1000)}s and your companion asks about
+          it when you return. Anything under {Math.round(GRACE_MS / 1000)}s is forgiven outright.
+        </Text>
+        <Text style={[styles.body, { color: c.muted }]}>
+          Only &ldquo;I got distracted&rdquo; costs HP. Urgent things, task-switching and studying
+          off-screen cost nothing — otherwise answering honestly would be pointless.
+        </Text>
+      </Card>
+
+      <Card title="Pledges">
+        <Text style={[styles.body, { color: c.muted }]}>
+          Commit to a length before starting and the session carries stakes: stop before the time
+          is up, or admit you were distracted, and it earns nothing.
+        </Text>
+        <Text style={[styles.body, { color: c.muted }]}>
+          Pledges run on the clock, not your screen — putting the phone down and studying on paper
+          still counts.
+        </Text>
+      </Card>
+
+      {account && (
+        <Card title="Account">
+          <Text style={[styles.body, { color: c.muted }]}>
+            Signed in as{" "}
+            <Text style={{ color: c.ink, fontWeight: "800" }}>{account.displayName}</Text>. Your
+            companion is shared with the desktop app.
+          </Text>
+          <Pressable
+            onPress={onSignOut}
+            style={({ pressed }) => [styles.signOut, { borderColor: c.line }, pressed && styles.dim]}
+          >
+            <Text style={[styles.signOutText, { color: c.clay }]}>Sign out</Text>
+          </Pressable>
+        </Card>
+      )}
     </ScrollView>
   );
 }
 
-function AppToggle({ value, onValueChange }: { value: boolean; onValueChange: (value: boolean) => void }) {
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  const { colors: c } = useTheme();
   return (
-    <View style={styles.toggleSlot}>
-      <Pressable
-        accessibilityRole="switch"
-        accessibilityState={{ checked: value }}
-        accessibilityLabel={value ? "Restricted" : "Not restricted"}
-        onPress={() => onValueChange(!value)}
-        style={({ pressed }) => [
-          styles.toggle,
-          value && styles.toggleOn,
-          pressed && styles.togglePressed,
-        ]}
-      >
-        <View style={[styles.toggleThumb, value && styles.toggleThumbOn]} />
-      </Pressable>
+    <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.line }]}>
+      <Text style={[styles.cardTitle, { color: c.ink }]}>{title}</Text>
+      {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 34 },
-  pageTitle: { color: colors.text, fontFamily: roundedFont, fontSize: 28, fontWeight: "900" },
-  subtitle: {
-    color: colors.muted,
-    fontFamily: roundedFont,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "600",
-    marginTop: 10,
-  },
-  search: {
-    height: 52,
-    marginTop: 20,
-    marginBottom: 18,
-    borderRadius: 16,
+  content: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 34, gap: 14 },
+  pageTitle: { fontFamily: roundedFont, fontSize: 28, fontWeight: "900", marginBottom: 4 },
+  card: { borderRadius: radius.card, borderWidth: 1, padding: 18, gap: 8 },
+  cardTitle: { fontFamily: roundedFont, fontSize: 16, fontWeight: "800" },
+  label: { fontFamily: roundedFont, fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  body: { fontFamily: roundedFont, fontSize: 14, lineHeight: 21 },
+  nameRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+  input: {
+    flex: 1,
+    height: 46,
+    borderRadius: radius.control,
     borderWidth: 1,
-    borderColor: "#d9dcdc",
-    backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    color: colors.text,
+    paddingHorizontal: 14,
     fontFamily: roundedFont,
-    fontSize: 17,
-    fontWeight: "600",
+    fontSize: 16,
   },
-  list: {
-    borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  row: { minHeight: 73, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, gap: 14 },
-  divider: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  appIcon: { width: 40, height: 40, borderRadius: 11 },
-  appName: { flex: 1, color: colors.text, fontFamily: roundedFont, fontSize: 17, fontWeight: "800" },
-  toggleSlot: { width: 58, height: 44, alignItems: "center", justifyContent: "center" },
-  toggle: {
-    width: 52,
-    height: 30,
-    borderRadius: 15,
-    padding: 3,
+  saveButton: {
+    height: 46,
+    paddingHorizontal: 20,
+    borderRadius: radius.control,
+    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#e7e0cf",
   },
-  toggleOn: { backgroundColor: colors.accent },
-  togglePressed: { opacity: 0.72 },
-  toggleThumb: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-    shadowColor: "#5b5549",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+  saveText: { fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
+  row: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 1 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  chipText: { fontFamily: roundedFont, fontSize: 13, fontWeight: "700" },
+  signOut: {
+    marginTop: 6,
+    minHeight: 44,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  toggleThumbOn: { alignSelf: "flex-end" },
-  empty: { color: colors.muted, fontFamily: roundedFont, fontSize: 14, textAlign: "center", padding: 28 },
+  signOutText: { fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
+  dim: { opacity: 0.55 },
 });

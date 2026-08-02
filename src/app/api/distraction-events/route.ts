@@ -3,15 +3,16 @@ import { db } from "@/lib/db";
 import { distractionEvents } from "@/lib/db/schema";
 import { uid } from "@/lib/companion";
 import { ensureCompanion } from "@/lib/api/users";
+import { requireUserId } from "@/lib/api/identity";
 import { parseDistractionEventRequest } from "@/lib/api/contract";
 
 /**
  * Logs a single distraction as it happens, mid-session.
  *
  * This exists alongside the `distraction_events` array on POST /api/sessions
- * because the two happen at different times: Android posts here the moment a
- * user taps "5 more minutes" on the block overlay, while the session array is
- * the record written at session end.
+ * because the two happen at different times: the client posts here the moment
+ * the user answers the return check-in, while the session array is the record
+ * written at session end.
  *
  * `session_id` is nullable — a live event is logged before the session row
  * exists. Those rows are backfilled by nothing right now; they are kept for
@@ -32,19 +33,26 @@ export async function POST(request: Request) {
   }
   const req = parsed.value;
 
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  }
+
   try {
-    await ensureCompanion(req.user_id);
+    await ensureCompanion(userId);
 
     const id = uid();
     await db.insert(distractionEvents)
       .values({
         id,
-        userId: req.user_id,
+        userId: userId,
         sessionId: req.session_id,
-        appIdentifier: req.app_identifier,
         timestamp: Date.parse(req.timestamp),
         durationSeconds: req.duration_seconds,
+        appIdentifier: req.app_identifier,
         bypassed: req.bypassed,
+        reason: req.reason,
+        guessedSeconds: req.guessed_seconds,
         createdAt: Date.now(),
       })
       ;
