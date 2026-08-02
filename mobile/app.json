@@ -26,8 +26,7 @@
       }
     },
     "extra": {
-      "//": "Point this at the machine running `pnpm dev` in the repo root. Read at runtime via expo-constants, so changing it is a reload, not a rebuild.",
-      "apiBaseUrl": "http://192.168.1.14:3000"
+      "//": "Leave apiBaseUrl unset in development: the app derives the backend host from the Expo dev server, so it follows the laptop across networks. Set it to point at a deployed backend."
     },
     "plugins": [
       "expo-dev-client",

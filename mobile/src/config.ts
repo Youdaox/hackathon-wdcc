@@ -11,8 +11,32 @@ import Constants from "expo-constants";
  * Native's networking stack rejects untrusted certificates outright with no
  * way to click through the way a browser does.
  */
-export const API_BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ?? "http://localhost:3000";
+/**
+ * Backend base URL.
+ *
+ * Derived from the Expo dev server the app is already talking to, because that
+ * address is correct by construction: the simulator sees `localhost`, a
+ * physical phone sees the LAN IP, and both follow the laptop onto a new
+ * network without anyone editing a config file. Chasing a hardcoded IP through
+ * every wifi change was a recurring source of "can't reach the server".
+ *
+ * `expo.extra.apiBaseUrl` still wins when set, for pointing at a deployed
+ * backend, and is the fallback in a production build where there is no dev
+ * server to infer from.
+ */
+function resolveApiBaseUrl(): string {
+  const configured = Constants.expoConfig?.extra?.apiBaseUrl as string | undefined;
+  if (configured && configured.trim()) return configured.trim();
+
+  // e.g. "172.20.10.154:8081" or "localhost:8081"
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.linkingUri ?? "";
+  const host = hostUri.split("/")[0].split(":")[0];
+  if (host) return `http://${host}:3000`;
+
+  return "http://localhost:3000";
+}
+
+export const API_BASE_URL: string = resolveApiBaseUrl();
 
 /**
  * There is no auth, so identity is just a string both sides agree on. Pinned
