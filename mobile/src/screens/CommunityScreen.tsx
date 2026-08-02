@@ -53,8 +53,10 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
       setReceived(e);
       setSent(s);
       setBalance(b);
-    } catch {
-      setNotice("Couldn't load your community.");
+    } catch (e) {
+      setNotice(
+        e instanceof Error ? `Couldn't load your community — ${e.message}` : "Couldn't load your community.",
+      );
     }
   }, []);
 
@@ -173,11 +175,11 @@ export function CommunityScreen({ leaderboard }: { leaderboard: Leaderboard | nu
             ) : (
               <Pressable
                 onPress={() => onCheer(friend)}
-                disabled={(balance?.available ?? 0) <= 0}
+                disabled={balance !== null && balance.available <= 0}
                 style={({ pressed }) => [
                   styles.cheer,
                   { backgroundColor: c.moss },
-                  (pressed || (balance?.available ?? 0) <= 0) && styles.dim,
+                  (pressed || (balance !== null && balance.available <= 0)) && styles.dim,
                 ]}
               >
                 <Text style={[styles.cheerText, { color: c.surface }]}>Cheer</Text>

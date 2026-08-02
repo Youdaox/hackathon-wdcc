@@ -8,19 +8,21 @@ import { applySession, uid } from "@/lib/companion";
  * What leaving costs. Mirrors `hpCostForAway` in mobile/src/config.ts — the
  * two must agree or the live number contradicts what gets written on sync.
  *
- * Front-loaded on purpose: a flat hit for picking the phone up, a steady drain
- * while away, and a steeper rate past the escalation point, so a five-second
- * glance doesn't feel like a five-minute scroll.
+ * Picking the phone up pauses verified focus immediately, but HP is untouched
+ * until the grace window passes: a five-second glance isn't the behaviour this
+ * is trying to change, and charging for it teaches people to resent the app.
  */
+const HP_GRACE_MS = 5_000;
 const HP_LEAVE_PENALTY = 5;
 const HP_DRAIN_PER_AWAY_MINUTE = 2;
 const HP_ESCALATE_AFTER_MS = 30_000;
 const HP_ESCALATED_MULTIPLIER = 3;
 
 function hpCostForAway(awayMs: number): number {
-  if (awayMs <= 0) return 0;
-  const steady = (Math.min(awayMs, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
-  const overrun = Math.max(0, awayMs - HP_ESCALATE_AFTER_MS);
+  if (awayMs <= HP_GRACE_MS) return 0;
+  const chargeable = awayMs - HP_GRACE_MS;
+  const steady = (Math.min(chargeable, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
+  const overrun = Math.max(0, chargeable - HP_ESCALATE_AFTER_MS);
   return (
     HP_LEAVE_PENALTY +
     steady +

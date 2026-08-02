@@ -68,14 +68,18 @@ export const CHECKPOINT_MIN_MS = 1_000;
 /**
  * What leaving costs.
  *
- * Three parts, deliberately front-loaded: a flat hit the instant you pick the
- * phone up, a steady drain while you're gone, and a steeper rate once you've
- * been away long enough that it isn't a glance any more. The escalation is the
- * point — a five-second check shouldn't feel like a five-minute scroll.
+ * Picking the phone up pauses verified focus immediately — that part is free
+ * and instant. HP is not touched until the grace window passes, because a
+ * five-second glance at a notification isn't the behaviour this is trying to
+ * change, and charging for it teaches people to resent the app.
+ *
+ * Past the grace window the flat penalty lands in full, then a steady drain,
+ * then a steeper rate once it's clearly not a glance any more.
  *
  * Duplicated in `src/app/api/sessions/route.ts`; the two must agree or the
  * live number will contradict what the server writes on sync.
  */
+export const HP_GRACE_MS = 5_000;
 export const HP_LEAVE_PENALTY = 5;
 export const HP_DRAIN_PER_AWAY_MINUTE = 2;
 export const HP_ESCALATE_AFTER_MS = 30_000;
@@ -83,13 +87,17 @@ export const HP_ESCALATED_MULTIPLIER = 3;
 
 /** HP lost for a single away stretch of `awayMs`. */
 export function hpCostForAway(awayMs: number): number {
-  if (awayMs <= 0) return 0;
-  const base = HP_LEAVE_PENALTY;
-  const steady = (Math.min(awayMs, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
-  const overrun = Math.max(0, awayMs - HP_ESCALATE_AFTER_MS);
-  const escalated =
-    (overrun / 60_000) * HP_DRAIN_PER_AWAY_MINUTE * HP_ESCALATED_MULTIPLIER;
-  return base + steady + escalated;
+  if (awayMs <= HP_GRACE_MS) return 0;
+
+  // Charged from the moment grace ends, so the cost curve doesn't jump twice.
+  const chargeable = awayMs - HP_GRACE_MS;
+  const steady = (Math.min(chargeable, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
+  const overrun = Math.max(0, chargeable - HP_ESCALATE_AFTER_MS);
+  return (
+    HP_LEAVE_PENALTY +
+    steady +
+    (overrun / 60_000) * HP_DRAIN_PER_AWAY_MINUTE * HP_ESCALATED_MULTIPLIER
+  );
 }
 
 /**
