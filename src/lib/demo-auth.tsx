@@ -9,6 +9,7 @@ interface DemoAuthValue {
   ready: boolean;
   flashMessage: string | null;
   flashVisible: boolean;
+  dismissFlashMessage: () => void;
   login: (username: string, password: string) => Promise<string | null>;
   register: (username: string, password: string) => Promise<string | null>;
   logout: () => Promise<void>;
@@ -51,6 +52,13 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const dismissFlashMessage = useCallback(() => {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    if (fadeTimerRef.current) window.clearTimeout(fadeTimerRef.current);
+    setFlashVisible(false);
+    fadeTimerRef.current = window.setTimeout(() => setFlashMessage(null), 500);
+  }, []);
+
   const authenticate = useCallback(async (path: string, username: string, password: string) => {
     try {
       const payload = await authRequest(path, { username, password });
@@ -80,7 +88,7 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(null);
   }, []);
 
-  const value = useMemo(() => ({ currentUser, ready, flashMessage, flashVisible, login, register, logout }), [currentUser, ready, flashMessage, flashVisible, login, register, logout]);
+  const value = useMemo(() => ({ currentUser, ready, flashMessage, flashVisible, dismissFlashMessage, login, register, logout }), [currentUser, ready, flashMessage, flashVisible, dismissFlashMessage, login, register, logout]);
   return <DemoAuthContext.Provider value={value}>{children}</DemoAuthContext.Provider>;
 }
 

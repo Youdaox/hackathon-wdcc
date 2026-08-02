@@ -20,7 +20,7 @@ import { DemoLogin } from "@/components/DemoLogin";
 
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
-  const { currentUser, logout, flashMessage, flashVisible } = useDemoAuth();
+  const { currentUser, logout, flashMessage, flashVisible, dismissFlashMessage } = useDemoAuth();
 
   useEffect(() => {
     window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
@@ -32,12 +32,15 @@ export default function Dashboard() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
       {flashMessage !== null && (
-        <div
-          className={`fixed left-1/2 top-5 z-50 -translate-x-1/2 rounded-full border border-moss/30 bg-moss/10 px-7 py-5 text-xl font-semibold text-moss shadow-xl backdrop-blur-sm transition-all duration-500 ease-out ${flashVisible ? "scale-100 opacity-100" : "scale-90 opacity-0"}`}
+        <button
+          type="button"
+          onClick={dismissFlashMessage}
+          className={`fixed left-1/2 top-5 z-50 -translate-x-1/2 rounded-full border border-moss/30 bg-moss/10 px-7 py-5 text-xl font-semibold text-moss shadow-xl backdrop-blur-sm transition-all duration-500 ease-out hover:bg-moss/15 ${flashVisible ? "scale-100 opacity-100" : "scale-90 opacity-0"}`}
           aria-live="polite"
+          aria-label={`Dismiss welcome message: ${flashMessage}`}
         >
           {flashMessage}
-        </div>
+        </button>
       )}
       <header className="mb-10 flex items-center justify-between gap-4">
         <div className="flex items-baseline gap-3">
