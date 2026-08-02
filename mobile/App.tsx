@@ -309,7 +309,15 @@ export default function App() {
           {tab === "ranks" && (
             <RanksScreen leaderboard={leaderboard} refreshing={refreshing} onRefresh={onRefresh} />
           )}
-          {tab === "settings" && <SettingsScreen blocker={blocker} />}
+          {tab === "settings" && (
+            <SettingsScreen
+              blocker={blocker}
+              sessionRunning={state.running}
+              onPreviewIntercept={() =>
+                state.running && setIntercept({ appLabel: "Safari" })
+              }
+            />
+          )}
         </View>
         <SafeAreaView edges={["bottom"]} style={styles.navSafe}>
           <BottomNav active={tab} onChange={setTab} />

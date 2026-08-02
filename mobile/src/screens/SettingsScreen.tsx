@@ -19,7 +19,11 @@ const INTERCEPT_URL = "incline://intercept?app=Instagram";
  */
 export function SettingsScreen({
   blocker,
+  sessionRunning,
+  onPreviewIntercept,
 }: {
+  sessionRunning: boolean;
+  onPreviewIntercept: () => void;
   blocker: {
     supported: boolean;
     ready: boolean;
@@ -179,6 +183,19 @@ export function SettingsScreen({
           Now opening that app during a session throws you straight back here. Change the{" "}
           <Text style={styles.mono}>?app=</Text> part to whatever you want the screen to say.
         </Text>
+        <Pressable
+          onPress={onPreviewIntercept}
+          style={({ pressed }) => [styles.permButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.permButtonText}>
+            {sessionRunning ? "Preview the block screen" : "Start a session to preview"}
+          </Text>
+        </Pressable>
+        <Text style={styles.caveat}>
+          Automations only fire on a real device — the Simulator never runs them — so the button
+          above shows the same screen a real intercept would.
+        </Text>
+
         <Text style={styles.caveat}>
           Honest caveat: this is your automation, not a lock. You can delete it, and Incline never
           learns which app you opened unless the URL tells it. It&apos;s a speed bump you chose to
