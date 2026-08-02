@@ -146,6 +146,78 @@ export const sessions = sqliteTable(
   (table) => [index("sessions_user_idx").on(table.userId, table.endTime)],
 );
 
+/** Ephemeral, consented study context captured during one web focus session. */
+export const studyMemorySessions = sqliteTable(
+  "study_memory_sessions",
+  {
+    id: text("id").primaryKey(),
+    focusSessionId: text("focus_session_id").notNull(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    course: text("course").notNull(),
+    status: text("status", { enum: ["capturing", "ready", "submitted", "failed"] }).notNull(),
+    consentVersion: text("consent_version").notNull(),
+    createdAt: integer("created_at").notNull(),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [
+    uniqueIndex("study_memory_focus_user_unique").on(table.focusSessionId, table.userId),
+    index("study_memory_user_idx").on(table.userId, table.createdAt),
+  ],
+);
+
+export const studyObservations = sqliteTable(
+  "study_observations",
+  {
+    id: text("id").primaryKey(),
+    memorySessionId: text("memory_session_id").notNull().references(() => studyMemorySessions.id, { onDelete: "cascade" }),
+    sourceName: text("source_name").notNull(),
+    capturedAt: integer("captured_at").notNull(),
+    imageHash: text("image_hash").notNull(),
+    extractedText: text("extracted_text").notNull(),
+    summary: text("summary").notNull(),
+    topicsJson: text("topics_json").notNull(),
+    confidence: real("confidence").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("study_observation_hash_unique").on(table.memorySessionId, table.imageHash),
+    index("study_observation_session_idx").on(table.memorySessionId, table.capturedAt),
+  ],
+);
+
+export const studyChunks = sqliteTable(
+  "study_chunks",
+  {
+    id: text("id").primaryKey(),
+    memorySessionId: text("memory_session_id").notNull().references(() => studyMemorySessions.id, { onDelete: "cascade" }),
+    observationId: text("observation_id").notNull().references(() => studyObservations.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    embeddingJson: text("embedding_json").notNull(),
+    embeddingModel: text("embedding_model").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("study_chunks_session_idx").on(table.memorySessionId)],
+);
+
+export const recallChecks = sqliteTable(
+  "recall_checks",
+  {
+    id: text("id").primaryKey(),
+    memorySessionId: text("memory_session_id").notNull().references(() => studyMemorySessions.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    questionsJson: text("questions_json").notNull(),
+    evidenceJson: text("evidence_json").notNull(),
+    status: text("status", { enum: ["ready", "submitted", "skipped"] }).notNull(),
+    score: integer("score"),
+    feedbackJson: text("feedback_json"),
+    xpAwarded: integer("xp_awarded").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    submittedAt: integer("submitted_at"),
+  },
+  (table) => [uniqueIndex("recall_check_memory_unique").on(table.memorySessionId)],
+);
+
 /**
  * One distraction during a session.
  *

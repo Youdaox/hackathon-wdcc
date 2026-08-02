@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { app, BrowserWindow, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require("electron");
 const path = require("node:path");
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
@@ -191,6 +191,32 @@ ipcMain.on("status:ready", (event) => {
 ipcMain.on("status:set", (_event, next) => {
   status = next && typeof next.phase === "string" ? next : { phase: "idle" };
   syncStatusWindow();
+});
+
+// Study Memory deliberately exposes snapshots, not an unrestricted media
+// stream. The authenticated renderer decides when a focus session is active
+// and uploads a short-lived data URL; the main process never writes images.
+ipcMain.handle("study-memory:sources", async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    thumbnailSize: { width: 0, height: 0 },
+    fetchWindowIcons: false,
+  });
+  return sources
+    .filter((source) => !/incline/i.test(source.name))
+    .map((source) => ({ id: source.id, name: source.name }));
+});
+
+ipcMain.handle("study-memory:capture", async (_event, sourceId) => {
+  if (typeof sourceId !== "string" || !/^(screen|window):/.test(sourceId)) return null;
+  const sources = await desktopCapturer.getSources({
+    types: [sourceId.startsWith("screen:") ? "screen" : "window"],
+    thumbnailSize: { width: 1280, height: 720 },
+    fetchWindowIcons: false,
+  });
+  const source = sources.find((candidate) => candidate.id === sourceId);
+  if (!source || /incline/i.test(source.name) || source.thumbnail.isEmpty()) return null;
+  return { sourceName: source.name, imageDataUrl: source.thumbnail.toJPEG(72).toString("base64") };
 });
 
 app.whenReady().then(() => {

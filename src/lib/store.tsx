@@ -27,6 +27,7 @@ import { useDemoAuth } from "./demo-auth";
 import {
   applyIdleDecay,
   applySession,
+  awardBonusXp,
   awayMsPastGrace,
   createCompanion,
   EMOTION_SESSION_MODIFIERS,
@@ -89,6 +90,7 @@ interface InclineContextValue {
   cancelSession: () => void;
   /** Awards flat XP to the running session (correct recall check). */
   addBonusXp: (amount: number) => void;
+  awardRecallXp: (sessionId: string, amount: number) => void;
   outcome: SessionOutcome | null;
   dismissOutcome: () => void;
   resetEverything: () => void;
@@ -430,6 +432,18 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     cancel();
   }, [cancel]);
 
+  const awardRecallXp = useCallback((targetSessionId: string, amount: number) => {
+    const safeAmount = Math.max(0, Math.floor(amount));
+    if (!safeAmount) return;
+    setCompanion((prev) => awardBonusXp(prev, safeAmount));
+    setSessions((all) => all.map((session) => session.id === targetSessionId
+      ? { ...session, bonusXp: session.bonusXp + safeAmount, xpEarned: session.xpEarned + safeAmount }
+      : session));
+    setOutcome((prev) => prev?.session.id === targetSessionId
+      ? { ...prev, session: { ...prev.session, bonusXp: prev.session.bonusXp + safeAmount, xpEarned: prev.session.xpEarned + safeAmount } }
+      : prev);
+  }, []);
+
   // --- Eye tracking ---------------------------------------------------------
   // The camera only ever runs while a session is live, and only if the user
   // asked for it. No session, no webcam — that's the whole privacy promise.
@@ -622,6 +636,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       endSession: end,
       cancelSession,
       addBonusXp,
+      awardRecallXp,
       outcome,
       dismissOutcome: () => setOutcome(null),
       resetEverything,
@@ -664,6 +679,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       end,
       cancelSession,
       addBonusXp,
+      awardRecallXp,
       outcome,
       resetEverything,
       geoEnabled,

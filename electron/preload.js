@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("overlayAPI", {
@@ -20,4 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // The renderer owns the definition of "away" and pushes the derived status up;
   // the main process only relays it to the pill.
   setBackgroundStatus: (status) => ipcRenderer.send("status:set", status),
+  studyMemory: {
+    getSources: () => ipcRenderer.invoke("study-memory:sources"),
+    capture: (sourceId) => ipcRenderer.invoke("study-memory:capture", sourceId),
+  },
 });

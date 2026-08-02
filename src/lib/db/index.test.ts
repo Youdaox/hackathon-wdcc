@@ -23,11 +23,12 @@ test("migrations create the auth tables for a fresh SQLite database", () => {
 
   const tables = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .all()
-    .map((row: { name: string }) => row.name);
+    .all() as Array<{ name: string }>;
+
+  const tableNames = tables.map((row) => row.name);
 
   sqlite.close();
 
-  assert.ok(tables.includes("users"), `Expected users table to exist, got ${JSON.stringify(tables)}`);
-  assert.ok(tables.includes("auth_sessions"), `Expected auth_sessions table to exist, got ${JSON.stringify(tables)}`);
+  assert.ok(tableNames.includes("users"), `Expected users table to exist, got ${JSON.stringify(tableNames)}`);
+  assert.ok(tableNames.includes("auth_sessions"), `Expected auth_sessions table to exist, got ${JSON.stringify(tableNames)}`);
 });
