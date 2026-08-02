@@ -35,7 +35,7 @@ Three collections in `localStorage`, defined in [`src/lib/types.ts`](src/lib/typ
 
 All balance lives in `RULES` in [`src/lib/companion.ts`](src/lib/companion.ts):
 
-- **1 XP** per 30 seconds of verified focused time
+- **1 XP** per 10 verified focused seconds
 - Level *N* costs **30 × N** XP
 - **−8 HP** per distraction, **+0.5 HP** per focused minute
 - Hidden stretches under **5s** cost focus time but not HP (grace for accidental clicks)

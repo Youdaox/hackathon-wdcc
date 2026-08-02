@@ -7,8 +7,10 @@ import { nzDateKey, nzParts } from "./timezone";
  * explained (and tuned) in one place.
  */
 export const RULES = {
-  /** XP per 30 seconds of verified focus. */
-  xpPerFocusedThirtySeconds: 1,
+  /** XP awarded for each completed focused interval. */
+  xpPerFocusedInterval: 1,
+  /** Ten verified focused seconds earn one XP. */
+  xpIntervalMs: 10_000,
   /** XP needed to clear level N. Grows linearly: L1 = 30, L2 = 60, … */
   xpForLevel: (level: number) => 30 * level,
   /**
@@ -190,7 +192,7 @@ export function hpLostForSession(distractions: ReadonlyArray<{
 
 /** XP earned by a session's focused time, before any multiplier. */
 export function xpFromFocusedMs(focusedMs: number): number {
-  return Math.floor(focusedMs / 30_000) * RULES.xpPerFocusedThirtySeconds;
+  return Math.floor(focusedMs / RULES.xpIntervalMs) * RULES.xpPerFocusedInterval;
 }
 
 /** Progress within the current level, for the XP bar. */
