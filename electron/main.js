@@ -220,6 +220,19 @@ ipcMain.handle("overlay:toggle", () => {
   return true;
 });
 
+// Idempotent close — unlike overlay:toggle, this doesn't flip state, it just
+// guarantees the overlay ends up closed. Used on logout (see demo-auth.tsx),
+// which needs to close it as a direct side effect of the logout action
+// itself, not by reacting to a state change after the fact: the dashboard
+// unmounts on logout, so nothing survives to observe that transition.
+ipcMain.on("overlay:close", () => {
+  if (overlayWindow) {
+    overlayWindow.close();
+    overlayWindow = null;
+    stopAppWatch();
+  }
+});
+
 // The overlay page sends this once the pet has walked up to a target app's
 // close button — see closeApp.js for why this runs the real quit command
 // rather than simulating an actual OS-level mouse click.
@@ -243,6 +256,13 @@ ipcMain.on("target-app:reached", (_event, name) => {
 ipcMain.on("overlay:set-ignore-mouse-events", (event, ignore, options) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   win?.setIgnoreMouseEvents(ignore, options);
+});
+
+// Relayed from the dashboard window to whichever overlay window is currently
+// open, so the desktop pet's look/mood stays live-synced with the dashboard
+// instead of only reflecting whatever it was when the overlay last opened.
+ipcMain.on("companion:update", (_event, companion) => {
+  overlayWindow?.webContents.send("companion:update", companion);
 });
 
 // The overlay page sends this once it has actually applied its transparent

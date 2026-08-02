@@ -1,11 +1,14 @@
 import type { BackgroundStatus } from "@/lib/backgroundStatus";
+import type { Companion } from "@/lib/types";
 
 declare global {
   interface Window {
     electronAPI?: {
       isElectron: boolean;
       toggleOverlay: () => Promise<boolean>;
+      closeOverlay: () => void;
       setBackgroundStatus: (status: BackgroundStatus) => void;
+      updateCompanion: (companion: Companion) => void;
       studyMemory: {
         getSources: () => Promise<Array<{ id: string; name: string }>>;
         capture: (sourceId: string) => Promise<{ sourceName: string; imageDataUrl: string } | null>;
@@ -19,6 +22,7 @@ declare global {
       ) => () => void;
       onTargetAppBlur: (handler: (payload: { name: string }) => void) => () => void;
       targetAppReached: (name: string) => void;
+      onCompanionUpdate: (handler: (companion: Companion) => void) => () => void;
     };
     statusAPI?: {
       ready: () => void;
