@@ -6,7 +6,7 @@ import { NEW_ZEALAND_TIME_ZONE } from "@/lib/timezone";
 import type { GradeResult, RecallQuestion } from "./ai";
 import type { StudyMemoryDesktopPhase } from "@/lib/backgroundStatus";
 
-const CAPTURE_INTERVAL_MS = 45_000;
+const CAPTURE_INTERVAL_MS = 10_000;
 const SETTINGS_KEY = "incline.studyMemory.v1";
 const SENSITIVE_TITLE = /password|1password|bitwarden|bank|wallet|login|sign in|messages?|mail|health/i;
 
