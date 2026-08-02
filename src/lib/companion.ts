@@ -1,4 +1,4 @@
-import type { ActiveSession, AvatarEmotion, Companion, Meal, Mood, PigColor } from "./types";
+import type { ActiveSession, AnimalSpecies, AvatarEmotion, Companion, CompanionColor, Meal, Mood } from "./types";
 import { uid } from "./storage";
 
 /**
@@ -99,10 +99,14 @@ export function wellbeingHpLossMultiplier(
   return mealMultiplier * waterMultiplier;
 }
 
-export function createCompanion(name = "Oinky", color: PigColor = "pink"): Companion {
+export function createCompanion(
+  name = "Oinky",
+  color: CompanionColor = "pink",
+  species: AnimalSpecies = "pig",
+): Companion {
   return {
     name,
-    species: "pig",
+    species,
     color,
     accessory: "none",
     checkInEmotion: null,

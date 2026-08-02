@@ -2,7 +2,14 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions, users } from "@/lib/db/schema";
 import { applyIdleDecay, createCompanion } from "@/lib/companion";
-import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type AvatarEmotion, type Companion } from "@/lib/types";
+import {
+  ANIMAL_SPECIES_VALUES,
+  AVATAR_EMOTIONS,
+  COMPANION_COLOR_VALUES_BY_SPECIES,
+  PIG_ACCESSORY_VALUES,
+  type AvatarEmotion,
+  type Companion,
+} from "@/lib/types";
 
 /**
  * Ensures a user and companion row exist, and returns the companion with
@@ -59,15 +66,16 @@ export function ensureCompanion(userId: string): Companion {
   // Rebuilt field-by-field rather than spread, so the row's `userId` column
   // can't leak into the Companion shape the growth rules operate on.
   //
-  // color/accessory are stored as plain text columns, so a row written before
-  // a coat was retired (or by a client with an older enum) needs the same
-  // defensive fallback the web store applies on load.
+  const species = ANIMAL_SPECIES_VALUES.includes(existing.species as Companion["species"])
+    ? (existing.species as Companion["species"])
+    : "pig";
+  const validColors = COMPANION_COLOR_VALUES_BY_SPECIES[species];
   const companion: Companion = {
     name: existing.name,
-    species: existing.species,
-    color: PIG_COLOR_VALUES.includes(existing.color as Companion["color"])
+    species,
+    color: validColors.includes(existing.color as Companion["color"])
       ? (existing.color as Companion["color"])
-      : "pink",
+      : validColors[0],
     accessory: PIG_ACCESSORY_VALUES.includes(existing.accessory as Companion["accessory"])
       ? (existing.accessory as Companion["accessory"])
       : "none",

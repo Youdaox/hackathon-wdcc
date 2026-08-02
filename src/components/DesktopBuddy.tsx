@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useWander } from "@/hooks/useWander";
 import { useIncline } from "@/lib/store";
 import { moodFor } from "@/lib/companion";
-import { Pig } from "@/components/Pig";
+import { AnimalSprite } from "@/components/AnimalSprite";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
 import { closeActivePipWindow, setActivePipWindow } from "@/lib/overlayWindow";
@@ -199,7 +199,8 @@ export function DesktopBuddy() {
                 userSelect: "none",
               }}
             >
-              <Pig
+              <AnimalSprite
+                species={companion.species}
                 mood={moodFor(companion.hp)}
                 level={companion.level}
                 color={companion.color}

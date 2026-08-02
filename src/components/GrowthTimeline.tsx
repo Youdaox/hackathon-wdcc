@@ -1,6 +1,7 @@
 "use client";
 
-import { Pig, stageForLevel, STAGE_LABEL } from "@/components/Pig";
+import { stageForLevel, STAGE_LABEL } from "@/components/Pig";
+import { AnimalSprite } from "@/components/AnimalSprite";
 import { avatarStateFor, levelProgress, moodFor } from "@/lib/companion";
 import { useIncline } from "@/lib/store";
 
@@ -30,7 +31,7 @@ export function GrowthTimeline() {
           return (
             <div key={level} className="flex min-w-0 flex-1 flex-col items-center text-center">
               <div className={`flex h-11 w-11 items-center justify-center rounded-full border ${reached ? "border-moss bg-moss/10" : "border-line bg-surface-2 opacity-55"}`}>
-                <Pig mood={mood} level={level} color={companion.color} accessory={level === companion.level ? companion.accessory : "none"} hp={reached ? companion.hp : 100} emotion={level === companion.level ? companion.checkInEmotion : null} size={40} />
+                <AnimalSprite species={companion.species} mood={mood} level={level} color={companion.color} accessory={level === companion.level ? companion.accessory : "none"} hp={reached ? companion.hp : 100} emotion={level === companion.level ? companion.checkInEmotion : null} size={40} />
               </div>
               <span className="mt-2 text-[10px] font-semibold text-muted">Lv {level}</span>
               <span className="hidden text-[10px] text-faint sm:block">{STAGE_LABEL[stageForLevel(level)]}</span>
