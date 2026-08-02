@@ -6,8 +6,8 @@ import { uid } from "./storage";
  * explained (and tuned) in one place.
  */
 export const RULES = {
-  /** XP per verified focused minute. */
-  xpPerFocusedMinute: 1,
+  /** XP per 30 seconds of verified focus. */
+  xpPerFocusedThirtySeconds: 1,
   /** XP needed to clear level N. Grows linearly: L1 = 30, L2 = 60, … */
   xpForLevel: (level: number) => 30 * level,
   /**
@@ -189,7 +189,7 @@ export function hpLostForSession(distractions: ReadonlyArray<{
 
 /** XP earned by a session's focused time, before any multiplier. */
 export function xpFromFocusedMs(focusedMs: number): number {
-  return Math.floor((focusedMs / 60_000) * RULES.xpPerFocusedMinute);
+  return Math.floor(focusedMs / 30_000) * RULES.xpPerFocusedThirtySeconds;
 }
 
 /** Progress within the current level, for the XP bar. */
