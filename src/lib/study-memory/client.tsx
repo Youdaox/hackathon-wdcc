@@ -27,6 +27,7 @@ interface StudyMemoryContextValue {
   sources: Source[];
   sourceId: string;
   setSourceId: (id: string) => void;
+  refreshSources: () => void;
   state: CaptureState;
   captures: number;
   pause: () => void;
@@ -55,6 +56,17 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
   const activeTitle = active?.title ?? "";
   const activeCourse = active?.course ?? "";
 
+  const refreshSources = useCallback(async () => {
+    try {
+      const items = await window.electronAPI?.studyMemory.getSources();
+      if (!items) return;
+      setSources(items);
+      setSourceIdState((current) => current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? ""));
+    } catch {
+      // The desktop bridge can disappear while Electron is restarting.
+    }
+  }, []);
+
   /* localStorage and Electron sources exist only after hydration. */
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -66,21 +78,34 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
         setSourceIdState(value.sourceId ?? "");
       } catch { /* ignore stale settings */ }
     }
-    void window.electronAPI?.studyMemory.getSources().then((items) => {
-      setSources(items);
-      setSourceIdState((current) => current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? ""));
-    });
-  }, []);
+    void refreshSources();
+  }, [refreshSources]);
 
   const persist = useCallback((nextEnabled: boolean, nextSourceId: string) => {
     window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ enabled: nextEnabled, sourceId: nextSourceId }));
   }, []);
   const setEnabled = useCallback((next: boolean) => {
     setEnabledState(next); persist(next, sourceId);
-  }, [persist, sourceId]);
+    if (next) void refreshSources();
+  }, [persist, refreshSources, sourceId]);
   const setSourceId = useCallback((next: string) => {
     setSourceIdState(next); persist(enabled, next);
   }, [enabled, persist]);
+
+  // Capture sources are operating-system windows, which can open and close
+  // while this dashboard stays mounted. Keep the picker accurate and drop a
+  // selection that has disappeared before the next automatic capture.
+  useEffect(() => {
+    if (!enabled || !window.electronAPI) return;
+    const update = () => void refreshSources();
+    update();
+    window.addEventListener("focus", update);
+    const interval = window.setInterval(update, 5_000);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.clearInterval(interval);
+    };
+  }, [enabled, refreshSources]);
 
   const settleStatus = useCallback((phase: CaptureState, delay = 2_000) => {
     setState(phase);
@@ -195,11 +220,11 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
   }, [outcome]);
 
   const value = useMemo(() => ({
-    enabled, setEnabled, sources, sourceId, setSourceId, state, captures,
+    enabled, setEnabled, sources, sourceId, setSourceId, refreshSources, state, captures,
     available: typeof window !== "undefined" && Boolean(window.electronAPI),
     pause: () => { paused.current = true; setState("paused"); },
     resume: () => { paused.current = false; setState(active ? "capturing" : "off"); },
-  }), [enabled, setEnabled, sources, sourceId, setSourceId, state, captures, active]);
+  }), [enabled, setEnabled, sources, sourceId, setSourceId, refreshSources, state, captures, active]);
 
   return <StudyMemoryContext.Provider value={value}>
     {children}

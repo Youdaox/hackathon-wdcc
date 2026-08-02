@@ -121,19 +121,23 @@ export function FocusPanel() {
 }
 
 function StudyMemoryToggle() {
-  const { available, enabled, setEnabled, sources, sourceId, setSourceId } = useStudyMemory();
+  const { available, enabled, setEnabled, sources, sourceId, setSourceId, refreshSources } = useStudyMemory();
   return (
     <div className="mt-5 border-t border-line-soft pt-5">
       <div className="flex items-start justify-between gap-4">
         <div><div className="text-sm font-semibold">AI Study Memory</div><p className="mt-0.5 max-w-lg text-xs text-muted">With your consent, Incline samples the selected screen only during focus mode, sends useful frames to OpenAI, and deletes each frame immediately after processing.</p></div>
         <Button size="sm" variant={enabled ? "ghost" : "outline"} disabled={!available} onClick={() => setEnabled(!enabled)}>{enabled ? "Turn off" : available ? "Enable" : "Desktop app only"}</Button>
       </div>
-      {enabled && <label className="mt-3 block text-xs font-semibold text-muted">Capture source
-        <select value={sourceId} onChange={(event) => setSourceId(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink">
+      {enabled && <div className="mt-3">
+        <div className="flex items-center justify-between gap-3">
+          <label className="text-xs font-semibold text-muted" htmlFor="capture-source">Capture source</label>
+          <button type="button" onClick={refreshSources} className="text-[11px] font-semibold text-moss hover:text-moss-deep">Refresh windows</button>
+        </div>
+        <select id="capture-source" value={sourceId} onFocus={refreshSources} onChange={(event) => setSourceId(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink">
           {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
         </select>
         <span className="mt-1 block text-[11px] font-normal text-faint">Avoid selecting windows containing messages, passwords, health, banking, or personal records.</span>
-      </label>}
+      </div>}
     </div>
   );
 }
@@ -187,10 +191,6 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const memory = useStudyMemory();
   const away = active.isHidden || active.isGazeAway;
-  const focusRatio =
-    active.focusedMs + active.distractedMs > 0
-      ? active.focusedMs / (active.focusedMs + active.distractedMs)
-      : 1;
   const remainingMs = active.plannedMs ? Math.max(0, active.plannedMs - elapsedMs) : null;
   const penalized = active.distractions.filter((d) => d.penalized).length;
 
@@ -199,6 +199,10 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
   // while still away would be competing with the surfaces that can be seen from
   // outside the page.
   const now = active.startedAt + elapsedMs;
+  const activeAwayIsPenalized = away
+    && active.awaySince !== null
+    && awayMsPastGrace(now - active.awaySince) > 0;
+  const showTimeline = penalized > 0 || activeAwayIsPenalized;
   const recent = active.distractions.at(-1);
   const lastLapse =
     !away && recent && now - (recent.startedAt + recent.durationMs) <= RECEIPT_MS ? recent : null;
@@ -241,6 +245,9 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </div>
       </div>
 
+      {/* Held back until there's something to say — a timeline of the first ten
+          seconds of a session is noise, and "no lapses in the whole 12s" reads
+          as faint praise. */}
       <div className="mt-8 text-center">
         <div className="eyebrow">{remainingMs !== null ? "Time remaining" : "Elapsed"}</div>
         <div
@@ -252,31 +259,7 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </div>
       </div>
 
-      {/* Focused vs distracted, as one continuous bar. */}
-      <div className="mt-8">
-        <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="bg-moss transition-[width] duration-1000 ease-linear"
-            style={{ width: `${focusRatio * 100}%` }}
-          />
-          <div className="flex-1 bg-clay/70" />
-        </div>
-        <div className="mt-3 flex justify-between text-sm">
-          <span className="text-moss">
-            <span className="tabular font-semibold">{formatCompact(active.focusedMs)}</span>{" "}
-            <span className="text-muted">focused</span>
-          </span>
-          <span className="text-clay">
-            <span className="tabular font-semibold">{formatCompact(active.distractedMs)}</span>{" "}
-            <span className="text-muted">away</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Held back until there's something to say — a timeline of the first ten
-          seconds of a session is noise, and "no lapses in the whole 12s" reads
-          as faint praise. */}
-      {(active.distractions.length > 0 || elapsedMs >= 120_000) && (
+      {showTimeline && (
         <div className="mt-7 border-t border-line-soft pt-6">
           <FocusTimeline
             startedAt={active.startedAt}
