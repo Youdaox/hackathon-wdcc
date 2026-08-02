@@ -4,9 +4,10 @@
   "main": "index.ts",
   "private": true,
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --go",
+    "ios": "expo start --go --ios",
+    "start:dev": "expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
