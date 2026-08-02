@@ -102,13 +102,19 @@ export function wellbeingHpLossMultiplier(
   return mealMultiplier * waterMultiplier;
 }
 
+export const DEFAULT_COMPANION_NAME_BY_SPECIES: Record<AnimalSpecies, string> = {
+  pig: "Oinky",
+  cow: "Webster",
+  raccoon: "Sesame",
+};
+
 export function createCompanion(
-  name = "Oinky",
+  name: string | undefined = undefined,
   color: CompanionColor = "pink",
   species: AnimalSpecies = "pig",
 ): Companion {
   return {
-    name,
+    name: name ?? DEFAULT_COMPANION_NAME_BY_SPECIES[species],
     species,
     color,
     accessory: "none",

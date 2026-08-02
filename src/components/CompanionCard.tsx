@@ -100,8 +100,14 @@ export function CompanionCard() {
       </div>
 
       <SpeciesPicker value={companion.species} onChange={setCompanionSpecies} />
-      <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
-      <AccessoryPicker value={companion.accessory} onChange={setCompanionAccessory} />
+      {companion.species === "pig" && (
+        <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
+      )}
+      <AccessoryPicker
+        species={companion.species}
+        value={companion.accessory}
+        onChange={setCompanionAccessory}
+      />
 
       {editing ? (
         <input
@@ -267,19 +273,25 @@ function ColorPicker({
 }
 
 function AccessoryPicker({
+  species,
   value,
   onChange,
 }: {
+  species: AnimalSpecies;
   value: PigAccessory;
   onChange: (accessory: PigAccessory) => void;
 }) {
+  const accessories = species === "pig"
+    ? PIG_ACCESSORIES
+    : PIG_ACCESSORIES.filter((accessory) => accessory.value !== "glasses");
+
   return (
     <div
       className="mt-2 flex flex-wrap items-center justify-center gap-1.5"
       role="group"
       aria-label="Accessory"
     >
-      {PIG_ACCESSORIES.map((a) => (
+      {accessories.map((a) => (
         <button
           key={a.value}
           type="button"

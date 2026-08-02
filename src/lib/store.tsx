@@ -32,6 +32,7 @@ import {
   awardBonusXp,
   awayMsPastGrace,
   createCompanion,
+  DEFAULT_COMPANION_NAME_BY_SPECIES,
   EMOTION_SESSION_MODIFIERS,
   hpLostForAwayMs,
   restoreHp,
@@ -599,13 +600,19 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   const setCompanionSpecies = useCallback((species: AnimalSpecies) => {
     setCompanion((prev) => {
+      if (prev.species === species) return prev;
+
       // Each species has its own coat palette, so a color carried over from
       // the old species (e.g. a pig's "pink") wouldn't resolve to anything —
       // reset to that species' default whenever the current color isn't one
       // of its options.
       const validColors = COMPANION_COLOR_VALUES_BY_SPECIES[species];
       const color = (validColors as string[]).includes(prev.color) ? prev.color : validColors[0];
-      return { ...prev, species, color };
+      const previousDefaultName = DEFAULT_COMPANION_NAME_BY_SPECIES[prev.species];
+      const name = prev.name === previousDefaultName
+        ? DEFAULT_COMPANION_NAME_BY_SPECIES[species]
+        : prev.name;
+      return { ...prev, species, color, name };
     });
   }, []);
 
