@@ -40,8 +40,29 @@
     {
       "idx": 5,
       "version": "6",
-      "when": 1785600000000,
-      "tag": "0005_focus_interruption",
+      "when": 1785573000000,
+      "tag": "0005_wellbeing_care",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785574000000,
+      "tag": "0006_water_prompt_cadence",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785632400000,
+      "tag": "0007_calendar_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1785633000000,
+      "tag": "0008_noisy_zuras",
       "breakpoints": true
     }
   ]

@@ -1,33 +1,22 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "./schema";
 
-/**
- * SQLite connection, shared across route handlers.
- *
- * File-based on purpose: a hackathon venue's wifi is not a dependency we want
- * between a phone and its own pet. Set `INCLINE_DB_PATH` to relocate it.
- *
- * The global cache survives Next's dev-server hot reloads — without it every
- * edit opens another handle to the same file and they eventually collide.
- */
-
-const DB_PATH = process.env.INCLINE_DB_PATH ?? "incline.db";
+/** Shared PostgreSQL connection. DATABASE_URL is server-only. */
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL must be set to use Incline's shared database.");
 
 const globalForDb = globalThis as unknown as {
-  inclineDb?: ReturnType<typeof createDb>;
+  inclineDb?: ReturnType<typeof drizzle>;
+  inclineSql?: ReturnType<typeof postgres>;
 };
 
-function createDb() {
-  const sqlite = new Database(DB_PATH);
-  // WAL lets the seed script and the dev server hold the file at once.
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
-  return drizzle(sqlite, { schema });
+const sql = globalForDb.inclineSql ?? postgres(databaseUrl, { max: 10 });
+export const db = globalForDb.inclineDb ?? drizzle(sql, { schema });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.inclineDb = db;
+  globalForDb.inclineSql = sql;
 }
-
-export const db = globalForDb.inclineDb ?? createDb();
-
-if (process.env.NODE_ENV !== "production") globalForDb.inclineDb = db;
 
 export { schema };

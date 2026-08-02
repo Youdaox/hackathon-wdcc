@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useIncline } from "@/lib/store";
-import { avatarStateFor, MOOD_LABEL, levelProgress, moodFor } from "@/lib/companion";
+import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor, xpFromFocusedMs } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
 import { useNow } from "@/hooks/useNow";
-import { Pig, PIG_ACCESSORIES, PIG_COLORS } from "@/components/Pig";
-import type { AvatarEmotion, Mood, PigAccessory, PigColor } from "@/lib/types";
+import { PIG_ACCESSORIES } from "@/components/Pig";
+import { ANIMAL_SPECIES_OPTIONS, AnimalSprite, COLOR_OPTIONS_BY_SPECIES } from "@/components/AnimalSprite";
+import type { AnimalSpecies, AvatarEmotion, CompanionColor, Mood, PigAccessory } from "@/lib/types";
 
 const CHECK_INS: { emotion: AvatarEmotion; label: string; icon: string }[] = [
   { emotion: "happy", label: "Happy", icon: "☺" },
@@ -37,7 +38,17 @@ const HP_BAR: Record<Mood, string> = {
 };
 
 export function CompanionCard() {
-  const { companion, active, renameCompanion, setCompanionColor, setCompanionAccessory, checkInWithCompanion } =
+  const {
+    companion,
+    active,
+    renameCompanion,
+    setCompanionSpecies,
+    setCompanionColor,
+    setCompanionAccessory,
+    checkInWithCompanion,
+    respondToMealCheck,
+    respondToWaterBreak,
+  } =
     useIncline();
   const [editing, setEditing] = useState(false);
   const now = useNow(30_000);
@@ -45,7 +56,19 @@ export function CompanionCard() {
   const progress = levelProgress(companion);
   const distracted = Boolean(active && (active.isHidden || active.isGazeAway));
   const avatarState = avatarStateFor(companion.hp, companion.checkInEmotion);
-  const checkInDue = companion.nextCheckInAt === null || (now !== null && now.getTime() >= companion.nextCheckInAt);
+  const checkInDue = companion.nextCheckInAt === null
+    || (now !== null && now.getTime() >= companion.nextCheckInAt);
+  const meal = now === null ? null : mealForTime(now);
+  const mealCheckDue = meal !== null && (
+    companion.lastMealAt === null
+    || new Date(companion.lastMealAt).toDateString() !== now?.toDateString()
+    || companion.lastMeal !== meal
+  );
+  const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);
+  const hasPrompt = checkInDue || mealCheckDue || waterBreakDue;
+  const liveXp = active ? xpFromFocusedMs(active.focusedMs) : 0;
+  const projectedXp = progress.xp + liveXp;
+  const projectedPct = Math.min(100, (projectedXp / progress.needed) * 100);
 
   return (
     <section className="card flex flex-col items-center p-8 text-center">
@@ -62,7 +85,8 @@ export function CompanionCard() {
           }}
         />
         <div className="relative" aria-label={`${companion.name} is ${avatarState.replace("-", " ")}`}>
-          <Pig
+          <AnimalSprite
+            species={companion.species}
             mood={mood}
             level={companion.level}
             color={companion.color}
@@ -74,7 +98,8 @@ export function CompanionCard() {
         </div>
       </div>
 
-      <ColorPicker value={companion.color} onChange={setCompanionColor} />
+      <SpeciesPicker value={companion.species} onChange={setCompanionSpecies} />
+      <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
       <AccessoryPicker value={companion.accessory} onChange={setCompanionAccessory} />
 
       {editing ? (
@@ -122,15 +147,37 @@ export function CompanionCard() {
         </div>
       </div>}
 
-      <p className={`${checkInDue ? "mt-2" : "mt-5"} text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
+      {mealCheckDue && meal !== null && (
+        <WellbeingPrompt
+          question={`Have you had ${meal}?`}
+          onYes={() => respondToMealCheck(meal, true)}
+          onNo={() => respondToMealCheck(meal, false)}
+        />
+      )}
+
+      {waterBreakDue && (
+        <WellbeingPrompt
+          question="Have you had some water?"
+          onYes={() => respondToWaterBreak(true)}
+          onNo={() => respondToWaterBreak(false)}
+        />
+      )}
+
+      {active && active.emotionalXpMultiplier !== 1 && !checkInDue && (
+        <p className="mt-2 text-xs text-faint">
+          Check-in effect: {active.emotionalXpMultiplier}× XP · {active.hpLossMultiplier}× health loss
+        </p>
+      )}
+
+      <p className={`${hasPrompt ? "mt-2" : "mt-5"} text-sm font-semibold ${MOOD_ACCENT[mood]}`}>
         Level {companion.level} · {MOOD_LABEL[mood]}
       </p>
 
       <div className="mt-6 w-full space-y-4">
         <Meter
           label="XP"
-          value={`${progress.xp} / ${progress.needed}`}
-          pct={progress.pct}
+          value={active ? `${progress.xp} + ${liveXp} / ${progress.needed}` : `${progress.xp} / ${progress.needed}`}
+          pct={active ? projectedPct : progress.pct}
           barClass="bg-moss"
         />
         <Meter
@@ -148,16 +195,59 @@ export function CompanionCard() {
   );
 }
 
+function WellbeingPrompt({
+  question,
+  onYes,
+  onNo,
+}: {
+  question: string;
+  onYes: () => void;
+  onNo: () => void;
+}) {
+  return (
+    <div className="mt-3 w-full rounded-xl bg-surface-2/60 px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="eyebrow">Wellbeing break</span>
+        <span className="text-xs text-faint">{question}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onYes} className="rounded-lg bg-moss px-3 py-1.5 text-sm font-semibold text-white">
+          Yes
+        </button>
+        <button type="button" onClick={onNo} className="rounded-lg bg-canvas px-3 py-1.5 text-sm font-semibold text-muted hover:bg-line">
+          Not yet
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SpeciesPicker({ value, onChange }: { value: AnimalSpecies; onChange: (species: AnimalSpecies) => void }) {
+  return (
+    <div className="mt-5 flex items-center gap-2" role="group" aria-label="Animal">
+      {ANIMAL_SPECIES_OPTIONS.map((species) => (
+        <button key={species.value} type="button" onClick={() => onChange(species.value)} title={species.label}
+          aria-label={species.label} aria-pressed={value === species.value}
+          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-lg transition-transform hover:scale-110 ${value === species.value ? "border-ink bg-surface-2" : "border-line"}`}>
+          {species.emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ColorPicker({
+  species,
   value,
   onChange,
 }: {
-  value: PigColor;
-  onChange: (color: PigColor) => void;
+  species: AnimalSpecies;
+  value: CompanionColor;
+  onChange: (color: CompanionColor) => void;
 }) {
   return (
     <div className="mt-4 flex items-center gap-2" role="group" aria-label="Coat color">
-      {PIG_COLORS.map((c) => (
+      {COLOR_OPTIONS_BY_SPECIES[species].map((c) => (
         <button
           key={c.value}
           type="button"

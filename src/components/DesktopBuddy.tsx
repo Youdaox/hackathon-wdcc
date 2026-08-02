@@ -1,37 +1,32 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { StatusState } from "@/app/status/page";
 import { createPortal } from "react-dom";
 import { useWander } from "@/hooks/useWander";
 import { useIncline } from "@/lib/store";
 import { moodFor } from "@/lib/companion";
-import { Pig } from "@/components/Pig";
+import { AnimalSprite } from "@/components/AnimalSprite";
+import { SpeechBubble } from "@/components/SpeechBubble";
+import { randomIdleLine } from "@/lib/speechLines";
+import { closeActivePipWindow, setActivePipWindow } from "@/lib/overlayWindow";
 
+// Electron window bridges are declared once in `src/types/electron.d.ts`.
+// Document Picture-in-Picture isn't in TypeScript's DOM lib yet, and this is
+// the only file that uses it, so it's declared locally instead.
 declare global {
   interface Window {
     documentPictureInPicture?: {
       requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
       window: Window | null;
     };
-    electronAPI?: {
-      isElectron: boolean;
-      toggleOverlay: () => Promise<boolean>;
-      setBackgroundTracking: (active: boolean) => void;
-    };
-    statusAPI?: {
-      ready: () => void;
-      /**
-       * Subscribes to overlay status pushes. Declared here to match what
-       * electron/preload.js actually exposes — the declaration listed only
-       * `ready`, so every call to this failed to type check.
-       */
-      onUpdate: (handler: (state: StatusState) => void) => () => void;
-    };
   }
 }
 
 const PET_SIZE = 96;
+const DRAG_SPEECH_LINE = "Let me down!";
+const DRAG_SPEECH_DELAY_MS = 600;
+const SPEECH_EVERY_N_IDLES = 3;
+const SPEECH_DURATION_MS = 3000;  
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running
@@ -47,11 +42,27 @@ export function DesktopBuddy() {
   const [pipSupported, setPipSupported] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const petRef = useRef<HTMLDivElement>(null);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const idleCountRef = useRef(0);
+  const speechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const dragSpeechTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [bubbleText, setBubbleText] = useState<string | null>(null);
 
+  useEffect(() => {
+    return () => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+    };
+  }, []);
+
+  // Neither capability can be detected during render without breaking SSR —
+  // the same reason `store.tsx` and `useFocusTracking.ts` carry this exemption.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setIsElectron(Boolean(window.electronAPI?.isElectron));
     setPipSupported("documentPictureInPicture" in window);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function openPip() {
     if (!window.documentPictureInPicture) return;
@@ -85,12 +96,17 @@ export function DesktopBuddy() {
       }
     });
 
-    pip.addEventListener("pagehide", () => setPipWindow(null));
+    pip.addEventListener("pagehide", () => {
+      setActivePipWindow(null);
+      setPipWindow(null);
+    });
+    setActivePipWindow(pip);
     setPipWindow(pip);
   }
 
   function closePip() {
     pipWindow?.close();
+    setActivePipWindow(null);
     setPipWindow(null);
   }
 
@@ -115,18 +131,40 @@ export function DesktopBuddy() {
       width: pipWindow?.innerWidth ?? 0,
       height: pipWindow?.innerHeight ?? 0,
     }),
-    undefined,
+    (dragging) => {
+      clearTimeout(speechTimeoutRef.current);
+      clearTimeout(dragSpeechTimeoutRef.current);
+      setBubbleText(null);
+      if (dragging) {
+        dragSpeechTimeoutRef.current = setTimeout(() => setBubbleText(DRAG_SPEECH_LINE), DRAG_SPEECH_DELAY_MS);
+      }
+    },
     // The Pig sprite's box-shadow pixel art is too expensive to rescale every
     // frame — see useWander's enableSquish doc comment.
     false,
+    () => {
+      idleCountRef.current += 1;
+      if (idleCountRef.current % SPEECH_EVERY_N_IDLES !== 0) return;
+      setBubbleText(randomIdleLine());
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = setTimeout(() => setBubbleText(null), SPEECH_DURATION_MS);
+    },
+    bubbleRef,
   );
 
   useEffect(() => {
     return () => {
-      pipWindow?.close();
+      closeActivePipWindow();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync the pet's look live with the dashboard while both are open — the
+  // Electron overlay is a separate window with its own InclineProvider, so
+  // its `companion` wouldn't otherwise pick up changes made here (color,
+  // accessory, level, mood) until it was closed and reopened.
+  useEffect(() => {
+    if (isElectron) window.electronAPI?.updateCompanion(companion);
+  }, [companion, isElectron]);
 
   if (!isElectron && !pipSupported) return null;
 
@@ -143,32 +181,40 @@ export function DesktopBuddy() {
       {!isElectron &&
         pipWindow &&
         createPortal(
-          <div
-            ref={petRef}
-            role="img"
-            aria-label="Desktop buddy"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: PET_SIZE,
-              height: PET_SIZE,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              willChange: "transform",
-              userSelect: "none",
-            }}
-          >
-            <Pig
-              mood={moodFor(companion.hp)}
-              level={companion.level}
-              color={companion.color}
-              accessory={companion.accessory}
-              hp={companion.hp}
-              size={PET_SIZE}
-            />
-          </div>,
+          <>
+            <div
+              ref={petRef}
+              role="img"
+              aria-label="Desktop buddy"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: PET_SIZE,
+                height: PET_SIZE,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                willChange: "transform",
+                userSelect: "none",
+              }}
+            >
+              <AnimalSprite
+                species={companion.species}
+                mood={moodFor(companion.hp)}
+                level={companion.level}
+                color={companion.color}
+                accessory={companion.accessory}
+                hp={companion.hp}
+                size={PET_SIZE}
+              />
+            </div>
+            {bubbleText && (
+              <SpeechBubble ref={bubbleRef} size={PET_SIZE}>
+                {bubbleText}
+              </SpeechBubble>
+            )}
+          </>,
           pipWindow.document.body,
         )}
     </>

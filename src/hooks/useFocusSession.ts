@@ -153,6 +153,8 @@ export function useFocusSession(onComplete: (session: FocusSession) => void, sto
       awaySince: hidden ? at : null,
       awayReason: hidden ? "hidden" : null,
       bonusXp: 0,
+      emotionalXpMultiplier: 1,
+      hpLossMultiplier: 1,
     });
   }, []);
 
@@ -160,6 +162,12 @@ export function useFocusSession(onComplete: (session: FocusSession) => void, sto
   const addBonusXp = useCallback((amount: number) => {
     setActive((prev) => (prev ? { ...prev, bonusXp: prev.bonusXp + amount } : prev));
   }, []);
+
+  /** Updates the active check-in effect; it replaces the prior response. */
+  const setEmotionalModifiers = useCallback((xpMultiplier: number, hpLossMultiplier: number) => {
+    setActive((prev) => (prev ? { ...prev, emotionalXpMultiplier: xpMultiplier, hpLossMultiplier } : prev));
+  }, []);
+
 
   const clearLive = useCallback(() => {
     setActive(null);
@@ -204,6 +212,8 @@ export function useFocusSession(onComplete: (session: FocusSession) => void, sto
       xpEarned: 0, // filled in by the companion layer
       hpDelta: 0,
       xpMultiplier: 1,
+      emotionalXpMultiplier: current.emotionalXpMultiplier,
+      hpLossMultiplier: current.hpLossMultiplier,
       bonusXp: current.bonusXp,
     };
 
@@ -294,6 +304,8 @@ export function useFocusSession(onComplete: (session: FocusSession) => void, sto
       setActive({
         ...session,
         bonusXp: session.bonusXp ?? 0, // tolerate sessions saved before this field existed
+        emotionalXpMultiplier: session.emotionalXpMultiplier ?? 1,
+        hpLossMultiplier: session.hpLossMultiplier ?? 1,
         distractedMs: session.distractedMs + gap,
         distractions,
         isHidden: document.hidden,
@@ -311,5 +323,5 @@ export function useFocusSession(onComplete: (session: FocusSession) => void, sto
 
   const elapsedMs = active ? Math.max(0, now - active.startedAt) : 0;
 
-  return { active, start, end, cancel: clearLive, elapsedMs, addBonusXp, setGazeAway };
+  return { active, start, end, cancel: clearLive, elapsedMs, addBonusXp, setEmotionalModifiers, setGazeAway };
 }

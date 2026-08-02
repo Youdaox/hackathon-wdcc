@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useIncline } from "@/lib/store";
 import { MOOD_LABEL, levelProgress, moodFor, reactionFor } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
-import { Pig } from "@/components/Pig";
+import { AnimalSprite } from "@/components/AnimalSprite";
 import { FocusTimeline } from "@/components/FocusTimeline";
 
 export function SessionSummary() {
@@ -51,7 +51,8 @@ export function SessionSummary() {
               Level up
             </span>
           )}
-          <Pig
+          <AnimalSprite
+            species={growth.companion.species}
             mood={mood}
             level={growth.companion.level}
             color={growth.companion.color}
@@ -112,6 +113,13 @@ export function SessionSummary() {
               label="Location bonus"
               value={`${session.xpMultiplier}× · ${session.zoneName ?? "Bonus zone"}`}
               accent="text-citrus"
+            />
+          )}
+          {session.emotionalXpMultiplier !== 1 && (
+            <Row
+              label="Check-in effect"
+              value={`${session.emotionalXpMultiplier}× XP · ${session.hpLossMultiplier}× health loss`}
+              accent={session.emotionalXpMultiplier > 1 ? "text-moss" : "text-amber"}
             />
           )}
           <Row

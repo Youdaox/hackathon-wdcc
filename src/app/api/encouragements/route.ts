@@ -8,7 +8,7 @@ import { friendships } from "@/lib/db/schema";
 
 export async function GET(request: Request) {
   try {
-    const { userId } = identity(request);
+    const { userId } = await identity(request);
     const searchParams = new URL(request.url).searchParams;
     const rawLimit = Number(searchParams.get("limit") ?? 50);
     const direction = searchParams.get("direction") ?? "received";
@@ -26,15 +26,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const sender = identity(request);
+    const sender = await identity(request);
     const body = await jsonObject(request);
     if (typeof body.recipientId !== "string" || !body.recipientId.trim() || body.recipientId.length > 100) {
       throw new DomainError("INVALID_RECIPIENT", "recipientId is required and must be at most 100 characters.");
     }
     const recipientName = typeof body.recipientName === "string" ? body.recipientName.slice(0, 80) : undefined;
-    const friendship = db.select({ id: friendships.id }).from(friendships)
-      .where(and(eq(friendships.userId, sender.userId), eq(friendships.friendId, body.recipientId.trim())))
-      .get();
+    const [friendship] = await db.select({ id: friendships.id }).from(friendships)
+      .where(and(eq(friendships.userId, sender.userId), eq(friendships.friendId, body.recipientId.trim())));
     if (!friendship) throw new DomainError("FRIEND_REQUIRED", "Add this person as a friend before sending encouragement.", 403);
     const result = await leaderboardService.sendEncouragement(
       sender.userId, sender.displayName, body.recipientId.trim(), recipientName,

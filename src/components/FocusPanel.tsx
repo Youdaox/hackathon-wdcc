@@ -8,8 +8,13 @@ import { useIncline } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
 import { DAY_LABELS, formatClock, formatCompact, formatDuration } from "@/lib/time";
+import { awayMsPastGrace, hpLostForAwayMs } from "@/lib/companion";
+import { useStudyMemory } from "@/lib/study-memory/client";
 
 const QUICK_DURATIONS = [15, 25, 50];
+
+/** How long the "you were away" receipt stays up after the user returns. */
+const RECEIPT_MS = 12_000;
 
 export function FocusPanel() {
   const { blocks, active, elapsedMs, startSession, endSession, cancelSession } = useIncline();
@@ -110,7 +115,26 @@ export function FocusPanel() {
       </div>
 
       <EyeTrackingToggle />
+      <StudyMemoryToggle />
     </section>
+  );
+}
+
+function StudyMemoryToggle() {
+  const { available, enabled, setEnabled, sources, sourceId, setSourceId } = useStudyMemory();
+  return (
+    <div className="mt-5 border-t border-line-soft pt-5">
+      <div className="flex items-start justify-between gap-4">
+        <div><div className="text-sm font-semibold">AI Study Memory</div><p className="mt-0.5 max-w-lg text-xs text-muted">With your consent, Incline samples the selected screen only during focus mode, sends useful frames to OpenAI, and deletes each frame immediately after processing.</p></div>
+        <Button size="sm" variant={enabled ? "ghost" : "outline"} disabled={!available} onClick={() => setEnabled(!enabled)}>{enabled ? "Turn off" : available ? "Enable" : "Desktop app only"}</Button>
+      </div>
+      {enabled && <label className="mt-3 block text-xs font-semibold text-muted">Capture source
+        <select value={sourceId} onChange={(event) => setSourceId(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink">
+          {sources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+        </select>
+        <span className="mt-1 block text-[11px] font-normal text-faint">Avoid selecting windows containing messages, passwords, health, banking, or personal records.</span>
+      </label>}
+    </div>
   );
 }
 
@@ -158,9 +182,10 @@ interface LiveProps {
 }
 
 function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
-  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
+  const { companion, currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
     useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const memory = useStudyMemory();
   const away = active.isHidden || active.isGazeAway;
   const focusRatio =
     active.focusedMs + active.distractedMs > 0
@@ -168,6 +193,15 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
       : 1;
   const remainingMs = active.plannedMs ? Math.max(0, active.plannedMs - elapsedMs) : null;
   const penalized = active.distractions.filter((d) => d.penalized).length;
+
+  // The receipt for the lapse just ended. Shown briefly and only once the user
+  // is actually back — a permanent banner would stop being news, and one shown
+  // while still away would be competing with the surfaces that can be seen from
+  // outside the page.
+  const now = active.startedAt + elapsedMs;
+  const recent = active.distractions.at(-1);
+  const lastLapse =
+    !away && recent && now - (recent.startedAt + recent.durationMs) <= RECEIPT_MS ? recent : null;
 
   return (
     <section
@@ -255,6 +289,11 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
       )}
 
       <div className="mt-4 flex flex-col items-center gap-1.5">
+        {memory.enabled && memory.available && (
+          <button onClick={memory.state === "paused" ? memory.resume : memory.pause} className="rounded-full bg-citrus/15 px-3 py-1 text-xs font-bold text-citrus">
+            {memory.state === "paused" ? "Resume Study Memory" : `Study Memory on · ${memory.captures} captured · Pause`}
+          </button>
+        )}
         {currentZone && (
           <span className="tabular rounded-full bg-citrus/15 px-3 py-1 text-xs font-bold text-citrus">
             {currentZone.multiplier}× XP · {currentZone.name}
@@ -306,9 +345,19 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </Button>
       </div>
 
-      {active.isHidden && (
+      {/* A receipt, not a warning. The old banner here read "Tab hidden — this
+          time isn't counting", which is only ever rendered while the tab is
+          hidden and therefore could never be read while it was true. What an
+          in-page surface is actually good for is telling you what you missed —
+          the live warning now lives in the tab title and the desktop pill. */}
+      {lastLapse && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-clay/10 py-2 text-center text-xs font-semibold text-clay">
-          Tab hidden — this time isn&apos;t counting
+          You were away {formatCompact(lastLapse.durationMs)}
+          {lastLapse.penalized
+            ? ` — that cost ${companion.name} ${hpLostForAwayMs(
+                awayMsPastGrace(lastLapse.durationMs),
+              ).toFixed(1)} HP`
+            : " — inside the grace window, no harm done"}
         </div>
       )}
     </section>

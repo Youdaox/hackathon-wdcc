@@ -1,4 +1,4 @@
-import type { ActiveSession, AvatarEmotion, Companion, Mood, PigColor } from "./types";
+import type { ActiveSession, AnimalSpecies, AvatarEmotion, Companion, CompanionColor, Meal, Mood } from "./types";
 import { uid } from "./storage";
 
 /**
@@ -42,15 +42,82 @@ export const RULES = {
   maxHp: 100,
 } as const;
 
-export function createCompanion(name = "Oinky", color: PigColor = "pink"): Companion {
+/**
+ * A check-in reflects how ready the companion is to study alongside its person.
+ * These replace, rather than stack with, the previous check-in for a session.
+ */
+export const EMOTION_SESSION_MODIFIERS: Record<AvatarEmotion, {
+  xpMultiplier: number;
+  hpLossMultiplier: number;
+}> = {
+  happy: { xpMultiplier: 1.2, hpLossMultiplier: 0.8 },
+  excited: { xpMultiplier: 1.15, hpLossMultiplier: 0.85 },
+  calm: { xpMultiplier: 1.1, hpLossMultiplier: 0.9 },
+  sad: { xpMultiplier: 0.9, hpLossMultiplier: 1.1 },
+  angry: { xpMultiplier: 0.8, hpLossMultiplier: 1.2 },
+};
+
+/** Wellbeing prompts are deliberately quick for the hackathon demonstration. */
+export const WELLBEING = {
+  emotionalCheckInMinMs: 2 * 60_000,
+  emotionalCheckInMaxMs: 5 * 60_000,
+  waterBreakMs: 60 * 60_000,
+  mealRecoveryHp: 10,
+  waterRecoveryHp: 4,
+  pendingMealHpLossMultiplier: 1.25,
+  missedMealHpLossMultiplier: 1.5,
+  missedWaterHpLossMultiplier: 1.3,
+} as const;
+
+/** Returns the meal we ask about in the user's local time, or null outside meal windows. */
+export function mealForTime(now = new Date()): Meal | null {
+  const hour = now.getHours();
+  if (hour >= 7 && hour < 11) return "breakfast";
+  if (hour >= 12 && hour < 14) return "lunch";
+  if (hour >= 17 && hour < 19) return "dinner";
+  return null;
+}
+
+/** Combine the active food and water needs into one distraction-health modifier. */
+export function wellbeingHpLossMultiplier(
+  companion: Pick<Companion, "lastMeal" | "lastMealAt" | "lastWaterAt" | "nextWaterCheckAt" | "foodBreakMissed" | "waterBreakMissed">,
+  now = Date.now(),
+): number {
+  const meal = mealForTime(new Date(now));
+  const sameDay = companion.lastMealAt !== null
+    && new Date(companion.lastMealAt).toDateString() === new Date(now).toDateString();
+  const mealMultiplier = companion.foodBreakMissed
+    ? WELLBEING.missedMealHpLossMultiplier
+    : meal !== null && (!sameDay || companion.lastMeal !== meal)
+      ? WELLBEING.pendingMealHpLossMultiplier
+      : 1;
+  const waterMultiplier = companion.waterBreakMissed
+    ? WELLBEING.missedWaterHpLossMultiplier
+    : companion.nextWaterCheckAt === null || now >= companion.nextWaterCheckAt
+      ? 1.15
+      : 1;
+  return mealMultiplier * waterMultiplier;
+}
+
+export function createCompanion(
+  name = "Oinky",
+  color: CompanionColor = "pink",
+  species: AnimalSpecies = "pig",
+): Companion {
   return {
     name,
-    species: "pig",
+    species,
     color,
     accessory: "none",
     checkInEmotion: null,
     checkInAt: null,
     nextCheckInAt: null,
+    lastMeal: null,
+    lastMealAt: null,
+    lastWaterAt: null,
+    nextWaterCheckAt: Date.now() + WELLBEING.waterBreakMs,
+    foodBreakMissed: false,
+    waterBreakMissed: false,
     level: 1,
     xp: 0,
     hp: 100,
@@ -108,7 +175,7 @@ export function hpLostForAwayMs(awayMs: number): number {
 export function hpLostForSession(distractions: ReadonlyArray<{
   durationMs: number;
   penalized: boolean;
-}>): number {
+}>, hpLossMultiplier = 1): number {
   return distractions.filter((d) => d.penalized).reduce((total, d) => {
     const past = awayMsPastGrace(d.durationMs);
     // The floor applies only where proportional charging would come to nothing,
@@ -117,7 +184,7 @@ export function hpLostForSession(distractions: ReadonlyArray<{
     // — which is what keeps the live decay converging exactly on this total
     // rather than jumping at the end of every session.
     return total + hpLostForAwayMs(past > 0 ? past : RULES.minPenaltyMs);
-  }, 0);
+  }, 0) * hpLossMultiplier;
 }
 
 /** XP earned by a session's focused time, before any multiplier. */
@@ -154,6 +221,7 @@ export function applySession(
   companion: Companion,
   session: Pick<ActiveSession, "focusedMs" | "distractions"> & { bonusXp?: number },
   xpMultiplier = 1,
+  hpLossMultiplier = 1,
 ): GrowthResult {
   const focusedMinutes = session.focusedMs / 60_000;
   // The location multiplier scales earned focus time; recall bonus is flat on
@@ -161,7 +229,7 @@ export function applySession(
   const xpEarned =
     Math.floor(xpFromFocusedMs(session.focusedMs) * xpMultiplier) + (session.bonusXp ?? 0);
 
-  const hpLost = hpLostForSession(session.distractions);
+  const hpLost = hpLostForSession(session.distractions, hpLossMultiplier);
   const hpGained = focusedMinutes * RULES.hpPerFocusedMinute;
   const nextHp = clampHp(companion.hp - hpLost + hpGained);
 
@@ -189,6 +257,17 @@ export function applySession(
   };
 }
 
+/** Adds an already-verified post-session reward without replaying session HP/time. */
+export function awardBonusXp(companion: Companion, amount: number): Companion {
+  let level = companion.level;
+  let xp = companion.xp + Math.max(0, Math.floor(amount));
+  while (xp >= RULES.xpForLevel(level)) {
+    xp -= RULES.xpForLevel(level);
+    level += 1;
+  }
+  return { ...companion, level, xp };
+}
+
 /**
  * Neglect decay, applied once on load. Keeps the stakes real without needing a
  * background job — we just compare against the last completed session.
@@ -203,6 +282,10 @@ export function applyIdleDecay(companion: Companion, now = Date.now()): Companio
 
 function clampHp(hp: number): number {
   return Math.max(0, Math.min(RULES.maxHp, hp));
+}
+
+export function restoreHp(companion: Companion, amount: number): Companion {
+  return { ...companion, hp: clampHp(companion.hp + amount) };
 }
 
 /** Reaction line for the session-end screen. */

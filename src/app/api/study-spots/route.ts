@@ -23,11 +23,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const rows = db
+    const rows = await db
       .select()
       .from(studySpots)
       .where(or(isNull(studySpots.userId), eq(studySpots.userId, userId)))
-      .all();
+      ;
 
     return NextResponse.json({
       spots: rows.map((row) => ({

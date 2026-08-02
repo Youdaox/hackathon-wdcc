@@ -9,17 +9,19 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
-    "db:setup": "node --experimental-strip-types scripts/db-setup.ts",
-    "electron": "electron .",
-    "dev:web": "next dev"
+    "db:setup": "node --env-file=.env.local --experimental-strip-types scripts/db-setup.ts",
+    "electron": "set ELECTRON_RUN_AS_NODE=&& electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "better-sqlite3": "^13.0.2",
     "drizzle-orm": "^0.45.2",
+    "get-windows": "^9.3.0",
     "graphql": "^16.14.2",
     "graphql-yoga": "^5.21.2",
     "next": "16.2.12",
+    "openai": "^7.3.0",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "webgazer": "^3.5.3"

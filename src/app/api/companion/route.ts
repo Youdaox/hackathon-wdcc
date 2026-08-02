@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   try {
     // Reading also applies neglect decay, so a phone opened after three idle
     // days shows the same wilted pet the browser would.
-    const companion = ensureCompanion(userId);
+    const companion = await ensureCompanion(userId);
     const progress = levelProgress(companion);
 
     return NextResponse.json({
