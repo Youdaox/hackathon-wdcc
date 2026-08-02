@@ -135,6 +135,7 @@ export async function POST(request: Request) {
       pet_growth_delta: result.xpEarned,
       voided: pledge.voided,
       void_reason: pledge.reason,
+      companion: result.companion,
     });
   } catch (error) {
     console.error("[sessions] failed to record session:", error);

@@ -67,6 +67,8 @@ export interface SessionResult {
   pet_growth_delta: number;
   voided: boolean;
   void_reason: "left-early" | "distracted" | null;
+  /** The grown companion, so ending a session needs no second round trip. */
+  companion: Companion;
 }
 
 const TIMEOUT_MS = 8_000;

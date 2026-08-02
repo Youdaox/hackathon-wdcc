@@ -8,11 +8,24 @@ const { exec } = require("node:child_process");
  */
 const TARGET_APPS = ["Discord", "Steam", "Snapchat"];
 
-/** Matches the focused window's owner name against the target app list. */
+/**
+ * Matches the focused window's owner name against the target app list.
+ *
+ * Not an exact match: on Windows in particular, the reported owner name can
+ * vary by launcher/installer (a plain "Discord.exe", but also things like
+ * "Discord Inc. - Discord" from some window managers, or a versioned path
+ * component). Checking containment both ways catches these without needing
+ * to special-case every variant.
+ */
 function matchTargetApp(ownerName) {
   if (!ownerName) return null;
-  const normalized = ownerName.toLowerCase().replace(/\.exe$/, "");
-  return TARGET_APPS.find((name) => name.toLowerCase() === normalized) ?? null;
+  const normalized = ownerName.toLowerCase().trim().replace(/\.exe$/, "");
+  return (
+    TARGET_APPS.find((name) => {
+      const target = name.toLowerCase();
+      return normalized === target || normalized.includes(target);
+    }) ?? null
+  );
 }
 
 /**

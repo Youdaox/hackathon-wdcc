@@ -10,3 +10,6 @@ web-build/
 # modules/app-blocker/android and drop the native module from git.
 /android
 /ios
+
+# next build artefacts, from running next build in the wrong directory
+.next/

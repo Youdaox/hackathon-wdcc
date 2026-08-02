@@ -1,4 +1,5 @@
 import type { DistractionEvent as WebDistractionEvent } from "@/lib/types";
+import type { Companion } from "@/lib/types";
 import { RULES } from "@/lib/companion";
 
 /**
@@ -111,6 +112,8 @@ export interface SessionResponse {
   voided: boolean;
   /** Why it was voided, for the UI to say something specific. */
   void_reason: "left-early" | "distracted" | null;
+  /** The grown companion, so a client doesn't need a second round trip. */
+  companion: Companion;
 }
 
 export interface DistractionEventRequest {

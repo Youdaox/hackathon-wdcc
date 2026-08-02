@@ -62,9 +62,13 @@ function startAppWatch() {
         overlayWindow.webContents.send("target-app:blur", { name: focusedTargetApp });
       }
       focusedTargetApp = name;
-    } catch {
-      // Most likely macOS Accessibility permission hasn't been granted yet —
-      // just skip this tick rather than crashing the watch loop.
+    } catch (error) {
+      // On macOS this is usually the Accessibility permission not having
+      // been granted yet. Logged (not just swallowed) so a failure that
+      // isn't that — e.g. get-windows' native binding not loading on
+      // Windows — is actually visible instead of silently doing nothing
+      // every single tick.
+      console.error("[app-watch] getActiveWindow failed:", error);
     }
   }, APP_WATCH_POLL_MS);
 }
