@@ -1,5 +1,6 @@
 import type { ActiveSession, AnimalSpecies, AvatarEmotion, Companion, CompanionColor, Meal, Mood } from "./types";
 import { uid } from "./storage";
+import { nzDateKey, nzParts } from "./timezone";
 
 /**
  * Companion growth rules — the whole game balance lives here so it can be
@@ -69,9 +70,9 @@ export const WELLBEING = {
   missedWaterHpLossMultiplier: 1.3,
 } as const;
 
-/** Returns the meal we ask about in the user's local time, or null outside meal windows. */
+/** Returns the meal we ask about in New Zealand time, or null outside meal windows. */
 export function mealForTime(now = new Date()): Meal | null {
-  const hour = now.getHours();
+  const { hour } = nzParts(now);
   if (hour >= 7 && hour < 11) return "breakfast";
   if (hour >= 12 && hour < 14) return "lunch";
   if (hour >= 17 && hour < 19) return "dinner";
@@ -85,7 +86,7 @@ export function wellbeingHpLossMultiplier(
 ): number {
   const meal = mealForTime(new Date(now));
   const sameDay = companion.lastMealAt !== null
-    && new Date(companion.lastMealAt).toDateString() === new Date(now).toDateString();
+    && nzDateKey(companion.lastMealAt) === nzDateKey(now);
   const mealMultiplier = companion.foodBreakMissed
     ? WELLBEING.missedMealHpLossMultiplier
     : meal !== null && (!sameDay || companion.lastMeal !== meal)

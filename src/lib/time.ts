@@ -1,5 +1,7 @@
 /** Time formatting + minutes-from-midnight helpers. */
 
+import { nzParts, nzStartOfDay } from "./timezone";
+
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 /** "09:30" -> 570 */
@@ -27,7 +29,8 @@ export function formatClock(min: number): string {
 
 /** Minutes from midnight for a Date (defaults to now). */
 export function minutesOfDay(date: Date = new Date()): number {
-  return date.getHours() * 60 + date.getMinutes();
+  const { hour, minute } = nzParts(date);
+  return hour * 60 + minute;
 }
 
 /** ms -> "M:SS" or "H:MM:SS" for the big timer readout. */
@@ -54,7 +57,5 @@ export function formatCompact(ms: number): string {
 
 /** Start-of-day timestamp, used to bucket "today's" sessions. */
 export function startOfDay(ts: number = Date.now()): number {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  return nzStartOfDay(ts).getTime();
 }

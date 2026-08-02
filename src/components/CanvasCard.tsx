@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useCanvas, type CanvasState } from "@/hooks/useCanvas";
 import type { CanvasStudyBlock, CanvasUpcomingAssignment } from "@/lib/canvas/query";
 import { DAY_LABELS, formatClock } from "@/lib/time";
+import { NEW_ZEALAND_TIME_ZONE } from "@/lib/timezone";
 
 /**
  * Canvas connection + timetable import.
@@ -269,5 +270,5 @@ function dueLabel(dueAt: string | null): string {
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   if (days < 14) return `in ${days} days`;
-  return new Date(dueAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return new Date(dueAt).toLocaleDateString("en-NZ", { timeZone: NEW_ZEALAND_TIME_ZONE, day: "numeric", month: "short" });
 }

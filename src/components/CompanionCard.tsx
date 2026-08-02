@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useIncline } from "@/lib/store";
 import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor, xpFromFocusedMs } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
+import { nzDateKey } from "@/lib/timezone";
 import { useNow } from "@/hooks/useNow";
 import { PIG_ACCESSORIES } from "@/components/Pig";
 import { ANIMAL_SPECIES_OPTIONS, AnimalSprite, COLOR_OPTIONS_BY_SPECIES } from "@/components/AnimalSprite";
@@ -61,7 +62,7 @@ export function CompanionCard() {
   const meal = now === null ? null : mealForTime(now);
   const mealCheckDue = meal !== null && (
     companion.lastMealAt === null
-    || new Date(companion.lastMealAt).toDateString() !== now?.toDateString()
+    || nzDateKey(companion.lastMealAt) !== nzDateKey(now ?? new Date())
     || companion.lastMeal !== meal
   );
   const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);

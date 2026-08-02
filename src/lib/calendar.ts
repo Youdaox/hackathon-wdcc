@@ -7,6 +7,7 @@ export interface CalendarEvent {
   description: string;
   location: string;
 }
+import { nzDateKey, nzParts } from "./timezone";
 
 export type CalendarEventDraft = Omit<CalendarEvent, "id">;
 
@@ -26,8 +27,8 @@ function dateAndTime(value: string) {
   if (/^\d{8}$/.test(clean)) return { date: `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}`, time: "09:00" };
   const parsed = new Date(value);
   if (Number.isNaN(parsed.valueOf())) return null;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return { date: `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`, time: `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}` };
+  const { hour, minute } = nzParts(parsed);
+  return { date: nzDateKey(parsed), time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` };
 }
 
 export function parseIcs(source: string): CalendarEventDraft[] {

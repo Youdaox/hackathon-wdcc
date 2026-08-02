@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useIncline } from "@/lib/store";
+import { NEW_ZEALAND_TIME_ZONE } from "@/lib/timezone";
 import type { GradeResult, RecallQuestion } from "./ai";
 import type { StudyMemoryDesktopPhase } from "@/lib/backgroundStatus";
 
@@ -282,7 +283,7 @@ function RecallDialog({ check, onClose, onAward }: {
           <div className="mt-3 space-y-2">{result.details.map((detail, index) => <details key={detail.chunkId} className="rounded-xl border border-line-soft bg-surface-2/60 px-4 py-3 text-left">
             <summary className="cursor-pointer list-none text-sm font-semibold">
               <span className="text-citrus">{index + 1}.</span> {detail.sourceName}
-              {detail.capturedAt && <span className="ml-2 text-[11px] font-normal text-faint">{new Date(detail.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+              {detail.capturedAt && <span className="ml-2 text-[11px] font-normal text-faint">{new Date(detail.capturedAt).toLocaleTimeString("en-NZ", { timeZone: NEW_ZEALAND_TIME_ZONE, hour: "2-digit", minute: "2-digit" })}</span>}
             </summary>
             {detail.summary && <p className="mt-2 text-xs font-medium text-muted">{detail.summary}</p>}
             <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-faint">{detail.excerpt}</p>

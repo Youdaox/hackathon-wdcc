@@ -23,8 +23,8 @@ export async function PUT(request: Request) {
         throw new DomainError("INVALID_RULES", `${key} must be an integer between 0 and 10000.`);
       }
     }
-    if (body.timezone !== "UTC") {
-      throw new DomainError("INVALID_RULES", "timezone must currently be UTC.");
+    if (body.timezone !== "Pacific/Auckland") {
+      throw new DomainError("INVALID_RULES", "timezone must be Pacific/Auckland.");
     }
     return NextResponse.json(await leaderboardService.updateRules(body as unknown as RankingRules));
   } catch (error) { return errorResponse(error); }

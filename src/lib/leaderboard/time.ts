@@ -1,25 +1,21 @@
 import type { LeaderboardPeriod } from "./types";
-
-const DAY_MS = 86_400_000;
+import { addNewZealandDays, newZealandDate, nzDateKey, nzParts, nzStartOfDay } from "../timezone";
 
 export function dayKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return nzDateKey(date);
 }
 
 export function periodBounds(period: LeaderboardPeriod, now: Date) {
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  const date = now.getUTCDate();
+  const { year, month, weekday } = nzParts(now);
 
   if (period === "month") {
     return {
-      startsAt: new Date(Date.UTC(year, month, 1)),
-      endsAt: new Date(Date.UTC(year, month + 1, 1)),
+      startsAt: newZealandDate(year, month, 1),
+      endsAt: newZealandDate(year, month + 1, 1),
     };
   }
 
-  const midnight = new Date(Date.UTC(year, month, date));
-  const mondayOffset = (midnight.getUTCDay() + 6) % 7;
-  const startsAt = new Date(midnight.getTime() - mondayOffset * DAY_MS);
-  return { startsAt, endsAt: new Date(startsAt.getTime() + 7 * DAY_MS) };
+  const mondayOffset = (weekday + 6) % 7;
+  const startsAt = addNewZealandDays(nzStartOfDay(now), -mondayOffset);
+  return { startsAt, endsAt: addNewZealandDays(startsAt, 7) };
 }

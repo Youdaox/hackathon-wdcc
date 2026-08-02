@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DAY_LABELS, minToTimeValue, parseTimeToMin } from "@/lib/time";
+import { nzParts } from "@/lib/timezone";
 import { isValidRange } from "@/lib/schedule";
 import type { StudyBlock } from "@/lib/types";
 
@@ -30,7 +31,7 @@ export function ScheduleBlockForm({ initial, onSubmit, onCancel }: Props) {
   const [start, setStart] = useState(minToTimeValue(initial?.startMin ?? 9 * 60));
   const [end, setEnd] = useState(minToTimeValue(initial?.endMin ?? 10 * 60));
   // Lazy so the "today" default is read once, not on every render.
-  const [days, setDays] = useState<number[]>(() => initial?.days ?? [new Date().getDay()]);
+  const [days, setDays] = useState<number[]>(() => initial?.days ?? [nzParts().weekday]);
   const [error, setError] = useState<string | null>(null);
 
   const toggleDay = (day: number) => {

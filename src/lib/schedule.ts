@@ -1,5 +1,6 @@
 import type { StudyBlock } from "./types";
 import { minutesOfDay } from "./time";
+import { nzParts } from "./timezone";
 
 /** A block resolved against a specific moment in the week. */
 export interface BlockOccurrence {
@@ -25,7 +26,7 @@ export function findActiveBlock(
   blocks: StudyBlock[],
   now: Date = new Date(),
 ): BlockOccurrence | null {
-  const day = now.getDay();
+  const day = nzParts(now).weekday;
   const nowMin = minutesOfDay(now);
   const match = blocksOnDay(blocks, day).find(
     (b) => nowMin >= b.startMin && nowMin < b.endMin,
@@ -50,7 +51,7 @@ export function findNextBlock(
 ): BlockOccurrence | null {
   if (blocks.length === 0) return null;
   const nowMin = minutesOfDay(now);
-  const today = now.getDay();
+  const today = nzParts(now).weekday;
 
   for (let offset = 0; offset < 7; offset++) {
     const day = (today + offset) % 7;

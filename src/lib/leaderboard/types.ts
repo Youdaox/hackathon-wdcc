@@ -5,7 +5,7 @@ export interface RankingRules {
   encouragementsPerTask: number;
   pointsPerTask: number;
   pointsPerEncouragementReceived: number;
-  timezone: "UTC";
+  timezone: "Pacific/Auckland";
 }
 
 export interface Member {

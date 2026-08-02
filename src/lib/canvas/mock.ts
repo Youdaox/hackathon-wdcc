@@ -1,4 +1,5 @@
 import type { CanvasSource } from "./source";
+import { addNewZealandDays, newZealandDate, nzParts, nzStartOfDay } from "../timezone";
 import type {
   CanvasAssignment,
   CanvasCalendarEvent,
@@ -21,30 +22,21 @@ import type {
  * instead of rotting into the past.
  */
 
-const DAY_MS = 86_400_000;
-
-/** Midnight Monday of the current week, local time. */
+/** Midnight Monday of the current week, in New Zealand. */
 function weekStart(now = new Date()): Date {
-  const monday = new Date(now);
-  const offset = (monday.getDay() + 6) % 7; // 0 = Sunday → 6 days after Monday
-  monday.setDate(monday.getDate() - offset);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
+  return addNewZealandDays(nzStartOfDay(now), -((nzParts(now).weekday + 6) % 7));
 }
 
 /** ISO timestamp for `dayIndex` (0 = Monday) of this week at `hour`:`minute`. */
 function atWeekday(dayIndex: number, hour: number, minute = 0): string {
-  const date = weekStart();
-  date.setDate(date.getDate() + dayIndex);
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
+  const { year, month, day } = nzParts(addNewZealandDays(weekStart(), dayIndex));
+  return newZealandDate(year, month, day, hour, minute).toISOString();
 }
 
 /** ISO timestamp `days` from now at `hour` — used for due dates. */
 function inDays(days: number, hour = 23, minute = 59): string {
-  const date = new Date(Date.now() + days * DAY_MS);
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
+  const { year, month, day } = nzParts(addNewZealandDays(new Date(), days));
+  return newZealandDate(year, month, day, hour, minute).toISOString();
 }
 
 const SELF: CanvasUser = {

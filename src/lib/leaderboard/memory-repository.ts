@@ -9,7 +9,7 @@ const DEFAULT_STATE: LeaderboardSnapshot = {
     encouragementsPerTask: 1,
     pointsPerTask: 10,
     pointsPerEncouragementReceived: 4,
-    timezone: "UTC",
+    timezone: "Pacific/Auckland",
   },
 };
 
@@ -20,6 +20,10 @@ declare global {
 
 function state(): LeaderboardSnapshot {
   globalThis.inclineLeaderboardState ??= structuredClone(DEFAULT_STATE);
+  globalThis.inclineLeaderboardState.rules = {
+    ...globalThis.inclineLeaderboardState.rules,
+    timezone: "Pacific/Auckland",
+  };
   return globalThis.inclineLeaderboardState;
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { parseIcs, type CalendarEvent, type CalendarEventDraft } from "@/lib/calendar";
+import { nzDateKey, nzParts } from "@/lib/timezone";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -15,17 +16,13 @@ async function api(path: string, init?: RequestInit) {
   return value;
 }
 
-function localDate(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 export function SchedulePanel() {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const nzToday = nzParts(today);
+  const [year, setYear] = useState(nzToday.year);
+  const [month, setMonth] = useState(nzToday.month - 1);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [selected, setSelected] = useState(localDate(today));
+  const [selected, setSelected] = useState(nzDateKey(today));
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [creating, setCreating] = useState(false);
   const [feedUrl, setFeedUrl] = useState("");
@@ -46,15 +43,15 @@ export function SchedulePanel() {
   useEffect(() => { void api("/api/calendar/feed-url").then((value) => setFeedUrl(value.url)).catch(() => undefined); }, []);
 
   const cells = useMemo(() => {
-    const first = new Date(year, month, 1).getDay();
-    const days = new Date(year, month + 1, 0).getDate();
+    const first = new Date(Date.UTC(year, month, 1)).getUTCDay();
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
     const cellCount = Math.ceil((first + days) / 7) * 7;
     return Array.from({ length: cellCount }, (_, index) => {
-      const date = new Date(year, month, index - first + 1);
+      const date = new Date(Date.UTC(year, month, index - first + 1));
       return {
-        date: localDate(date),
-        day: date.getDate(),
-        inCurrentMonth: date.getMonth() === month && date.getFullYear() === year,
+        date: date.toISOString().slice(0, 10),
+        day: date.getUTCDate(),
+        inCurrentMonth: date.getUTCMonth() === month && date.getUTCFullYear() === year,
       };
     });
   }, [month, year]);
@@ -62,8 +59,8 @@ export function SchedulePanel() {
   const selectedEvents = (byDate[selected] ?? []).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   const moveMonth = (delta: number) => {
-    const next = new Date(year, month + delta, 1);
-    setYear(next.getFullYear()); setMonth(next.getMonth());
+    const next = new Date(Date.UTC(year, month + delta, 1));
+    setYear(next.getUTCFullYear()); setMonth(next.getUTCMonth());
   };
   const selectDate = (date: string) => {
     setSelected(date); setEditing(null); setCreating(false);
@@ -90,7 +87,7 @@ export function SchedulePanel() {
           <input ref={fileRef} type="file" accept=".ics,text/calendar" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) void importFile(file).catch((error) => setNotice(error.message)); e.target.value = ""; }} />
           <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import .ics</Button>
           <a href="/api/calendar/export" download className="inline-flex h-8 items-center rounded-full border border-line bg-surface-2 px-3 text-xs font-semibold hover:border-moss/60 hover:text-moss">Export .ics</a>
-          <Button size="sm" onClick={() => { setSelected(localDate(new Date(year, month, 1))); setEditing(null); setCreating(true); }}>+ Event</Button>
+          <Button size="sm" onClick={() => { setSelected(new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10)); setEditing(null); setCreating(true); }}>+ Event</Button>
         </div>
       </header>
 
@@ -107,7 +104,7 @@ export function SchedulePanel() {
           <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border border-line bg-line">
             {WEEKDAYS.map((day) => <div key={day} className="bg-surface-2 px-1 py-2 text-center text-[10px] font-bold uppercase tracking-wide text-faint sm:text-xs">{day}</div>)}
             {cells.map((cell) => {
-              const dayEvents = byDate[cell.date] ?? []; const isToday = cell.date === localDate(today);
+              const dayEvents = byDate[cell.date] ?? []; const isToday = cell.date === nzDateKey(today);
               return <div key={cell.date} role="button" tabIndex={0} aria-label={`${cell.date}, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`} onClick={() => selectDate(cell.date)} onDoubleClick={() => createOnDate(cell.date)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectDate(cell.date); } }} className={`min-h-16 cursor-pointer overflow-hidden p-1.5 text-left align-top transition hover:bg-moss/5 sm:min-h-24 sm:p-2 ${cell.inCurrentMonth ? "bg-surface" : "bg-surface-2/55"} ${selected === cell.date ? "ring-2 ring-inset ring-moss" : ""}`}>
                 <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isToday ? "bg-moss text-white" : cell.inCurrentMonth ? "text-muted" : "text-faint"}`}>{cell.day}</span>
                 <div className={`mt-1 space-y-1 ${cell.inCurrentMonth ? "" : "opacity-65"}`}>{dayEvents.slice(0, 2).map((event) => <button type="button" key={event.id} onClick={(click) => { click.stopPropagation(); setSelected(cell.date); setEditing(event); setCreating(false); }} onDoubleClick={(click) => click.stopPropagation()} className="block w-full truncate rounded bg-moss/15 px-1.5 py-1 text-left text-[10px] font-semibold text-moss-deep hover:bg-moss/25 dark:text-moss">{event.startTime} {event.title}</button>)}{dayEvents.length > 2 && <p className="px-1 text-[10px] font-semibold text-faint">+{dayEvents.length - 2} more</p>}</div>

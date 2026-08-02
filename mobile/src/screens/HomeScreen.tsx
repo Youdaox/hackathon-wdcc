@@ -7,6 +7,7 @@ import { RecallCheck } from "../components/RecallCheck";
 import { FocusPanel } from "../components/FocusPanel";
 import { LocationCard } from "../components/LocationCard";
 import { colors, roundedFont } from "../theme";
+import { NEW_ZEALAND_TIME_ZONE } from "../timezone";
 
 type HomeScreenProps = {
   companion: Companion | null;
@@ -34,6 +35,7 @@ type HomeScreenProps = {
 
 export function HomeScreen(props: HomeScreenProps) {
   const date = new Date().toLocaleDateString("en-NZ", {
+    timeZone: NEW_ZEALAND_TIME_ZONE,
     weekday: "long",
     month: "short",
     day: "numeric",

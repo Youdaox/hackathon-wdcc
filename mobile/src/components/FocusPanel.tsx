@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import type { FocusState } from "../useFocusSession";
 import { colors, formatDuration, roundedFont } from "../theme";
+import { nzClock } from "../timezone";
 
 const PLEDGES = [0, 15, 25, 50];
 
 function clockOf(ts: number): string {
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return nzClock(ts);
 }
 
 export function FocusPanel({
