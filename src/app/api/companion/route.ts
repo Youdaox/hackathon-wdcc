@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions } from "@/lib/db/schema";
-import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES } from "@/lib/types";
+import {
+  ALL_COMPANION_COLOR_VALUES,
+  ANIMAL_SPECIES_VALUES,
+  AVATAR_EMOTIONS,
+  COMPANION_COLOR_VALUES_BY_SPECIES,
+  PIG_ACCESSORY_VALUES,
+} from "@/lib/types";
 import { ensureCompanion } from "@/lib/api/users";
 import { requireUserId } from "@/lib/api/identity";
 import { levelProgress, moodFor } from "@/lib/companion";
@@ -74,10 +80,25 @@ export async function PATCH(request: Request) {
   }
 
   const patch: Record<string, unknown> = {};
-  if (b?.color !== undefined) {
-    if (!PIG_COLOR_VALUES.includes(b.color as never)) {
+  if (b?.species !== undefined) {
+    if (!ANIMAL_SPECIES_VALUES.includes(b.species as never)) {
       return NextResponse.json(
-        { error: `color must be one of ${PIG_COLOR_VALUES.join(", ")}` },
+        { error: `species must be one of ${ANIMAL_SPECIES_VALUES.join(", ")}` },
+        { status: 400 },
+      );
+    }
+    patch.species = b.species;
+    // Coats are species-specific, so switching animal without a colour would
+    // leave e.g. a raccoon wearing "pink". Default to that species' first coat
+    // unless the caller picked one in the same request.
+    if (b.color === undefined) {
+      patch.color = COMPANION_COLOR_VALUES_BY_SPECIES[b.species as never][0];
+    }
+  }
+  if (b?.color !== undefined) {
+    if (!ALL_COMPANION_COLOR_VALUES.includes(b.color as never)) {
+      return NextResponse.json(
+        { error: `color must be one of ${ALL_COMPANION_COLOR_VALUES.join(", ")}` },
         { status: 400 },
       );
     }

@@ -93,42 +93,6 @@ export function RecapScreen({
         </View>
       )}
 
-      <View style={styles.chartCard}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.cardTitle}>Focus vs. distracted</Text>
-          <View style={styles.averageBadge}>
-            <Text style={styles.averageValue}>{averageFocus}%</Text>
-            <Text style={styles.averageLabel}>weekly average</Text>
-          </View>
-        </View>
-        <View style={styles.legend}>
-          <Legend color={colors.accent} label="Focused" />
-          <Legend color={colors.sand} label="Distracted" />
-        </View>
-        <View style={styles.chart}>
-          {week.map((entry) => {
-            const total = entry.focused_minutes + entry.distracted_minutes;
-            // A day with no data reads as an empty column rather than
-            // vanishing, so the week always has seven bars.
-            const focusPct = total === 0 ? 0 : Math.round((entry.focused_minutes / total) * 100);
-            const distractedPct = total === 0 ? 0 : 100 - focusPct;
-            return (
-              <View key={entry.date} style={styles.dayColumn}>
-                <View style={styles.barTrack}>
-                  <View style={[styles.distractedBar, { flex: distractedPct }]}>
-                    <Text style={styles.distractedPercent}>{distractedPct}%</Text>
-                  </View>
-                  <View style={[styles.focusBar, { flex: focusPct }]}>
-                    <Text style={styles.focusPercent}>{focusPct}%</Text>
-                  </View>
-                </View>
-                <Text style={styles.dayLabel}>{entry.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
       <View style={styles.goalCard}>
         <View style={styles.goalHeader}>
           <View>

@@ -15,6 +15,7 @@ import {
   fetchCompanion,
   fetchLeaderboard,
   fetchRecap,
+  fetchSchedule,
   fetchStudySpots,
   logDistractionEvent,
   patchCompanion,
@@ -32,6 +33,7 @@ import { ScheduleScreen } from "./src/screens/ScheduleScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { type Account, currentAccount, signOut } from "./src/auth";
+import { GEO_OPT_IN_KEY } from "./src/config";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
 import { colors } from "./src/theme";
 import { useFocusSession } from "./src/useFocusSession";
@@ -58,6 +60,7 @@ export default function App() {
   const [recap, setRecap] = useState<Recap | null>(null);
   const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
   const [spots, setSpots] = useState<StudySpot[]>([]);
+  const [blocks, setBlocks] = useState<import("./src/api").StudyBlock[]>([]);
   const [match, setMatch] = useState<SpotMatch | null>(null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,6 +71,19 @@ export default function App() {
   /** Null until the stored session has been checked, so we don't flash the login screen. */
   const [authChecked, setAuthChecked] = useState(false);
   const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
+  /** Location is opt-in: nothing prompts until the user turns it on. */
+  const [locationEnabled, setLocationEnabled] = useState(false);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(GEO_OPT_IN_KEY)
+      .then((v) => setLocationEnabled(v === "true"))
+      .catch(() => {});
+  }, []);
+
+  const toggleLocation = useCallback((enabled: boolean) => {
+    setLocationEnabled(enabled);
+    void AsyncStorage.setItem(GEO_OPT_IN_KEY, String(enabled)).catch(() => {});
+  }, []);
   const [plantSetup, setPlantSetup] = useState(false);
   const [lastPlantSummary, setLastPlantSummary] = useState<PlantSessionSummary | null>(null);
 
@@ -83,18 +99,21 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
-      const [nextCompanion, nextSpots, nextRecap, nextBoard] = await Promise.all([
+      const [nextCompanion, nextSpots, nextRecap, nextBoard, nextBlocks] = await Promise.all([
         fetchCompanion(),
         fetchStudySpots(),
         fetchRecap(),
         // Non-fatal: the board is a nice-to-have, and a friendless demo
         // account shouldn't blank the whole screen.
         fetchLeaderboard().catch(() => null),
+        // Non-fatal: the home card falls back to "no study block scheduled".
+        fetchSchedule().catch(() => []),
       ]);
       setCompanion(nextCompanion);
       setSpots(nextSpots);
       setRecap(nextRecap);
       setLeaderboard(nextBoard);
+      setBlocks(nextBlocks);
       setNotice(null);
     } catch (error) {
       setNotice(error instanceof Error ? `Can't reach the server — ${error.message}` : "Can't reach the server.");
@@ -127,6 +146,10 @@ export default function App() {
   }, []);
 
   const checkIn = useCallback(async () => {
+    if (!locationEnabled) {
+      setNotice("Turn on the location bonus in Settings first.");
+      return;
+    }
     setChecking(true);
     try {
       const reading = await getReading();
@@ -140,7 +163,7 @@ export default function App() {
     } finally {
       setChecking(false);
     }
-  }, [spots]);
+  }, [spots, locationEnabled]);
 
   const multiplier = match?.inside ? match.spot.multiplier : 1;
 
@@ -287,7 +310,12 @@ export default function App() {
    * optimistically so the swatch responds instantly.
    */
   const handleCustomise = useCallback(
-    (patch: { color?: PigColor; accessory?: PigAccessory; name?: string }) => {
+    (patch: {
+      species?: Companion["species"];
+      color?: PigColor;
+      accessory?: PigAccessory;
+      name?: string;
+    }) => {
       setCompanion((current) => (current ? { ...current, ...patch } : current));
       void patchCompanion(patch)
         .then(load)
@@ -322,6 +350,7 @@ export default function App() {
             <HomeScreen
               companion={companion}
               spots={spots}
+              blocks={blocks}
               match={match}
               checking={checking}
               state={state}
@@ -353,6 +382,8 @@ export default function App() {
           {tab === "settings" && (
             <SettingsScreen
               companion={companion}
+              locationEnabled={locationEnabled}
+              onToggleLocation={toggleLocation}
               onRename={(name) => handleCustomise({ name })}
               onCustomise={handleCustomise}
               account={{ displayName: account.name }}

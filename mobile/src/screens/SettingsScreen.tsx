@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Companion } from "../api";
 import { CHECKPOINT_MIN_MS, GRACE_MS } from "../config";
-import { PIG_ACCESSORIES, PIG_COLORS } from "../components/Pig";
+import { PIG_ACCESSORIES } from "../components/Pig";
+import { AnimalSprite, SPECIES_COLORS, swatchFor } from "../components/AnimalSprite";
 import { radius, roundedFont, useTheme } from "../theme";
 
 /**
@@ -15,14 +16,22 @@ import { radius, roundedFont, useTheme } from "../theme";
  */
 export function SettingsScreen({
   companion,
+  locationEnabled,
+  onToggleLocation,
   onRename,
   onCustomise,
   account,
   onSignOut,
 }: {
   companion: Companion | null;
+  locationEnabled: boolean;
+  onToggleLocation: (enabled: boolean) => void;
   onRename: (name: string) => void;
-  onCustomise: (patch: { color?: Companion["color"]; accessory?: Companion["accessory"] }) => void;
+  onCustomise: (patch: {
+    species?: Companion["species"];
+    color?: Companion["color"];
+    accessory?: Companion["accessory"];
+  }) => void;
   account: { displayName: string } | null;
   onSignOut: () => void;
 }) {
@@ -69,17 +78,45 @@ export function SettingsScreen({
           </Pressable>
         </View>
 
+        <Text style={[styles.label, { color: c.faint, marginTop: 16 }]}>ANIMAL</Text>
+        <View style={styles.row}>
+          {(["pig", "cow", "raccoon"] as const).map((option) => (
+            <Pressable
+              key={option}
+              accessibilityLabel={option}
+              onPress={() => onCustomise({ species: option })}
+              style={({ pressed }) => [
+                styles.species,
+                { borderColor: c.line, backgroundColor: c.surface2 },
+                companion?.species === option && { borderColor: c.moss, borderWidth: 2 },
+                pressed && styles.dim,
+              ]}
+            >
+              <AnimalSprite
+                species={option}
+                mood="happy"
+                level={9}
+                color={SPECIES_COLORS[option][0]}
+                size={46}
+              />
+            </Pressable>
+          ))}
+        </View>
+
         <Text style={[styles.label, { color: c.faint, marginTop: 16 }]}>COAT</Text>
         <View style={styles.row}>
-          {PIG_COLORS.map((option) => (
+          {(SPECIES_COLORS[companion?.species ?? "pig"] ?? []).map((option) => (
             <Pressable
-              key={option.value}
-              accessibilityLabel={`${option.label} coat`}
-              onPress={() => onCustomise({ color: option.value })}
+              key={option}
+              accessibilityLabel={`${option} coat`}
+              onPress={() => onCustomise({ color: option })}
               style={({ pressed }) => [
                 styles.swatch,
-                { backgroundColor: option.swatch, borderColor: c.line },
-                companion?.color === option.value && { borderColor: c.ink, borderWidth: 3 },
+                {
+                  backgroundColor: swatchFor(companion?.species ?? "pig", option),
+                  borderColor: c.line,
+                },
+                companion?.color === option && { borderColor: c.ink, borderWidth: 3 },
                 pressed && styles.dim,
               ]}
             />
@@ -113,6 +150,39 @@ export function SettingsScreen({
             </Pressable>
           ))}
         </View>
+      </Card>
+
+      <Card title="Location bonus">
+        <Text style={[styles.body, { color: c.muted }]}>
+          Sessions finished at a verified study spot earn an XP multiplier. Incline takes one
+          reading when a session starts — never background tracking.
+        </Text>
+        <Pressable
+          onPress={() => onToggleLocation(!locationEnabled)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: locationEnabled }}
+          style={({ pressed }) => [
+            styles.toggleRow,
+            { borderColor: c.line },
+            pressed && styles.dim,
+          ]}
+        >
+          <Text style={[styles.toggleLabel, { color: c.ink }]}>
+            {locationEnabled ? "Location bonus on" : "Enable location bonus"}
+          </Text>
+          <View
+            style={[
+              styles.switch,
+              { backgroundColor: locationEnabled ? c.moss : c.surface2 },
+            ]}
+          >
+            <View style={[styles.knob, { backgroundColor: c.surface }, locationEnabled && styles.knobOn]} />
+          </View>
+        </Pressable>
+        <Text style={[styles.body, { color: c.faint }]}>
+          Nothing prompts for location until you turn this on, and declining costs you nothing but
+          the bonus.
+        </Text>
       </Card>
 
       <Card title="How focus is measured">
@@ -197,6 +267,15 @@ const styles = StyleSheet.create({
   saveText: { fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
   row: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
   swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 1 },
+  species: {
+    width: 66,
+    height: 66,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   chipText: { fontFamily: roundedFont, fontSize: 13, fontWeight: "700" },
   signOut: {
@@ -208,5 +287,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   signOutText: { fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 52,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    marginTop: 4,
+  },
+  toggleLabel: { fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
+  switch: { width: 50, height: 30, borderRadius: 15, padding: 3, justifyContent: "center" },
+  knob: { width: 24, height: 24, borderRadius: 12 },
+  knobOn: { alignSelf: "flex-end" },
   dim: { opacity: 0.55 },
 });

@@ -17,13 +17,14 @@ const PLATFORM = Platform.OS === "web" ? "web" : "ios";
  * only ever deals in numbers.
  */
 
-export type PigColor = "pink" | "purple" | "blue";
+export type AnimalSpecies = "pig" | "cow" | "raccoon";
+export type PigColor = string;
 export type PigAccessory = "none" | "glasses" | "flower";
 export type AvatarEmotion = "happy" | "sad" | "angry" | "calm" | "excited";
 
 export interface Companion {
   name: string;
-  species: string;
+  species: AnimalSpecies;
   color: PigColor;
   accessory: PigAccessory;
   check_in_emotion: AvatarEmotion | null;
@@ -191,6 +192,7 @@ export interface Recap {
 
 /** Updates coat, accessory, emotion or name. Growth stays server-owned. */
 export function patchCompanion(patch: {
+  species?: AnimalSpecies;
   color?: PigColor;
   accessory?: PigAccessory;
   check_in_emotion?: AvatarEmotion | null;

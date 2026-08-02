@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import type { FocusState } from "../useFocusSession";
+import { HP_ESCALATE_AFTER_MS, hpCostForAway } from "../config";
 import { colors, formatDuration, roundedFont } from "../theme";
 
 const PLEDGES = [0, 15, 25, 50];
@@ -29,6 +30,24 @@ export function FocusPanel({
 }) {
   const penalised = state.distractions.filter((d) => d.durationMs >= 5_000).length;
 
+  // A slow pulse on the live card while away, so the cost registers
+  // peripherally rather than having to be read.
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!state.away) {
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+        Animated.timing(pulse, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: false }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [state.away, pulse]);
+
   return (
     <View style={styles.wrap}>
       {state.running && state.plantMode && (
@@ -36,7 +55,17 @@ export function FocusPanel({
       )}
 
       {state.running && (
-        <View style={styles.liveCard}>
+        <Animated.View
+          style={[
+            styles.liveCard,
+            state.away && {
+              borderColor: pulse.interpolate({
+                inputRange: [0, 1],
+                outputRange: [colors.border, colors.clay],
+              }),
+            },
+          ]}
+        >
           <View>
             <Text style={styles.liveLabel}>
               {state.away || state.plantPaused ? "FOCUS PAUSED" : "VERIFIED FOCUS"}
@@ -44,12 +73,16 @@ export function FocusPanel({
             <Text style={styles.clock}>{formatDuration(state.focusedMs)}</Text>
           </View>
           <View style={styles.liveStats}>
-            <Text style={styles.stat}>{formatDuration(state.distractedMs)} away</Text>
+            <Text style={[styles.stat, state.away && styles.statAway]}>
+              {formatDuration(state.distractedMs)} away
+              {state.distractedMs > 0 ? ` · −${Math.round(hpCostForAway(state.distractedMs))} HP` : ""}
+              {state.away && state.distractedMs > HP_ESCALATE_AFTER_MS ? " ⚠︎" : ""}
+            </Text>
             <Text style={styles.stat}>
               {state.plantMode ? `${state.phonePickups} pickups` : `${penalised} breaks`} · {multiplier}x
             </Text>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {!state.running && (
@@ -222,6 +255,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   stat: { color: colors.muted, fontFamily: roundedFont, fontSize: 12 },
+  statAway: { color: colors.clay, fontWeight: "800" },
   button: {
     minHeight: 66,
     borderRadius: 20,
