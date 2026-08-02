@@ -12,6 +12,13 @@ const SENSITIVE_TITLE = /password|1password|bitwarden|bank|wallet|login|sign in|
 type Source = { id: string; name: string };
 type CaptureState = StudyMemoryDesktopPhase;
 type CaptureReason = "automatic" | "manual";
+type StudyDetail = {
+  chunkId: string;
+  sourceName: string;
+  capturedAt: number | null;
+  summary: string;
+  excerpt: string;
+};
 
 interface StudyMemoryContextValue {
   enabled: boolean;
@@ -36,6 +43,7 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
   const [state, setState] = useState<CaptureState>("off");
   const [captures, setCaptures] = useState(0);
   const [check, setCheck] = useState<{ checkId: string; sessionId: string; questions: RecallQuestion[] } | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
   const [error, setError] = useState("");
   const paused = useRef(false);
   const finalizedFor = useRef<string | null>(null);
@@ -167,6 +175,7 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
     const session = outcome?.session;
     if (!session || capturedFor.current !== session.id || finalizedFor.current === session.id) return;
     finalizedFor.current = session.id;
+    setFinalizing(true);
     setState("processing");
     void fetch("/api/study-memory/finalize", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -175,8 +184,13 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
       const payload = await response.json() as { checkId?: string; questions?: RecallQuestion[]; error?: string };
       if (!response.ok || !payload.checkId || !payload.questions) throw new Error(payload.error ?? "Could not build recall check");
       setCheck({ checkId: payload.checkId, sessionId: session.id, questions: payload.questions });
+      setFinalizing(false);
       setState("ready");
-    }).catch((cause) => { setError(cause instanceof Error ? cause.message : "Study Memory failed"); setState("error"); });
+    }).catch((cause) => {
+      setFinalizing(false);
+      setError(cause instanceof Error ? cause.message : "Study Memory failed");
+      setState("error");
+    });
   }, [outcome]);
 
   const value = useMemo(() => ({
@@ -188,9 +202,37 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
 
   return <StudyMemoryContext.Provider value={value}>
     {children}
+    {finalizing && <StudyMemoryLoading captures={captures} />}
     {check && <RecallDialog check={check} onClose={() => setCheck(null)} onAward={(xp) => awardRecallXp(check.sessionId, xp)} />}
     {state === "error" && error && <div className="fixed bottom-5 left-1/2 z-60 -translate-x-1/2 rounded-xl border border-amber/40 bg-surface px-4 py-3 text-sm text-amber shadow-xl">{error}</div>}
   </StudyMemoryContext.Provider>;
+}
+
+function StudyMemoryLoading({ captures }: { captures: number }) {
+  return <div className="fixed inset-0 z-70 flex items-center justify-center bg-canvas/90 p-4 backdrop-blur-sm" role="status" aria-live="polite">
+    <div className="card w-full max-w-md p-8 text-center shadow-2xl">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-citrus/15">
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-citrus/25 border-t-citrus" />
+      </div>
+      <div className="eyebrow mt-5 text-citrus">AI Study Memory</div>
+      <h2 className="mt-2 text-2xl font-extrabold">Building your recall check</h2>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
+        Reviewing {captures} captured study moment{captures === 1 ? "" : "s"}, retrieving the strongest concepts, and writing grounded questions.
+      </p>
+      <div className="mt-6 space-y-2 text-left text-xs text-muted">
+        <LoadingStep done label="Study session captured" />
+        <LoadingStep active label="Finding the most relevant material" />
+        <LoadingStep label="Generating personalised questions" />
+      </div>
+    </div>
+  </div>;
+}
+
+function LoadingStep({ label, done = false, active = false }: { label: string; done?: boolean; active?: boolean }) {
+  return <div className={`flex items-center gap-2.5 rounded-lg px-3 py-2 ${active ? "bg-citrus/10 text-ink" : "bg-surface-2/60"}`}>
+    <span className={`h-2 w-2 rounded-full ${done ? "bg-moss" : active ? "animate-pulse bg-citrus" : "bg-faint/40"}`} />
+    <span>{label}</span>
+  </div>;
 }
 
 export function useStudyMemory() {
@@ -205,7 +247,7 @@ function RecallDialog({ check, onClose, onAward }: {
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ score: number; xpAwarded: number; results: GradeResult[] } | null>(null);
+  const [result, setResult] = useState<{ score: number; xpAwarded: number; results: GradeResult[]; details: StudyDetail[] } | null>(null);
   const [error, setError] = useState("");
   const submit = async () => {
     setSubmitting(true); setError("");
@@ -234,6 +276,18 @@ function RecallDialog({ check, onClose, onAward }: {
       </> : <>
         <div className="mt-6 rounded-2xl bg-moss/10 p-5"><div className="text-4xl font-extrabold text-moss">{result.score}%</div><div className="mt-1 text-sm font-semibold">Understanding score · +{result.xpAwarded} recall XP</div></div>
         <div className="mt-5 space-y-4">{result.results.map((grade, index) => <div key={index} className="rounded-xl bg-surface-2 p-4"><div className="text-sm font-bold">Question {index + 1}</div><p className="mt-1 text-sm text-muted">{grade.feedback}</p>{grade.missingPoints.length > 0 && <p className="mt-2 text-xs text-amber">Review: {grade.missingPoints.join(" · ")}</p>}</div>)}</div>
+        <div className="mt-7 border-t border-line-soft pt-5">
+          <div className="eyebrow">What your questions used</div>
+          <p className="mt-1 text-xs text-muted">These details stayed hidden until submission so they could not give away your answers.</p>
+          <div className="mt-3 space-y-2">{result.details.map((detail, index) => <details key={detail.chunkId} className="rounded-xl border border-line-soft bg-surface-2/60 px-4 py-3 text-left">
+            <summary className="cursor-pointer list-none text-sm font-semibold">
+              <span className="text-citrus">{index + 1}.</span> {detail.sourceName}
+              {detail.capturedAt && <span className="ml-2 text-[11px] font-normal text-faint">{new Date(detail.capturedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+            </summary>
+            {detail.summary && <p className="mt-2 text-xs font-medium text-muted">{detail.summary}</p>}
+            <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-faint">{detail.excerpt}</p>
+          </details>)}</div>
+        </div>
         <button onClick={onClose} className="mt-6 w-full rounded-xl bg-moss px-5 py-3 text-sm font-bold text-white">Back to dashboard</button>
       </>}
     </div>
