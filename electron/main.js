@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require("electron");
 const path = require("node:path");
+const { matchTargetApp, closeButtonPosition, closeTargetApp } = require("./closeApp");
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+const APP_WATCH_POLL_MS = 500;
+const REACHED_RESET_DELAY_MS = 2000;
 
 let dashboardWindow = null;
 let overlayWindow = null;
 let statusWindow = null;
+let appWatchTimer = null;
+// Name of whichever target app (see closeApp.js's TARGET_APPS) was focused
+// on the last poll tick, or null — used to edge-detect focus/blur so each
+// only fires once per transition, not every tick while it stays focused.
+let focusedTargetApp = null;
 
 /**
  * The latest status pushed up from the dashboard renderer.
@@ -20,6 +28,45 @@ let statusWindow = null;
  * Only the renderer knows what away means, so it is the one that decides.
  */
 let status = { phase: "idle" };
+
+// get-windows ships ESM-only; dynamic import works from this CommonJS file
+// without needing to convert the whole main process to ESM.
+let activeWindowPromise;
+function getActiveWindow() {
+  activeWindowPromise ??= import("get-windows");
+  return activeWindowPromise.then((mod) => mod.activeWindow());
+}
+
+function startAppWatch() {
+  // Reset so an app that's already focused when the pet comes out still
+  // counts as a fresh "just focused" trigger, not something already seen.
+  focusedTargetApp = null;
+  if (appWatchTimer) return;
+  appWatchTimer = setInterval(async () => {
+    if (!overlayWindow) return;
+    try {
+      const win = await getActiveWindow();
+      const name = win ? matchTargetApp(win.owner?.name) : null;
+      if (name && name !== focusedTargetApp) {
+        overlayWindow.webContents.send("target-app:focus", { name, position: closeButtonPosition(win.bounds) });
+      } else if (!name && focusedTargetApp) {
+        // Tabbed away before the pet reached it — call off the pursuit.
+        overlayWindow.webContents.send("target-app:blur", { name: focusedTargetApp });
+      }
+      focusedTargetApp = name;
+    } catch {
+      // Most likely macOS Accessibility permission hasn't been granted yet —
+      // just skip this tick rather than crashing the watch loop.
+    }
+  }, APP_WATCH_POLL_MS);
+}
+
+function stopAppWatch() {
+  if (appWatchTimer) {
+    clearInterval(appWatchTimer);
+    appWatchTimer = null;
+  }
+}
 
 function getStatusBounds() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -155,6 +202,7 @@ function createOverlayWindow() {
   overlayWindow.loadURL(`${APP_URL}/overlay`);
   overlayWindow.on("closed", () => {
     overlayWindow = null;
+    stopAppWatch();
   });
 }
 
@@ -164,10 +212,32 @@ ipcMain.handle("overlay:toggle", () => {
   if (overlayWindow) {
     overlayWindow.close();
     overlayWindow = null;
+    stopAppWatch();
     return false;
   }
   createOverlayWindow();
+  startAppWatch();
   return true;
+});
+
+// The overlay page sends this once the pet has walked up to a target app's
+// close button — see closeApp.js for why this runs the real quit command
+// rather than simulating an actual OS-level mouse click.
+//
+// Not resetting focusedTargetApp immediately: the quit can take a moment,
+// and if the very next poll tick still saw the app focused right after an
+// immediate reset, it would misread that as a brand new focus event and
+// send the pet running at it again mid-quit. The natural blur (once the app
+// actually closes) normally clears it — this bounded fallback reset is a
+// safety net in case that blur is ever missed, so a target app can never get
+// permanently stuck and ignored for the rest of the session. Guarded so it
+// only clears the slot if nothing else (a real blur, or a newer app) already
+// has by the time it fires.
+ipcMain.on("target-app:reached", (_event, name) => {
+  closeTargetApp(name);
+  setTimeout(() => {
+    if (focusedTargetApp === name) focusedTargetApp = null;
+  }, REACHED_RESET_DELAY_MS);
 });
 
 ipcMain.on("overlay:set-ignore-mouse-events", (event, ignore, options) => {

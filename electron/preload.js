@@ -5,6 +5,17 @@ contextBridge.exposeInMainWorld("overlayAPI", {
   setIgnoreMouseEvents: (ignore, options) =>
     ipcRenderer.send("overlay:set-ignore-mouse-events", ignore, options),
   ready: () => ipcRenderer.send("overlay:ready"),
+  onTargetAppFocus: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("target-app:focus", listener);
+    return () => ipcRenderer.removeListener("target-app:focus", listener);
+  },
+  onTargetAppBlur: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("target-app:blur", listener);
+    return () => ipcRenderer.removeListener("target-app:blur", listener);
+  },
+  targetAppReached: (name) => ipcRenderer.send("target-app:reached", name),
 });
 contextBridge.exposeInMainWorld("statusAPI", {
   ready: () => ipcRenderer.send("status:ready"),

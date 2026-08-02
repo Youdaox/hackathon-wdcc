@@ -14,6 +14,11 @@ declare global {
     overlayAPI?: {
       setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
       ready: () => void;
+      onTargetAppFocus: (
+        handler: (payload: { name: string; position: { x: number; y: number } }) => void,
+      ) => () => void;
+      onTargetAppBlur: (handler: (payload: { name: string }) => void) => () => void;
+      targetAppReached: (name: string) => void;
     };
     statusAPI?: {
       ready: () => void;

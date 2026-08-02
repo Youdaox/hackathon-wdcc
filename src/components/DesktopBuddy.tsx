@@ -9,13 +9,23 @@ import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
 
-// Window bridges are declared once in `src/types/electron.d.ts`.
+// Electron window bridges are declared once in `src/types/electron.d.ts`.
+// Document Picture-in-Picture isn't in TypeScript's DOM lib yet, and this is
+// the only file that uses it, so it's declared locally instead.
+declare global {
+  interface Window {
+    documentPictureInPicture?: {
+      requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;
+      window: Window | null;
+    };
+  }
+}
 
 const PET_SIZE = 96;
 const DRAG_SPEECH_LINE = "Let me down!";
 const DRAG_SPEECH_DELAY_MS = 600;
 const SPEECH_EVERY_N_IDLES = 3;
-const SPEECH_DURATION_MS = 3000;
+const SPEECH_DURATION_MS = 3000;  
 
 /**
  * "Let the duck out" toggles a desktop overlay. When the dashboard is running
