@@ -415,7 +415,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           })),
         }),
       }).then((response) => response.ok ? response.json() as Promise<{ companion: Companion }> : null)
-        .then((payload) => { if (payload?.companion) syncCompanion(payload.companion); })
+        .then((payload) => {
+          if (payload?.companion) syncCompanion(payload.companion);
+          if (payload) window.dispatchEvent(new Event("focus-sessions-changed"));
+        })
         .catch(() => { /* The local session remains authoritative for this device. */ });
     }
   }, [syncCompanion]);

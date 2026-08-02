@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { distractionEvents, sessions } from "@/lib/db/schema";
 import { AWAY_REASONS, type AwayReason } from "@/lib/api/contract";
 import { requireUserId } from "@/lib/api/identity";
-import { addNewZealandDays, nzDateKey, nzParts, nzStartOfDay } from "@/lib/timezone";
+import { addNewZealandDays, newZealandDate, nzDateKey, nzParts, nzStartOfDay } from "@/lib/timezone";
 
 /**
  * Seven-day recap: per-day totals, a study streak, and the reason breakdown.
@@ -24,24 +24,34 @@ export async function GET(request: Request) {
   }
 
   try {
+    const url = new URL(request.url);
+    const requestedStart = url.searchParams.get("start_date");
+    const requestedDays = Number(url.searchParams.get("days") ?? "7");
+    const daysToInclude = Number.isInteger(requestedDays) && requestedDays > 0 && requestedDays <= 31
+      ? requestedDays
+      : 7;
     // New Zealand midnight, including its daylight-saving transitions.
-    const midnight = nzStartOfDay();
-    const since = addNewZealandDays(midnight, -6).getTime();
+    const today = nzStartOfDay();
+    const dateParts = requestedStart?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const windowStart = dateParts
+      ? newZealandDate(Number(dateParts[1]), Number(dateParts[2]), Number(dateParts[3]))
+      : addNewZealandDays(today, 1 - daysToInclude);
+    const windowEnd = addNewZealandDays(windowStart, daysToInclude);
 
     const rows = await db
       .select()
       .from(sessions)
-      .where(and(eq(sessions.userId, userId), gte(sessions.endTime, since)));
+      .where(and(eq(sessions.userId, userId), gte(sessions.endTime, windowStart.getTime()), lt(sessions.endTime, windowEnd.getTime())));
 
     const events = await db
       .select()
       .from(distractionEvents)
-      .where(and(eq(distractionEvents.userId, userId), gte(distractionEvents.timestamp, since)));
+      .where(and(eq(distractionEvents.userId, userId), gte(distractionEvents.timestamp, windowStart.getTime()), lt(distractionEvents.timestamp, windowEnd.getTime())));
 
-    // Seven buckets, oldest first, so a quiet day still renders as an empty
+    // One bucket per requested day, oldest first, so a quiet day still renders as an empty
     // column instead of vanishing from the chart.
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const start = addNewZealandDays(midnight, i - 6);
+    const days = Array.from({ length: daysToInclude }, (_, i) => {
+      const start = addNewZealandDays(windowStart, i);
       const end = addNewZealandDays(start, 1);
       const daySessions = rows.filter((r) => r.endTime >= start.getTime() && r.endTime < end.getTime());
       const dayEvents = events.filter((e) => e.timestamp >= start.getTime() && e.timestamp < end.getTime());
