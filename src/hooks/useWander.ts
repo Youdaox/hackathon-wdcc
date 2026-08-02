@@ -92,11 +92,14 @@ export function useWander(
   const nextShakeAtRef = useRef(0);
   const frameRef = useRef(0);
   const getBoundsRef = useRef(getBounds);
-  getBoundsRef.current = getBounds;
   const onDragStateChangeRef = useRef(onDragStateChange);
-  onDragStateChangeRef.current = onDragStateChange;
   const onEnterIdleRef = useRef(onEnterIdle);
-  onEnterIdleRef.current = onEnterIdle;
+
+  useEffect(() => {
+    getBoundsRef.current = getBounds;
+    onDragStateChangeRef.current = onDragStateChange;
+    onEnterIdleRef.current = onEnterIdle;
+  }, [getBounds, onDragStateChange, onEnterIdle]);
 
   const goTo = useCallback(
     (x: number, y: number, onArrive?: () => void, windUpMs = 0) => {

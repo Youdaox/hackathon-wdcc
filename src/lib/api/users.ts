@@ -7,7 +7,6 @@ import {
   AVATAR_EMOTIONS,
   COMPANION_COLOR_VALUES_BY_SPECIES,
   PIG_ACCESSORY_VALUES,
-  type AvatarEmotion,
   type Companion,
 } from "@/lib/types";
 
