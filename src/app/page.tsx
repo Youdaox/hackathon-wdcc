@@ -57,7 +57,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/community#leaderboards" className="rounded-full bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-moss-deep">Community Leaderboards</Link>
+          <Link href="/community#leaderboards" className="rounded-full bg-moss px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-moss-deep">Community</Link>
           <InstallAppButton />
           <ThemeToggle />
           <div

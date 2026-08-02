@@ -2,6 +2,7 @@ import { GraphQLError, GraphQLScalarType, Kind } from "graphql";
 import { createSchema } from "graphql-yoga";
 import { eventsToStudyBlocks } from "./schedule";
 import type { CanvasSource } from "./source";
+import { addNewZealandDays, nzParts, nzStartOfDay } from "../timezone";
 import type {
   CanvasAssignment,
   CanvasCalendarEvent,
@@ -223,11 +224,9 @@ const ENROLLMENT_TYPE: Record<string, string> = {
 
 /** Default calendar window: the current week, Monday to Sunday. */
 function defaultWeek(): { startDate: string; endDate: string } {
-  const monday = new Date();
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  const sunday = new Date(monday);
-  sunday.setDate(sunday.getDate() + 7);
+  const now = new Date();
+  const monday = addNewZealandDays(nzStartOfDay(now), -((nzParts(now).weekday + 6) % 7));
+  const sunday = addNewZealandDays(monday, 7);
   return { startDate: monday.toISOString(), endDate: sunday.toISOString() };
 }
 

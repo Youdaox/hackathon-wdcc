@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import { nzClock } from "./timezone";
 
 /**
  * Ambient session status — a notification that sits there while you're away.
@@ -38,10 +39,7 @@ export async function showSessionNotification(startedAt: number): Promise<void> 
     if (!(await ensurePermission())) return;
     await clearSessionNotification();
 
-    const started = new Date(startedAt);
-    const clock = `${String(started.getHours()).padStart(2, "0")}:${String(
-      started.getMinutes(),
-    ).padStart(2, "0")}`;
+    const clock = nzClock(startedAt);
 
     notificationId = await Notifications.scheduleNotificationAsync({
       content: {

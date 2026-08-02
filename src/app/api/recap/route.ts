@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { distractionEvents, sessions } from "@/lib/db/schema";
 import { AWAY_REASONS, type AwayReason } from "@/lib/api/contract";
 import { requireUserId } from "@/lib/api/identity";
+import { addNewZealandDays, nzDateKey, nzParts, nzStartOfDay } from "@/lib/timezone";
 
 /**
  * Seven-day recap: per-day totals, a study streak, and the reason breakdown.
@@ -14,7 +15,6 @@ import { requireUserId } from "@/lib/api/identity";
  * one definition of a study day across web and mobile.
  */
 
-const DAY_MS = 86_400_000;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export async function GET(request: Request) {
@@ -24,11 +24,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Local midnight, so "today" matches what the user believes it is rather
-    // than a UTC boundary that rolls over mid-evening in New Zealand.
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const since = midnight.getTime() - 6 * DAY_MS;
+    // New Zealand midnight, including its daylight-saving transitions.
+    const midnight = nzStartOfDay();
+    const since = addNewZealandDays(midnight, -6).getTime();
 
     const rows = await db
       .select()
@@ -43,17 +41,17 @@ export async function GET(request: Request) {
     // Seven buckets, oldest first, so a quiet day still renders as an empty
     // column instead of vanishing from the chart.
     const days = Array.from({ length: 7 }, (_, i) => {
-      const start = since + i * DAY_MS;
-      const end = start + DAY_MS;
-      const daySessions = rows.filter((r) => r.endTime >= start && r.endTime < end);
-      const dayEvents = events.filter((e) => e.timestamp >= start && e.timestamp < end);
+      const start = addNewZealandDays(midnight, i - 6);
+      const end = addNewZealandDays(start, 1);
+      const daySessions = rows.filter((r) => r.endTime >= start.getTime() && r.endTime < end.getTime());
+      const dayEvents = events.filter((e) => e.timestamp >= start.getTime() && e.timestamp < end.getTime());
 
       const focusedMinutes = daySessions.reduce((sum, r) => sum + r.verifiedMinutes, 0);
       const distractedMinutes = dayEvents.reduce((sum, e) => sum + e.durationSeconds / 60, 0);
 
       return {
-        date: new Date(start).toISOString().slice(0, 10),
-        label: DAY_LABELS[new Date(start).getDay()],
+        date: nzDateKey(start),
+        label: DAY_LABELS[nzParts(start).weekday],
         focused_minutes: Math.round(focusedMinutes),
         distracted_minutes: Math.round(distractedMinutes),
         sessions: daySessions.length,

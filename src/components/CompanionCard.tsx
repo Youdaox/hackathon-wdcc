@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useIncline } from "@/lib/store";
 import { avatarStateFor, mealForTime, MOOD_LABEL, levelProgress, moodFor, xpFromFocusedMs } from "@/lib/companion";
 import { formatCompact } from "@/lib/time";
+import { nzDateKey } from "@/lib/timezone";
 import { useNow } from "@/hooks/useNow";
 import { PIG_ACCESSORIES } from "@/components/Pig";
 import { ANIMAL_SPECIES_OPTIONS, AnimalSprite, COLOR_OPTIONS_BY_SPECIES } from "@/components/AnimalSprite";
@@ -61,7 +62,7 @@ export function CompanionCard() {
   const meal = now === null ? null : mealForTime(now);
   const mealCheckDue = meal !== null && (
     companion.lastMealAt === null
-    || new Date(companion.lastMealAt).toDateString() !== now?.toDateString()
+    || nzDateKey(companion.lastMealAt) !== nzDateKey(now ?? new Date())
     || companion.lastMeal !== meal
   );
   const waterBreakDue = now !== null && (companion.nextWaterCheckAt === null || now.getTime() >= companion.nextWaterCheckAt);
@@ -99,8 +100,14 @@ export function CompanionCard() {
       </div>
 
       <SpeciesPicker value={companion.species} onChange={setCompanionSpecies} />
-      <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
-      <AccessoryPicker value={companion.accessory} onChange={setCompanionAccessory} />
+      {companion.species === "pig" && (
+        <ColorPicker species={companion.species} value={companion.color} onChange={setCompanionColor} />
+      )}
+      <AccessoryPicker
+        species={companion.species}
+        value={companion.accessory}
+        onChange={setCompanionAccessory}
+      />
 
       {editing ? (
         <input
@@ -266,19 +273,25 @@ function ColorPicker({
 }
 
 function AccessoryPicker({
+  species,
   value,
   onChange,
 }: {
+  species: AnimalSpecies;
   value: PigAccessory;
   onChange: (accessory: PigAccessory) => void;
 }) {
+  const accessories = species === "pig"
+    ? PIG_ACCESSORIES
+    : PIG_ACCESSORIES.filter((accessory) => accessory.value !== "glasses");
+
   return (
     <div
       className="mt-2 flex flex-wrap items-center justify-center gap-1.5"
       role="group"
       aria-label="Accessory"
     >
-      {PIG_ACCESSORIES.map((a) => (
+      {accessories.map((a) => (
         <button
           key={a.value}
           type="button"

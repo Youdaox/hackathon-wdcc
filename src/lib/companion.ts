@@ -1,13 +1,16 @@
 import type { ActiveSession, AnimalSpecies, AvatarEmotion, Companion, CompanionColor, Meal, Mood } from "./types";
 import { uid } from "./storage";
+import { nzDateKey, nzParts } from "./timezone";
 
 /**
  * Companion growth rules — the whole game balance lives here so it can be
  * explained (and tuned) in one place.
  */
 export const RULES = {
-  /** XP per verified focused minute. */
-  xpPerFocusedMinute: 1,
+  /** XP awarded for each completed focused interval. */
+  xpPerFocusedInterval: 1,
+  /** Ten verified focused seconds earn one XP. */
+  xpIntervalMs: 10_000,
   /** XP needed to clear level N. Grows linearly: L1 = 30, L2 = 60, … */
   xpForLevel: (level: number) => 30 * level,
   /**
@@ -69,9 +72,9 @@ export const WELLBEING = {
   missedWaterHpLossMultiplier: 1.3,
 } as const;
 
-/** Returns the meal we ask about in the user's local time, or null outside meal windows. */
+/** Returns the meal we ask about in New Zealand time, or null outside meal windows. */
 export function mealForTime(now = new Date()): Meal | null {
-  const hour = now.getHours();
+  const { hour } = nzParts(now);
   if (hour >= 7 && hour < 11) return "breakfast";
   if (hour >= 12 && hour < 14) return "lunch";
   if (hour >= 17 && hour < 19) return "dinner";
@@ -85,7 +88,7 @@ export function wellbeingHpLossMultiplier(
 ): number {
   const meal = mealForTime(new Date(now));
   const sameDay = companion.lastMealAt !== null
-    && new Date(companion.lastMealAt).toDateString() === new Date(now).toDateString();
+    && nzDateKey(companion.lastMealAt) === nzDateKey(now);
   const mealMultiplier = companion.foodBreakMissed
     ? WELLBEING.missedMealHpLossMultiplier
     : meal !== null && (!sameDay || companion.lastMeal !== meal)
@@ -99,13 +102,19 @@ export function wellbeingHpLossMultiplier(
   return mealMultiplier * waterMultiplier;
 }
 
+export const DEFAULT_COMPANION_NAME_BY_SPECIES: Record<AnimalSpecies, string> = {
+  pig: "Oinky",
+  cow: "Webster",
+  raccoon: "Sesame",
+};
+
 export function createCompanion(
-  name = "Oinky",
+  name: string | undefined = undefined,
   color: CompanionColor = "pink",
   species: AnimalSpecies = "pig",
 ): Companion {
   return {
-    name,
+    name: name ?? DEFAULT_COMPANION_NAME_BY_SPECIES[species],
     species,
     color,
     accessory: "none",
@@ -189,7 +198,7 @@ export function hpLostForSession(distractions: ReadonlyArray<{
 
 /** XP earned by a session's focused time, before any multiplier. */
 export function xpFromFocusedMs(focusedMs: number): number {
-  return Math.floor((focusedMs / 60_000) * RULES.xpPerFocusedMinute);
+  return Math.floor(focusedMs / RULES.xpIntervalMs) * RULES.xpPerFocusedInterval;
 }
 
 /** Progress within the current level, for the XP bar. */

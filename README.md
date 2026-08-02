@@ -35,7 +35,7 @@ Three collections in `localStorage`, defined in [`src/lib/types.ts`](src/lib/typ
 
 All balance lives in `RULES` in [`src/lib/companion.ts`](src/lib/companion.ts):
 
-- **1 XP** per verified focused minute
+- **1 XP** per 10 verified focused seconds
 - Level *N* costs **30 × N** XP
 - **−8 HP** per distraction, **+0.5 HP** per focused minute
 - Hidden stretches under **5s** cost focus time but not HP (grace for accidental clicks)
@@ -179,7 +179,7 @@ src/components/   FocusPanel, SchedulePanel, CanvasCard, CompanionCard, TodaySum
 
 ## Social leaderboard API
 
-The backend exposes an encouragement economy and UTC weekly/monthly leaderboards:
+The backend exposes an encouragement economy and New Zealand weekly/monthly leaderboards:
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -194,8 +194,8 @@ Until the project has authentication, authenticated endpoints use `x-user-id` an
 `x-user-name` request headers. Rule updates require `Authorization: Bearer <secret>`, where the
 secret is configured as `LEADERBOARD_ADMIN_SECRET`.
 
-The daily allowance is derived from the UTC date, so it resets without a scheduled job. A sender
-can encourage a recipient only once per UTC day. Task rewards are idempotent by `(userId, taskId)`.
+The daily allowance is derived from the New Zealand date, so it resets without a scheduled job. A sender
+can encourage a recipient only once per New Zealand day. Task rewards are idempotent by `(userId, taskId)`.
 Weekly rankings start on Monday; monthly rankings start on the first day of the month. Ties are
 resolved by encouragements received, then display name.
 

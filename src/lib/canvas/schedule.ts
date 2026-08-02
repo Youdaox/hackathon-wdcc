@@ -1,4 +1,5 @@
 import type { CanvasCalendarEvent, CanvasDerivedBlock } from "./types";
+import { nzParts } from "../timezone";
 
 /**
  * Canvas calendar events → Incline study blocks.
@@ -8,18 +9,18 @@ import type { CanvasCalendarEvent, CanvasDerivedBlock } from "./types";
  * So occurrences that share a title, course, and time-of-day are collapsed back
  * into a single block covering every weekday they land on.
  *
- * Times become minutes-from-midnight in the server's local zone, matching
+ * Times become minutes-from-midnight in New Zealand time, matching
  * `StudyBlock` in `src/lib/types.ts`.
  */
 
 function minutesFromMidnight(iso: string): number {
-  const date = new Date(iso);
-  return date.getHours() * 60 + date.getMinutes();
+  const { hour, minute } = nzParts(new Date(iso));
+  return hour * 60 + minute;
 }
 
 /** 0 = Sunday … 6 = Saturday, matching `StudyBlock.days`. */
 function weekday(iso: string): number {
-  return new Date(iso).getDay();
+  return nzParts(new Date(iso)).weekday;
 }
 
 export function eventsToStudyBlocks(events: CanvasCalendarEvent[]): CanvasDerivedBlock[] {
