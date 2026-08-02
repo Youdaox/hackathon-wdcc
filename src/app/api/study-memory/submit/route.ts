@@ -13,11 +13,20 @@ export async function POST(request: Request) {
   const answers = body?.answers && typeof body.answers === "object" ? body.answers as Record<string, string> : {};
   const check = db.select().from(recallChecks).where(and(eq(recallChecks.id, checkId), eq(recallChecks.userId, user.id))).get();
   if (!check) return NextResponse.json({ error: "recall check not found" }, { status: 404 });
+  const evidence = JSON.parse(check.evidenceJson) as Array<{
+    id: string; content: string; sourceName?: string; capturedAt?: number; summary?: string;
+  }>;
+  const details = evidence.map((item) => ({
+    chunkId: item.id,
+    sourceName: item.sourceName ?? "Study material",
+    capturedAt: item.capturedAt ?? null,
+    summary: item.summary ?? "",
+    excerpt: item.content.slice(0, 420),
+  }));
   if (check.status === "submitted") {
-    return NextResponse.json({ score: check.score, xpAwarded: check.xpAwarded, results: JSON.parse(check.feedbackJson ?? "[]") });
+    return NextResponse.json({ score: check.score, xpAwarded: check.xpAwarded, results: JSON.parse(check.feedbackJson ?? "[]"), details });
   }
   const questions = JSON.parse(check.questionsJson) as RecallQuestion[];
-  const evidence = JSON.parse(check.evidenceJson) as Array<{ id: string; content: string }>;
   if (questions.some((q) => typeof answers[q.id] !== "string" || answers[q.id].trim().length < 3)) {
     return NextResponse.json({ error: "Answer every question in your own words." }, { status: 400 });
   }
@@ -34,10 +43,9 @@ export async function POST(request: Request) {
       }).where(and(eq(recallChecks.id, check.id), eq(recallChecks.status, "ready"))).run();
       tx.update(studyMemorySessions).set({ status: "submitted" }).where(eq(studyMemorySessions.id, check.memorySessionId)).run();
     });
-    return NextResponse.json({ score, xpAwarded, results });
+    return NextResponse.json({ score, xpAwarded, results, details });
   } catch (error) {
     console.error("[study-memory] grading failed", error);
     return NextResponse.json({ error: "Grading is temporarily unavailable." }, { status: 503 });
   }
 }
-
