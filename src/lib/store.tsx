@@ -17,6 +17,7 @@ import {
   type AvatarEmotion,
   type Companion,
   type FocusSession,
+  type Meal,
   type PigAccessory,
   type PigColor,
   type StudyBlock,
@@ -28,7 +29,11 @@ import {
   applySession,
   awayMsPastGrace,
   createCompanion,
+  EMOTION_SESSION_MODIFIERS,
   hpLostForAwayMs,
+  restoreHp,
+  WELLBEING,
+  wellbeingHpLossMultiplier,
   type GrowthResult,
 } from "./companion";
 import { LIVE_SESSION_KEY, liveSessionKeyForUser, useFocusSession, type StartSessionInput } from "@/hooks/useFocusSession";
@@ -73,6 +78,8 @@ interface InclineContextValue {
   setCompanionColor: (color: PigColor) => void;
   setCompanionAccessory: (accessory: PigAccessory) => void;
   checkInWithCompanion: (emotion: AvatarEmotion) => void;
+  respondToMealCheck: (meal: Meal, ate: boolean) => void;
+  respondToWaterBreak: (drank: boolean) => void;
   sessions: FocusSession[];
   todaysSessions: FocusSession[];
   active: ReturnType<typeof useFocusSession>["active"];
@@ -176,9 +183,20 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       checkInAt: typeof loadedCompanion.checkInAt === "number" ? loadedCompanion.checkInAt : null,
       nextCheckInAt:
         typeof loadedCompanion.nextCheckInAt === "number" ? loadedCompanion.nextCheckInAt : null,
+      lastMeal: loadedCompanion.lastMeal === "breakfast" || loadedCompanion.lastMeal === "lunch" || loadedCompanion.lastMeal === "dinner"
+        ? loadedCompanion.lastMeal : null,
+      lastMealAt: typeof loadedCompanion.lastMealAt === "number" ? loadedCompanion.lastMealAt : null,
+      lastWaterAt: typeof loadedCompanion.lastWaterAt === "number" ? loadedCompanion.lastWaterAt : null,
+      nextWaterCheckAt: typeof loadedCompanion.nextWaterCheckAt === "number" ? loadedCompanion.nextWaterCheckAt : null,
+      foodBreakMissed: loadedCompanion.foodBreakMissed === true,
+      waterBreakMissed: loadedCompanion.waterBreakMissed === true,
     });
     setCompanion(localCompanion);
-    setSessions(loadJSON<FocusSession[]>(userKey(STORAGE_KEYS.sessions), []));
+    setSessions(loadJSON<FocusSession[]>(userKey(STORAGE_KEYS.sessions), []).map((session) => ({
+      ...session,
+      emotionalXpMultiplier: session.emotionalXpMultiplier ?? 1,
+      hpLossMultiplier: session.hpLossMultiplier ?? 1,
+    })));
     setGeoEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.geo), false));
     setEyeEnabled(loadJSON<boolean>(userKey(STORAGE_KEYS.eye), false));
     setGazeCalibration(loadJSON<GazeCalibration>(userKey(STORAGE_KEYS.eyeCalibration), "none"));
@@ -191,7 +209,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         if (!active || !payload) return;
         // Focus/schedule data remains local today; only profile fields are
         // shared so loading a popup cannot replace an in-progress web profile.
-        const sharedProfile = hasAvatarCustomization(payload.companion) || !hasAvatarCustomization(localCompanion)
+        const avatarProfile = hasAvatarCustomization(payload.companion) || !hasAvatarCustomization(localCompanion)
           ? {
               ...localCompanion,
               name: payload.companion.name,
@@ -202,6 +220,15 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
               nextCheckInAt: payload.companion.nextCheckInAt,
             }
           : localCompanion;
+        const sharedProfile = {
+          ...avatarProfile,
+          lastMeal: payload.companion.lastMeal,
+          lastMealAt: payload.companion.lastMealAt,
+          lastWaterAt: payload.companion.lastWaterAt,
+          nextWaterCheckAt: payload.companion.nextWaterCheckAt,
+          foodBreakMissed: payload.companion.foodBreakMissed,
+          waterBreakMissed: payload.companion.waterBreakMissed,
+        };
         setCompanion(sharedProfile);
         setProfileLoadedForUser(currentUser.id);
       })
@@ -234,6 +261,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
         checkInEmotion: companion.checkInEmotion,
         checkInAt: companion.checkInAt,
         nextCheckInAt: companion.nextCheckInAt,
+        lastMeal: companion.lastMeal,
+        lastMealAt: companion.lastMealAt,
+        lastWaterAt: companion.lastWaterAt,
+        nextWaterCheckAt: companion.nextWaterCheckAt,
+        foodBreakMissed: companion.foodBreakMissed,
+        waterBreakMissed: companion.waterBreakMissed,
       }),
     }).catch(() => undefined);
   }, [companion, currentUser, profileLoadedForUser]);
@@ -298,10 +331,14 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   const handleComplete = useCallback((finished: FocusSession) => {
     const zone = zoneRef.current;
+    const emotionalEffectCurrent = companionRef.current.nextCheckInAt !== null
+      && finished.endedAt < companionRef.current.nextCheckInAt;
     const withBonus: FocusSession = {
       ...finished,
       xpMultiplier: zone?.multiplier ?? 1,
       zoneName: zone?.name,
+      emotionalXpMultiplier: emotionalEffectCurrent ? finished.emotionalXpMultiplier : 1,
+      hpLossMultiplier: emotionalEffectCurrent ? finished.hpLossMultiplier : 1,
     };
     // Cleared first: this also stops the drain loop from banking one last
     // partial second on top of the authoritative result as it tears down.
@@ -309,7 +346,12 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     hpAnchor.current = null;
     const base =
       anchor === null ? companionRef.current : { ...companionRef.current, hp: anchor };
-    const growth = applySession(base, withBonus, withBonus.xpMultiplier);
+    const growth = applySession(
+      base,
+      withBonus,
+      withBonus.xpMultiplier * withBonus.emotionalXpMultiplier,
+      withBonus.hpLossMultiplier * wellbeingHpLossMultiplier(base, withBonus.endedAt),
+    );
     const recorded: FocusSession = {
       ...withBonus,
       xpEarned: growth.xpEarned,
@@ -321,8 +363,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const liveSessionKey = currentUser ? liveSessionKeyForUser(currentUser.id) : LIVE_SESSION_KEY;
-  const { active, start, end, cancel, elapsedMs, addBonusXp, setGazeAway } =
+  const { active, start, end, cancel, elapsedMs, addBonusXp, setEmotionalModifiers, setGazeAway } =
     useFocusSession(handleComplete, liveSessionKey);
+
+  const startSession = start;
 
   // --- Live decay -----------------------------------------------------------
   // The pet loses health *while* you're away rather than being docked once the
@@ -331,6 +375,10 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
 
   // Anchored per session, so a discard can put back exactly what it took.
   const sessionId = active?.id ?? null;
+  const emotionalEffectCurrent = active !== null && companion.nextCheckInAt !== null
+    && active.startedAt + elapsedMs < companion.nextCheckInAt;
+  const hpLossMultiplier = (emotionalEffectCurrent ? active?.hpLossMultiplier ?? 1 : 1)
+    * wellbeingHpLossMultiplier(companion);
   useEffect(() => {
     if (sessionId === null) {
       hpAnchor.current = null;
@@ -355,9 +403,9 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       // The session may have landed since the last tick; its final HP is
       // authoritative and must not be decayed further.
       if (hpAnchor.current === null) return;
-      const owed = hpLostForAwayMs(awayMsPastGrace(Date.now() - awaySince));
+      const owed = hpLostForAwayMs(awayMsPastGrace(Date.now() - awaySince)) * hpLossMultiplier;
       const unbanked = owed - drainedThisStretch.current;
-      if (unbanked <= 0) return;
+      if (unbanked === 0) return;
       drainedThisStretch.current = owed;
       setCompanion((prev) => ({ ...prev, hp: Math.max(0, prev.hp - unbanked) }));
     };
@@ -370,7 +418,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       // end with a small unexplained drop.
       drain();
     };
-  }, [awaySince, sessionId]);
+  }, [awaySince, sessionId, hpLossMultiplier]);
 
   /** Discarding a session undoes the health it cost — it officially never happened. */
   const cancelSession = useCallback(() => {
@@ -491,13 +539,41 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
   const checkInWithCompanion = useCallback((emotion: AvatarEmotion) => {
     const checkedInAt = Date.now();
     // A varied delay keeps the prompt from feeling like a rigid notification.
-    const delayMs = (5 + Math.floor(Math.random() * 56)) * 60_000;
+    const delayMs = WELLBEING.emotionalCheckInMinMs
+      + Math.random() * (WELLBEING.emotionalCheckInMaxMs - WELLBEING.emotionalCheckInMinMs);
     setCompanion((prev) => ({
       ...prev,
       checkInEmotion: emotion,
       checkInAt: checkedInAt,
       nextCheckInAt: checkedInAt + delayMs,
     }));
+    if (active) {
+      const modifiers = EMOTION_SESSION_MODIFIERS[emotion];
+      setEmotionalModifiers(modifiers.xpMultiplier, modifiers.hpLossMultiplier);
+    }
+  }, [active, setEmotionalModifiers]);
+
+  const respondToMealCheck = useCallback((meal: Meal, ate: boolean) => {
+    const at = Date.now();
+    setCompanion((prev) => {
+      const next = { ...prev, lastMeal: ate ? meal : prev.lastMeal, lastMealAt: ate ? at : prev.lastMealAt, foodBreakMissed: !ate };
+      return ate ? restoreHp(next, WELLBEING.mealRecoveryHp) : next;
+    });
+    if (ate && hpAnchor.current !== null) hpAnchor.current = Math.min(100, hpAnchor.current + WELLBEING.mealRecoveryHp);
+  }, []);
+
+  const respondToWaterBreak = useCallback((drank: boolean) => {
+    const at = Date.now();
+    setCompanion((prev) => {
+      const next = {
+        ...prev,
+        lastWaterAt: drank ? at : prev.lastWaterAt,
+        nextWaterCheckAt: at + WELLBEING.waterBreakMs,
+        waterBreakMissed: !drank,
+      };
+      return drank ? restoreHp(next, WELLBEING.waterRecoveryHp) : next;
+    });
+    if (drank && hpAnchor.current !== null) hpAnchor.current = Math.min(100, hpAnchor.current + WELLBEING.waterRecoveryHp);
   }, []);
 
   const resetEverything = useCallback(() => {
@@ -536,11 +612,13 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       setCompanionColor,
       setCompanionAccessory,
       checkInWithCompanion,
+      respondToMealCheck,
+      respondToWaterBreak,
       sessions,
       todaysSessions,
       active,
       elapsedMs,
-      startSession: start,
+      startSession,
       endSession: end,
       cancelSession,
       addBonusXp,
@@ -576,11 +654,13 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       setCompanionColor,
       setCompanionAccessory,
       checkInWithCompanion,
+      respondToMealCheck,
+      respondToWaterBreak,
       sessions,
       todaysSessions,
       active,
       elapsedMs,
-      start,
+      startSession,
       end,
       cancelSession,
       addBonusXp,

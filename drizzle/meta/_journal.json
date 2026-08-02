@@ -36,6 +36,27 @@
       "when": 1785572000000,
       "tag": "0004_companion_profile_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785573000000,
+      "tag": "0005_wellbeing_care",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785574000000,
+      "tag": "0006_water_prompt_cadence",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785632400000,
+      "tag": "0007_calendar_events",
+      "breakpoints": true
     }
   ]
 }

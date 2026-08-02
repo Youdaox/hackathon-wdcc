@@ -28,5 +28,7 @@ contextBridge.exposeInMainWorld("statusAPI", {
 contextBridge.exposeInMainWorld("electronAPI", {
   isElectron: true,
   toggleOverlay: () => ipcRenderer.invoke("overlay:toggle"),
-  setBackgroundTracking: (active) => ipcRenderer.send("tracking:set-active", active),
+  // The renderer owns the definition of "away" and pushes the derived status up;
+  // the main process only relays it to the pill.
+  setBackgroundStatus: (status) => ipcRenderer.send("status:set", status),
 });

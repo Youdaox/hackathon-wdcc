@@ -39,6 +39,31 @@ export const authSessions = sqliteTable(
   (table) => [index("auth_sessions_user_idx").on(table.userId)],
 );
 
+/** Dated calendar events are server-backed so every account has a private calendar. */
+export const calendarEvents = sqliteTable(
+  "calendar_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    eventDate: text("event_date").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    description: text("description").notNull().default(""),
+    location: text("location"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [index("calendar_events_user_date_idx").on(table.userId, table.eventDate)],
+);
+
+/** Secret bearer token used by calendar apps, which cannot send the login cookie. */
+export const calendarFeedTokens = sqliteTable("calendar_feed_tokens", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at").notNull(),
+});
+
 /** Mutual, account-backed connections used to limit encouragement sharing. */
 export const friendships = sqliteTable(
   "friendships",
@@ -75,6 +100,12 @@ export const companions = sqliteTable("companions", {
   checkInEmotion: text("check_in_emotion"),
   checkInAt: integer("check_in_at"),
   nextCheckInAt: integer("next_check_in_at"),
+  lastMeal: text("last_meal"),
+  lastMealAt: integer("last_meal_at"),
+  lastWaterAt: integer("last_water_at"),
+  nextWaterCheckAt: integer("next_water_check_at"),
+  foodBreakMissed: integer("food_break_missed", { mode: "boolean" }).notNull().default(false),
+  waterBreakMissed: integer("water_break_missed", { mode: "boolean" }).notNull().default(false),
   level: integer("level").notNull(),
   /** XP toward the *current* level only, not lifetime. */
   xp: integer("xp").notNull(),
