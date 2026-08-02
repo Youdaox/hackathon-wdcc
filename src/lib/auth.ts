@@ -1,5 +1,5 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { authSessions, users } from "@/lib/db/schema";
 
@@ -34,10 +34,10 @@ export function verifyPassword(password: string, stored: string) {
 }
 
 export function validateCredentials(username: unknown, password: unknown) {
-  const normalized = typeof username === "string" ? username.trim().toLowerCase() : "";
-  if (!/^[a-z0-9_]{3,30}$/.test(normalized)) return { error: "Username must be 3–30 letters, numbers, or underscores." };
+  const trimmed = typeof username === "string" ? username.trim() : "";
+  if (!/^[A-Za-z0-9_]{3,30}$/.test(trimmed)) return { error: "Username must be 3–30 letters, numbers, or underscores." };
   if (typeof password !== "string" || password.length < 8) return { error: "Password must be at least 8 characters." };
-  return { username: normalized, password };
+  return { username: trimmed, password };
 }
 
 export function createSession(userId: string) {
@@ -74,13 +74,24 @@ export function deleteSessionFromRequest(request: Request) {
 }
 
 export function findUserByUsername(username: string) {
-  return db.select().from(users).where(eq(users.username, username)).get();
+  const normalized = username.trim();
+  const user = db.select().from(users).where(sql`lower(${users.username}) = lower(${normalized})`).get();
+  if (!user) return null;
+  if (user.username !== normalized) {
+    db.update(users).set({ username: normalized }).where(eq(users.id, user.id)).run();
+    return { ...user, username: normalized };
+  }
+  return user;
 }
 
 export function registerUser(username: string, password: string): AuthUser {
   const now = Date.now();
   const id = crypto.randomUUID();
   const displayName = username;
+  const existingUser = findUserByUsername(username);
+  if (existingUser) {
+    throw new Error("UNIQUE constraint failed: users.username");
+  }
   db.insert(users).values({ id, username, passwordHash: hashPassword(password), displayName, createdAt: now }).run();
   return { id, username, name: displayName, initials: displayName.slice(0, 2).toUpperCase() };
 }
