@@ -314,6 +314,7 @@ export default function App() {
       species?: Companion["species"];
       color?: PigColor;
       accessory?: PigAccessory;
+      check_in_emotion?: Companion["check_in_emotion"];
       name?: string;
     }) => {
       setCompanion((current) => (current ? { ...current, ...patch } : current));
@@ -362,7 +363,7 @@ export default function App() {
               onCheckIn={checkIn}
               recall={recall}
               pledge={pledge}
-              onCustomise={handleCustomise}
+              onMoodChange={(emotion) => handleCustomise({ check_in_emotion: emotion })}
               onPledgeChange={setPledge}
               onStart={handleStart}
               onStop={handleStop}

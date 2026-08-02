@@ -24,7 +24,7 @@ type HomeScreenProps = {
     answer: (index: number) => void;
     dismiss: () => void;
   };
-  onCustomise: (patch: { color?: import("../api").PigColor; accessory?: import("../api").PigAccessory }) => void;
+  onMoodChange: (emotion: import("../api").AvatarEmotion) => void;
   onPledgeChange: (minutes: number) => void;
   notice: string | null;
   refreshing: boolean;
@@ -65,7 +65,7 @@ export function HomeScreen(props: HomeScreenProps) {
       <CompanionCard
         companion={props.companion}
         awayMs={props.state.running ? props.state.distractedMs : 0}
-        onCustomise={props.onCustomise}
+        onMoodChange={props.onMoodChange}
       />
 
       <View style={styles.metricRow}>
