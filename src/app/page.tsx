@@ -20,7 +20,7 @@ import { DemoLogin } from "@/components/DemoLogin";
 
 export default function Dashboard() {
   const { hydrated, active, eyeEnabled } = useIncline();
-  const { currentUser, logout } = useDemoAuth();
+  const { currentUser, logout, flashMessage, flashVisible } = useDemoAuth();
 
   useEffect(() => {
     window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
@@ -31,6 +31,14 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
+      {flashMessage !== null && (
+        <div
+          className={`fixed left-1/2 top-5 z-50 -translate-x-1/2 rounded-full border border-moss/30 bg-moss/10 px-7 py-5 text-xl font-semibold text-moss shadow-xl backdrop-blur-sm transition-all duration-500 ease-out ${flashVisible ? "scale-100 opacity-100" : "scale-90 opacity-0"}`}
+          aria-live="polite"
+        >
+          {flashMessage}
+        </div>
+      )}
       <header className="mb-10 flex items-center justify-between gap-4">
         <div className="flex items-baseline gap-3">
           <h1 className="font-display text-2xl font-extrabold tracking-tight">
