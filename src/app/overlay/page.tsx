@@ -7,6 +7,7 @@ import { moodFor } from "@/lib/companion";
 import { Pig } from "@/components/Pig";
 import { SpeechBubble } from "@/components/SpeechBubble";
 import { randomIdleLine } from "@/lib/speechLines";
+import type { Companion } from "@/lib/types";
 
 // Window bridges are declared once in `src/types/electron.d.ts`.
 
@@ -23,7 +24,14 @@ const SPEECH_DURATION_MS = 3000;
  * overlay shell (see electron/main.js) — not part of the normal dashboard flow.
  */
 export default function OverlayPage() {
-  const { companion } = useIncline();
+  const { companion: localCompanion } = useIncline();
+  // The dashboard pushes live updates over IPC (see electron/main.js) so the
+  // pet's look/mood here doesn't just reflect whatever it was when this
+  // window last opened — this overlay is a separate window with its own
+  // InclineProvider, so its own `companion` wouldn't otherwise pick up
+  // changes made in the dashboard while both are open.
+  const [pushedCompanion, setPushedCompanion] = useState<Companion | null>(null);
+  const companion = pushedCompanion ?? localCompanion;
   const petRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -134,6 +142,10 @@ export default function OverlayPage() {
       cancel();
     });
   }, [cancel]);
+
+  useEffect(() => {
+    return window.overlayAPI?.onCompanionUpdate(setPushedCompanion);
+  }, []);
 
   // Hit-testing: the Electron window ignores the mouse by default (click-through
   // to whatever's underneath). We forward mousemove events into this page, check
