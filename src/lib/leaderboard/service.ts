@@ -156,20 +156,20 @@ export class LeaderboardService {
         const tasksCompleted = snapshot.taskCompletions.filter(
           (item) => item.userId === member.id && inPeriod(item.completedAt),
         ).length;
-        const encouragementsReceived = snapshot.encouragements.filter(
-          (item) => item.recipientId === member.id && inPeriod(item.createdAt),
+        const encouragementsSent = snapshot.encouragements.filter(
+          (item) => item.senderId === member.id && inPeriod(item.createdAt),
         ).length;
         return {
           userId: member.id,
           displayName: member.displayName,
           tasksCompleted,
-          encouragementsReceived,
+          encouragementsSent,
           score: tasksCompleted * snapshot.rules.pointsPerTask
-            + encouragementsReceived * snapshot.rules.pointsPerEncouragementReceived,
+            + encouragementsSent * snapshot.rules.pointsPerEncouragementReceived,
         };
       });
       entries.sort((a, b) => b.score - a.score
-        || b.encouragementsReceived - a.encouragementsReceived
+        || b.encouragementsSent - a.encouragementsSent
         || a.displayName.localeCompare(b.displayName));
       const ranked: LeaderboardEntry[] = entries.slice(0, limit).map((entry, index) => ({
         ...entry, rank: index + 1,

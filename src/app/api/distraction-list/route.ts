@@ -35,28 +35,28 @@ export async function GET(request: Request) {
   }
 
   try {
-    ensureCompanion(userId);
+    await ensureCompanion(userId);
 
-    let rows = db
+    let rows = await db
       .select()
       .from(distractionApps)
       .where(eq(distractionApps.userId, userId))
-      .all();
+      ;
 
     if (rows.length === 0) {
       const now = Date.now();
-      db.transaction((tx) => {
+      await db.transaction(async (tx) => {
         for (const appIdentifier of DEFAULT_APPS) {
-          tx.insert(distractionApps)
+          await tx.insert(distractionApps)
             .values({ id: uid(), userId, appIdentifier, createdAt: now })
-            .run();
+            ;
         }
       });
-      rows = db
+      rows = await db
         .select()
         .from(distractionApps)
         .where(eq(distractionApps.userId, userId))
-        .all();
+        ;
     }
 
     return NextResponse.json({ apps: rows.map((row) => row.appIdentifier) });
@@ -90,15 +90,15 @@ export async function PUT(request: Request) {
   const apps = [...new Set(b.apps as string[])].filter((a) => a.trim().length > 0);
 
   try {
-    ensureCompanion(userId);
+    await ensureCompanion(userId);
     const now = Date.now();
 
-    db.transaction((tx) => {
-      tx.delete(distractionApps).where(eq(distractionApps.userId, userId)).run();
+    await db.transaction(async (tx) => {
+      await tx.delete(distractionApps).where(eq(distractionApps.userId, userId));
       for (const appIdentifier of apps) {
-        tx.insert(distractionApps)
+        await tx.insert(distractionApps)
           .values({ id: uid(), userId, appIdentifier, createdAt: now })
-          .run();
+          ;
       }
     });
 

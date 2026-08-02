@@ -1,0 +1,8 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    { "idx": 0, "version": "7", "when": 1785590400000, "tag": "0000_shared_postgres", "breakpoints": true },
+    { "idx": 1, "version": "7", "when": 1785630420000, "tag": "0001_timestamp_bigints", "breakpoints": true }
+  ]
+}

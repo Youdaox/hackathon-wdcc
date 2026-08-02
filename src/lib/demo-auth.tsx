@@ -19,6 +19,7 @@ async function authRequest(path: string, body?: Record<string, string>) {
     method: body ? "POST" : "GET",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    credentials: "same-origin",
   });
   const payload = await response.json().catch(() => ({})) as { user?: DemoUser | null; error?: string };
   if (!response.ok) throw new Error(payload.error ?? "Unable to complete that request.");

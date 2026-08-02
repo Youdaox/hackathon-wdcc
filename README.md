@@ -100,12 +100,33 @@ This also means the mobile client fits the existing contract with no changes: it
 
 Timing is timestamp-based rather than tick-based, which matters more here than on the web: a backgrounded React Native app has its timers suspended outright, so counting ticks would under-report distraction to near zero.
 
+## Shared group database and deployment
+
+The app now uses one hosted PostgreSQL database for accounts, friends, companions,
+search, encouragements, and the leaderboard. Create a PostgreSQL database (Neon is
+a straightforward option), then copy its pooled connection string into `.env.local`:
+
+```bash
+DATABASE_URL="postgresql://..." # include sslmode=require when your provider requires it
+LEADERBOARD_ADMIN_SECRET="a-long-random-secret"
+npm run db:setup
+npm run dev
+```
+
+Run `db:setup` exactly once per new database (and again after future migrations). For
+production, add the same two variables to your hosting provider, run `npm run db:setup`
+against that production `DATABASE_URL`, then deploy this Next.js app. Share the deployed
+HTTPS URL with the group; do not point phones at an individual developer's LAN address.
+
+`DATABASE_URL` is never exposed to browser or mobile code. It belongs only in `.env.local`
+locally and your deployment provider's encrypted environment variables.
+
 ## Mobile sync API
 
 The Android and iOS companion apps sync against this app. Setup:
 
 ```bash
-pnpm db:setup    # migrate + seed the campus study spots into incline.db
+    DATABASE_URL="postgresql://..." pnpm db:setup    # migrate + seed the shared hosted database
 pnpm dev         # phones point at http://<your-lan-ip>:3000
 ```
 
@@ -178,10 +199,8 @@ can encourage a recipient only once per UTC day. Task rewards are idempotent by 
 Weekly rankings start on Monday; monthly rankings start on the first day of the month. Ties are
 resolved by encouragements received, then display name.
 
-Data currently uses the `LeaderboardRepository` interface with a process-memory adapter for local
-demo use. Before production deployment, replace it with a transactional database adapter and add
-unique constraints for `(senderId, recipientId, dayKey)` and `(userId, taskId)`. Serverless
-instances do not share process memory.
+Leaderboard state is stored transactionally in the shared PostgreSQL database, so deployed
+instances and every group member see the same rankings and encouragement history.
 
 ## Canvas GraphQL backend
 

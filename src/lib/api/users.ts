@@ -12,7 +12,7 @@ import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES, type Companion
  * `user_id` is whatever string the client sends. Fine for a demo, and the one
  * thing that has to change before this is exposed publicly.
  */
-export function ensureCompanion(userId: string): Companion {
+export async function ensureCompanion(userId: string): Promise<Companion> {
   const now = Date.now();
 
   // API-only/mobile callers are retained as local records; browser accounts
@@ -23,13 +23,13 @@ export function ensureCompanion(userId: string): Companion {
     passwordHash: "external-device-account",
     displayName: userId,
     createdAt: now,
-  }).onConflictDoNothing().run();
+  }).onConflictDoNothing();
 
-  const existing = db.select().from(companions).where(eq(companions.userId, userId)).get();
+  const [existing] = await db.select().from(companions).where(eq(companions.userId, userId));
 
   if (!existing) {
     const fresh = createCompanion();
-    db.insert(companions)
+    await db.insert(companions)
       .values({
         userId,
         name: fresh.name,
@@ -52,7 +52,7 @@ export function ensureCompanion(userId: string): Companion {
         lastSessionAt: fresh.lastSessionAt,
         createdAt: fresh.createdAt,
       })
-      .run();
+      ;
     return fresh;
   }
 
@@ -71,7 +71,7 @@ export function ensureCompanion(userId: string): Companion {
     accessory: PIG_ACCESSORY_VALUES.includes(existing.accessory as Companion["accessory"])
       ? (existing.accessory as Companion["accessory"])
       : "none",
-    checkInEmotion: AVATAR_EMOTIONS.includes(existing.checkInEmotion as Companion["checkInEmotion"])
+    checkInEmotion: existing.checkInEmotion !== null && AVATAR_EMOTIONS.includes(existing.checkInEmotion as Exclude<Companion["checkInEmotion"], null>)
       ? (existing.checkInEmotion as Companion["checkInEmotion"])
       : null,
     checkInAt: existing.checkInAt,
@@ -95,7 +95,7 @@ export function ensureCompanion(userId: string): Companion {
   // same wilted pet the browser would.
   const decayed = applyIdleDecay(companion, now);
   if (decayed.hp !== companion.hp) {
-    db.update(companions).set({ hp: decayed.hp }).where(eq(companions.userId, userId)).run();
+    await db.update(companions).set({ hp: decayed.hp }).where(eq(companions.userId, userId));
   }
   return decayed;
 }

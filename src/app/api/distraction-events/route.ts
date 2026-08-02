@@ -33,10 +33,10 @@ export async function POST(request: Request) {
   const req = parsed.value;
 
   try {
-    ensureCompanion(req.user_id);
+    await ensureCompanion(req.user_id);
 
     const id = uid();
-    db.insert(distractionEvents)
+    await db.insert(distractionEvents)
       .values({
         id,
         userId: req.user_id,
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
         bypassed: req.bypassed,
         createdAt: Date.now(),
       })
-      .run();
+      ;
 
     return NextResponse.json({ event_id: id });
   } catch (error) {

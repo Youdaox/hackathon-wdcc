@@ -40,12 +40,12 @@ export function validateCredentials(username: unknown, password: unknown) {
   return { username: normalized, password };
 }
 
-export function createSession(userId: string) {
+export async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
   const now = Date.now();
   db.insert(authSessions).values({
     id: crypto.randomUUID(), tokenHash: tokenHash(token), userId, createdAt: now, expiresAt: now + SESSION_MS,
-  }).run();
+  });
   return { token, expiresAt: new Date(now + SESSION_MS) };
 }
 
@@ -57,30 +57,31 @@ export function clearSessionCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-export function sessionFromRequest(request: Request): AuthUser | null {
+export async function sessionFromRequest(request: Request): Promise<AuthUser | null> {
   const cookie = request.headers.get("cookie") ?? "";
   const token = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
   if (!token) return null;
-  const session = db.select().from(authSessions).where(and(eq(authSessions.tokenHash, tokenHash(token)), gt(authSessions.expiresAt, Date.now()))).get();
+  const [session] = await db.select().from(authSessions).where(and(eq(authSessions.tokenHash, tokenHash(token)), gt(authSessions.expiresAt, Date.now())));
   if (!session) return null;
-  const user = db.select().from(users).where(eq(users.id, session.userId)).get();
+  const [user] = await db.select().from(users).where(eq(users.id, session.userId));
   return user ? toUser(user) : null;
 }
 
-export function deleteSessionFromRequest(request: Request) {
+export async function deleteSessionFromRequest(request: Request) {
   const cookie = request.headers.get("cookie") ?? "";
   const token = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
-  if (token) db.delete(authSessions).where(eq(authSessions.tokenHash, tokenHash(token))).run();
+  if (token) await db.delete(authSessions).where(eq(authSessions.tokenHash, tokenHash(token)));
 }
 
-export function findUserByUsername(username: string) {
-  return db.select().from(users).where(eq(users.username, username)).get();
+export async function findUserByUsername(username: string) {
+  const [user] = await db.select().from(users).where(eq(users.username, username));
+  return user;
 }
 
-export function registerUser(username: string, password: string): AuthUser {
+export async function registerUser(username: string, password: string): Promise<AuthUser> {
   const now = Date.now();
   const id = crypto.randomUUID();
   const displayName = username;
-  db.insert(users).values({ id, username, passwordHash: hashPassword(password), displayName, createdAt: now }).run();
+  await db.insert(users).values({ id, username, passwordHash: hashPassword(password), displayName, createdAt: now });
   return { id, username, name: displayName, initials: displayName.slice(0, 2).toUpperCase() };
 }

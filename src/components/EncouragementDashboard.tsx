@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { EncouragementBalance, EncouragementHistoryRecord, LeaderboardEntry } from "@/lib/leaderboard/types";
 import { useDemoAuth, type DemoUser } from "@/lib/demo-auth";
 import { DemoLogin } from "@/components/DemoLogin";
 
 type Period = "week" | "month";
-type HistoryTab = "received" | "sent";
 type Notice = { kind: "success" | "error"; message: string } | null;
 type CommunityUser = DemoUser;
 const WELLBEING_TASKS = ["Take three deep breaths", "Look into the distance", "Stand up and stretch", "Drink some water"] as const;
@@ -19,8 +18,13 @@ function uniqueLeaderboardEntries(entries: LeaderboardEntry[]) {
   return [...new Map(entries.map((entry) => [entry.userId, entry])).values()];
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+async function request<T>(url: string, init?: RequestInit, user?: DemoUser | null): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (user) {
+    headers.set("x-user-id", user.id);
+    headers.set("x-user-name", user.name);
+  }
+  const response = await fetch(url, { credentials: "same-origin", ...init, headers });
   const body = await response.json().catch(() => ({})) as T & { error?: string | { message?: string } };
   if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : body.error?.message ?? "Something went wrong. Please try again.");
   return body;
@@ -30,33 +34,32 @@ export function EncouragementDashboard() {
   const { currentUser, logout } = useDemoAuth();
   const [balance, setBalance] = useState<EncouragementBalance | null>(null);
   const [received, setReceived] = useState<EncouragementHistoryRecord[]>([]);
-  const [sent, setSent] = useState<EncouragementHistoryRecord[]>([]);
   const [boards, setBoards] = useState<Record<Period, LeaderboardEntry[]>>({ week: [], month: [] });
   const [friends, setFriends] = useState<CommunityUser[]>([]);
   const [results, setResults] = useState<CommunityUser[]>([]);
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<Period>("week");
-  const [historyTab, setHistoryTab] = useState<HistoryTab>("received");
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<string | null>("initial");
   const [activeTask, setActiveTask] = useState<string | null>(null);
-  const seenReceived = useRef(new Set<string>());
 
   const load = useCallback(async () => {
-    const [nextBalance, weekly, monthly, friendResponse, receivedResponse, sentResponse] = await Promise.all([
-      request<EncouragementBalance>("/api/encouragements/balance"), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=week"), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=month"), request<{ friends: CommunityUser[] }>("/api/friends"), request<{ encouragements: EncouragementHistoryRecord[] }>("/api/encouragements?direction=received"), request<{ encouragements: EncouragementHistoryRecord[] }>("/api/encouragements?direction=sent"),
+    const [nextBalance, weekly, monthly, friendResponse, receivedResponse] = await Promise.all([
+      request<EncouragementBalance>("/api/encouragements/balance", undefined, currentUser), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=week", undefined, currentUser), request<{ entries: LeaderboardEntry[] }>("/api/leaderboards?period=month", undefined, currentUser), request<{ friends: CommunityUser[] }>("/api/friends", undefined, currentUser), request<{ encouragements: EncouragementHistoryRecord[] }>("/api/encouragements?direction=received", undefined, currentUser),
     ]);
-    setBalance(nextBalance); setBoards({ week: uniqueLeaderboardEntries(weekly.entries), month: uniqueLeaderboardEntries(monthly.entries) }); setFriends(uniqueById(friendResponse.friends)); setReceived(receivedResponse.encouragements); setSent(sentResponse.encouragements);
-    receivedResponse.encouragements.forEach((item) => seenReceived.current.add(item.id));
-  }, []);
+    setBalance(nextBalance); setBoards({ week: uniqueLeaderboardEntries(weekly.entries), month: uniqueLeaderboardEntries(monthly.entries) }); setFriends(uniqueById(friendResponse.friends)); setReceived(receivedResponse.encouragements);
+  }, [currentUser]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- reset is tied to account hydration */
   useEffect(() => {
     if (!currentUser) return;
     let active = true;
-    setBusy("initial"); setNotice(null); seenReceived.current = new Set();
+    setBusy("initial"); setNotice(null);
     void load().catch((error) => { if (active) setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to load community." }); }).finally(() => { if (active) setBusy(null); });
-    return () => { active = false; };
+    const interval = window.setInterval(() => {
+      void load().catch(() => { /* Keep the last successful community state visible. */ });
+    }, 12_000);
+    return () => { active = false; window.clearInterval(interval); };
   }, [currentUser, load]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -71,14 +74,14 @@ export function EncouragementDashboard() {
 
   async function addFriend(user: CommunityUser) {
     setBusy(user.id); setNotice(null);
-    try { await request("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) }); setNotice({ kind: "success", message: `${user.name} is now your friend.` }); setResults((items) => items.filter((item) => item.id !== user.id)); await load(); }
+    try { await request("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) }, currentUser); setNotice({ kind: "success", message: `${user.name} is now your friend.` }); setResults((items) => items.filter((item) => item.id !== user.id)); await load(); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to add friend." }); }
     finally { setBusy(null); }
   }
 
   async function sendEncouragement(friend: CommunityUser) {
     setBusy(friend.id); setNotice(null);
-    try { const result = await request<{ balance: EncouragementBalance }>("/api/encouragements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientId: friend.id, recipientName: friend.name }) }); setBalance(result.balance); setNotice({ kind: "success", message: `Encouragement sent to ${friend.name}.` }); await load(); }
+    try { const result = await request<{ balance: EncouragementBalance }>("/api/encouragements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipientId: friend.id, recipientName: friend.name }) }, currentUser); setBalance(result.balance); setNotice({ kind: "success", message: `Encouragement sent to ${friend.name}.` }); await load(); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to send encouragement." }); }
     finally { setBusy(null); }
   }
@@ -86,13 +89,12 @@ export function EncouragementDashboard() {
   async function completeTask() {
     if (!activeTask || !currentUser) return;
     setBusy("task"); setNotice(null);
-    try { const result = await request<{ balance: EncouragementBalance; encouragementPointsAwarded: number }>("/api/tasks/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: `wellbeing-${currentUser.id}-${Date.now()}` }) }); setBalance(result.balance); setActiveTask(null); setNotice({ kind: "success", message: result.encouragementPointsAwarded ? "Task completed. You earned an encouragement point." : "Task completed." }); }
+    try { const result = await request<{ balance: EncouragementBalance; encouragementPointsAwarded: number }>("/api/tasks/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: `wellbeing-${currentUser.id}-${Date.now()}` }) }, currentUser); setBalance(result.balance); setActiveTask(null); setNotice({ kind: "success", message: result.encouragementPointsAwarded ? "Task completed. You earned an encouragement point." : "Task completed." }); }
     catch (error) { setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to complete the task." }); }
     finally { setBusy(null); }
   }
 
   if (!currentUser) return <DemoLogin />;
-  const history = historyTab === "received" ? received : sent;
   const friendIds = new Set(friends.map((friend) => friend.id));
 
   return <div className="space-y-6">
@@ -100,7 +102,7 @@ export function EncouragementDashboard() {
     <section className="grid gap-4 lg:grid-cols-3"><div className="card p-6"><p className="eyebrow">Logged in</p><div className="mt-3 flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-moss/15 font-bold text-moss">{currentUser.initials}</div><div><h2 className="text-lg font-bold">{currentUser.name}</h2><p className="text-xs text-faint">@{currentUser.username}</p></div></div></div><div className="card p-6"><p className="eyebrow">Available today</p><p className="tabular mt-3 text-4xl font-extrabold text-moss">{balance?.available ?? "—"}</p><p className="mt-1 text-sm text-muted">encouragements remaining</p></div><div className="card p-6"><p className="eyebrow">Wellbeing task</p><p className="mt-3 text-sm text-muted">{activeTask ?? "Choose a small action for yourself."}</p><div className="mt-4 flex gap-2"><button onClick={() => setActiveTask(WELLBEING_TASKS[Math.floor(Math.random() * WELLBEING_TASKS.length)])} className="rounded-xl bg-moss px-3 py-2 text-xs font-bold text-white">{activeTask ? "Another task" : "Choose task"}</button>{activeTask && <button onClick={() => void completeTask()} disabled={busy !== null} className="rounded-xl border border-moss/30 px-3 py-2 text-xs font-bold text-moss">Complete</button>}</div></div></section>
     {notice && <p role="status" className={`rounded-xl border px-4 py-3 text-sm ${notice.kind === "success" ? "border-moss/30 bg-moss/10 text-moss" : "border-clay/30 bg-clay/10 text-clay"}`}>{notice.message}</p>}
     <section id="friends" className="card p-6"><p className="eyebrow">Friends</p><h2 className="mt-1 text-xl font-bold">Find people to encourage</h2><form onSubmit={search} className="mt-4 flex gap-2"><input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder="Search by username" className="min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm" /><button disabled={busy !== null} className="rounded-xl bg-moss px-4 py-3 text-sm font-bold text-white">Search</button></form>{results.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{results.map((user) => <UserCard key={user.id} user={user} action={friendIds.has(user.id) ? "Friend" : "Add friend"} disabled={busy !== null || friendIds.has(user.id)} onClick={() => void addFriend(user)} />)}</div>}<div className="mt-6 border-t border-line-soft pt-5"><p className="eyebrow">Your friends</p>{friends.length ? <div className="mt-3 grid gap-3 sm:grid-cols-2">{friends.map((friend) => <UserCard key={friend.id} user={friend} action={busy === friend.id ? "Sending…" : "Send encouragement"} disabled={busy !== null || !balance?.available} onClick={() => void sendEncouragement(friend)} />)}</div> : <p className="mt-3 text-sm text-muted">Search for a registered user to add your first friend.</p>}</div></section>
-    <section id="leaderboards" className="grid gap-6 lg:grid-cols-2"><div className="card overflow-hidden"><div className="border-b border-line-soft p-6"><p className="eyebrow">Encouragement history</p><div className="mt-4 flex rounded-xl bg-surface-2 p-1">{(["received", "sent"] as const).map((tab) => <button key={tab} onClick={() => setHistoryTab(tab)} className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold ${historyTab === tab ? "bg-moss text-white" : "text-muted"}`}>{tab}</button>)}</div></div>{history.length ? <div className="divide-y divide-line-soft">{history.map((item) => <article key={item.id} className="p-5"><p className="font-bold">{historyTab === "received" ? item.senderName : item.recipientName}</p><p className="mt-1 text-sm text-muted">“{item.message}”</p></article>)}</div> : <p className="p-8 text-center text-sm text-muted">No encouragements yet.</p>}</div><div className="card overflow-hidden"><div className="flex items-center justify-between border-b border-line-soft p-6"><div><p className="eyebrow">Leaderboard</p><h2 className="mt-1 text-xl font-bold">Community momentum</h2></div><div className="flex rounded-xl bg-surface-2 p-1">{(["week", "month"] as const).map((tab) => <button key={tab} onClick={() => setPeriod(tab)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${period === tab ? "bg-moss text-white" : "text-muted"}`}>{tab}</button>)}</div></div>{boards[period].length ? <div className="divide-y divide-line-soft">{boards[period].map((entry) => <div key={entry.userId} className="flex items-center justify-between px-5 py-4"><span className="font-semibold">#{entry.rank} {entry.displayName}{entry.userId === currentUser.id ? " (You)" : ""}</span><span className="tabular font-bold text-moss">{entry.score}</span></div>)}</div> : <p className="p-8 text-center text-sm text-muted">Complete a task to join the leaderboard.</p>}</div></section>
+    <section id="leaderboards" className="grid gap-6 lg:grid-cols-2"><div className="card overflow-hidden"><div className="border-b border-line-soft p-6"><p className="eyebrow">Encouragement feed</p><h2 className="mt-1 text-xl font-bold">Your friends are cheering you on</h2><p className="mt-2 text-sm text-muted">New messages appear here automatically.</p></div>{received.length ? <div className="divide-y divide-line-soft">{received.map((item) => <article key={item.id} className="p-5"><p className="font-bold">{item.senderName}</p><p className="mt-1 text-sm text-muted">“{item.message}”</p></article>)}</div> : <p className="p-8 text-center text-sm text-muted">No encouragements yet — invite a friend to send one.</p>}</div><div className="card overflow-hidden"><div className="flex items-center justify-between border-b border-line-soft p-6"><div><p className="eyebrow">Leaderboard</p><h2 className="mt-1 text-xl font-bold">Community momentum</h2></div><div className="flex rounded-xl bg-surface-2 p-1">{(["week", "month"] as const).map((tab) => <button key={tab} onClick={() => setPeriod(tab)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${period === tab ? "bg-moss text-white" : "text-muted"}`}>{tab}</button>)}</div></div>{boards[period].length ? <div className="divide-y divide-line-soft">{boards[period].map((entry) => <div key={entry.userId} className="flex items-center justify-between px-5 py-4"><span className="font-semibold">#{entry.rank} {entry.displayName}{entry.userId === currentUser.id ? " (You)" : ""}</span><span className="tabular font-bold text-moss">{entry.score}</span></div>)}</div> : <p className="p-8 text-center text-sm text-muted">Complete a task to join the leaderboard.</p>}</div></section>
   </div>;
 }
 
