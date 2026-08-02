@@ -63,3 +63,40 @@ export const GRACE_MS = 5_000;
  */
 export const CHECKPOINT_MIN_MS = 1_000;
 
+
+
+/**
+ * What leaving costs.
+ *
+ * Three parts, deliberately front-loaded: a flat hit the instant you pick the
+ * phone up, a steady drain while you're gone, and a steeper rate once you've
+ * been away long enough that it isn't a glance any more. The escalation is the
+ * point — a five-second check shouldn't feel like a five-minute scroll.
+ *
+ * Duplicated in `src/app/api/sessions/route.ts`; the two must agree or the
+ * live number will contradict what the server writes on sync.
+ */
+export const HP_LEAVE_PENALTY = 5;
+export const HP_DRAIN_PER_AWAY_MINUTE = 2;
+export const HP_ESCALATE_AFTER_MS = 30_000;
+export const HP_ESCALATED_MULTIPLIER = 3;
+
+/** HP lost for a single away stretch of `awayMs`. */
+export function hpCostForAway(awayMs: number): number {
+  if (awayMs <= 0) return 0;
+  const base = HP_LEAVE_PENALTY;
+  const steady = (Math.min(awayMs, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
+  const overrun = Math.max(0, awayMs - HP_ESCALATE_AFTER_MS);
+  const escalated =
+    (overrun / 60_000) * HP_DRAIN_PER_AWAY_MINUTE * HP_ESCALATED_MULTIPLIER;
+  return base + steady + escalated;
+}
+
+/**
+ * Location opt-in, mirroring the web's `incline.geo.v1`.
+ *
+ * Nothing prompts for location until this is true. Keeping it explicit is the
+ * point: the bonus is additive, so the permission dialog should never be the
+ * first thing a new user meets.
+ */
+export const GEO_OPT_IN_KEY = "incline.geo.v1";

@@ -11,7 +11,9 @@
     "db:generate": "drizzle-kit generate",
     "db:setup": "node --env-file=.env.local --experimental-strip-types scripts/db-setup.ts",
     "electron": "set ELECTRON_RUN_AS_NODE=&& electron .",
-    "dev:web": "next dev"
+    "dev:web": "next dev",
+    "gen:animals": "node --experimental-strip-types scripts/gen-animal-pixels.ts",
+    "gen:pig": "node --experimental-strip-types scripts/gen-pig-pixels.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

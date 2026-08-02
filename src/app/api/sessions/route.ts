@@ -3,6 +3,30 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companions, distractionEvents, sessions, studySpots } from "@/lib/db/schema";
 import { applySession, uid } from "@/lib/companion";
+
+/**
+ * What leaving costs. Mirrors `hpCostForAway` in mobile/src/config.ts — the
+ * two must agree or the live number contradicts what gets written on sync.
+ *
+ * Front-loaded on purpose: a flat hit for picking the phone up, a steady drain
+ * while away, and a steeper rate past the escalation point, so a five-second
+ * glance doesn't feel like a five-minute scroll.
+ */
+const HP_LEAVE_PENALTY = 5;
+const HP_DRAIN_PER_AWAY_MINUTE = 2;
+const HP_ESCALATE_AFTER_MS = 30_000;
+const HP_ESCALATED_MULTIPLIER = 3;
+
+function hpCostForAway(awayMs: number): number {
+  if (awayMs <= 0) return 0;
+  const steady = (Math.min(awayMs, HP_ESCALATE_AFTER_MS) / 60_000) * HP_DRAIN_PER_AWAY_MINUTE;
+  const overrun = Math.max(0, awayMs - HP_ESCALATE_AFTER_MS);
+  return (
+    HP_LEAVE_PENALTY +
+    steady +
+    (overrun / 60_000) * HP_DRAIN_PER_AWAY_MINUTE * HP_ESCALATED_MULTIPLIER
+  );
+}
 import { ensureCompanion } from "@/lib/api/users";
 import { requireUserId } from "@/lib/api/identity";
 import {
@@ -68,6 +92,16 @@ export async function POST(request: Request) {
       req.distraction_events,
     );
 
+    // HP also drains with time away, not just per break, so picking up the
+    // phone costs something continuously — which is what the client shows
+    // live. Reasons the user isn't penalised for are excluded, matching the
+    // rule the check-in already applies.
+    // Per stretch, not on the total: the flat leave penalty should be paid
+    // once per time you picked the phone up, and escalation is per-absence.
+    const hpDrain = req.distraction_events
+      .filter((e) => e.reason === null || e.reason === undefined || e.reason === "distraction")
+      .reduce((sum, e) => sum + hpCostForAway(e.duration_seconds * 1000), 0);
+
     const distractions = req.distraction_events.map(toWebDistraction);
     const result = applySession(
       companion,
@@ -79,6 +113,12 @@ export async function POST(request: Request) {
       },
       xpMultiplier,
     );
+
+    const drained = {
+      ...result.companion,
+      hp: Math.max(0, Math.min(100, result.companion.hp - hpDrain)),
+    };
+    const hpDelta = Math.round(drained.hp - companion.hp);
 
     const sessionId = uid();
     const now = Date.now();
@@ -97,7 +137,7 @@ export async function POST(request: Request) {
           locationName: req.location_name,
           platform: req.platform,
           xpEarned: result.xpEarned,
-          hpDelta: result.hpDelta,
+          hpDelta,
           xpMultiplier,
           committedMinutes: req.committed_minutes ?? 0,
           voided: pledge.voided,
@@ -125,7 +165,7 @@ export async function POST(request: Request) {
       // Inside the transaction: the grown companion and the session that
       // caused it must land together or not at all.
       await tx.update(companions)
-        .set(result.companion)
+        .set(drained)
         .where(eq(companions.userId, userId))
         ;
     });
@@ -135,7 +175,7 @@ export async function POST(request: Request) {
       pet_growth_delta: result.xpEarned,
       voided: pledge.voided,
       void_reason: pledge.reason,
-      companion: result.companion,
+      companion: drained,
     });
   } catch (error) {
     console.error("[sessions] failed to record session:", error);

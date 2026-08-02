@@ -12,6 +12,7 @@ import { NEW_ZEALAND_TIME_ZONE } from "../timezone";
 type HomeScreenProps = {
   companion: Companion | null;
   spots: StudySpot[];
+  blocks: import("../api").StudyBlock[];
   match: SpotMatch | null;
   checking: boolean;
   state: FocusState;
@@ -61,7 +62,11 @@ export function HomeScreen(props: HomeScreenProps) {
         </View>
       </View>
 
-      <CompanionCard companion={props.companion} onCustomise={props.onCustomise} />
+      <CompanionCard
+        companion={props.companion}
+        awayMs={props.state.running ? props.state.distractedMs : 0}
+        onCustomise={props.onCustomise}
+      />
 
       <View style={styles.metricRow}>
         <MetricCard value={focusedMinutes} unit="min" label="Focused today" />
@@ -70,6 +75,7 @@ export function HomeScreen(props: HomeScreenProps) {
 
       <LocationCard
         spots={props.spots}
+        blocks={props.blocks}
         match={props.match}
         checking={props.checking}
         onCheckIn={props.onCheckIn}
