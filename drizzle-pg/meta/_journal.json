@@ -29,6 +29,13 @@
       "when": 1785700000000,
       "tag": "0003_focus_interruption",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785710000000,
+      "tag": "0004_study_blocks",
+      "breakpoints": true
     }
   ]
 }

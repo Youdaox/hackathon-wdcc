@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { FocusState } from "../useFocusSession";
-import { PLEDGE_ABANDON_MS } from "../config";
 import { colors, formatDuration, roundedFont } from "../theme";
 
 const PLEDGES = [0, 15, 25, 50];
@@ -66,19 +65,18 @@ export function FocusPanel({
 
       {!state.running && pledge > 0 && (
         <Text style={styles.pledgeNote}>
-          Leave for more than {Math.round(PLEDGE_ABANDON_MS / 1000)}s, or stop early, and this
-          session earns nothing.
+          Stop before the time is up, or admit you were distracted, and this session earns
+          nothing. Stepping away for something real doesn&apos;t count against you.
         </Text>
       )}
 
       {state.running && state.pledgeMinutes > 0 && (
         <Text style={styles.pledgeNote}>
           {state.away
-            ? `Get back within ${Math.round(PLEDGE_ABANDON_MS / 1000)}s or the pledge dies.`
-            : `Pledged ${state.pledgeMinutes} minutes — ${Math.max(
-                0,
-                Math.ceil(state.pledgeMinutes - state.focusedMs / 60_000),
-              )} to go${state.endsAt ? `, due by ${clockOf(state.endsAt)}` : ""}.`}
+            ? "Away — your pledge runs on the clock, not your screen."
+            : `Pledged ${state.pledgeMinutes} minutes${
+                state.endsAt ? ` — done at ${clockOf(state.endsAt)}` : ""
+              }.`}
         </Text>
       )}
 

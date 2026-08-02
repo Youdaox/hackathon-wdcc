@@ -57,9 +57,28 @@ export function clearSessionCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-export async function sessionFromRequest(request: Request): Promise<AuthUser | null> {
+/**
+ * The session token, from either transport.
+ *
+ * Browsers send the httpOnly cookie. React Native manages cookies in its own
+ * native store and drops a manually-set `Cookie` header, so the mobile app
+ * sends the same token as a bearer instead — same value, same lookup, just a
+ * header the platform won't interfere with.
+ */
+function tokenFromRequest(request: Request): string | undefined {
+  const bearer = request.headers.get("authorization");
+  if (bearer?.toLowerCase().startsWith("bearer ")) return bearer.slice(7).trim() || undefined;
+
   const cookie = request.headers.get("cookie") ?? "";
-  const token = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
+  return cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${COOKIE_NAME}=`))
+    ?.slice(COOKIE_NAME.length + 1);
+}
+
+export async function sessionFromRequest(request: Request): Promise<AuthUser | null> {
+  const token = tokenFromRequest(request);
   if (!token) return null;
   const [session] = await db.select().from(authSessions).where(and(eq(authSessions.tokenHash, tokenHash(token)), gt(authSessions.expiresAt, Date.now())));
   if (!session) return null;
@@ -68,8 +87,7 @@ export async function sessionFromRequest(request: Request): Promise<AuthUser | n
 }
 
 export async function deleteSessionFromRequest(request: Request) {
-  const cookie = request.headers.get("cookie") ?? "";
-  const token = cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
+  const token = tokenFromRequest(request);
   if (token) await db.delete(authSessions).where(eq(authSessions.tokenHash, tokenHash(token)));
 }
 

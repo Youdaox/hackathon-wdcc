@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { distractionEvents } from "@/lib/db/schema";
 import { uid } from "@/lib/companion";
 import { ensureCompanion } from "@/lib/api/users";
+import { requireUserId } from "@/lib/api/identity";
 import { parseDistractionEventRequest } from "@/lib/api/contract";
 
 /**
@@ -32,14 +33,19 @@ export async function POST(request: Request) {
   }
   const req = parsed.value;
 
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  }
+
   try {
-    await ensureCompanion(req.user_id);
+    await ensureCompanion(userId);
 
     const id = uid();
     await db.insert(distractionEvents)
       .values({
         id,
-        userId: req.user_id,
+        userId: userId,
         sessionId: req.session_id,
         timestamp: Date.parse(req.timestamp),
         durationSeconds: req.duration_seconds,

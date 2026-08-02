@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
   }
   const session = await createSession(user.id);
-  const response = NextResponse.json({ user: { id: user.id, username: user.username, name: user.displayName, initials: user.displayName.slice(0, 2).toUpperCase() } });
+  const response = NextResponse.json({ user: { id: user.id, username: user.username, name: user.displayName, initials: user.displayName.slice(0, 2).toUpperCase() }, token: session.token });
   response.cookies.set({ name: "incline_session", value: session.token, path: "/", httpOnly: true, sameSite: "lax", expires: session.expiresAt, secure: process.env.NODE_ENV === "production" });
   return response;
 }

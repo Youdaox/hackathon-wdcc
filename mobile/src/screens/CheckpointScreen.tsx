@@ -50,6 +50,12 @@ const REASONS: {
     tone: "neutral",
   },
   {
+    reason: "offline",
+    label: "Phone was down",
+    blurb: "Studying off-screen. No penalty.",
+    tone: "calm",
+  },
+  {
     reason: "distraction",
     label: "I got distracted",
     blurb: "Costs a little HP. Honest is better.",
@@ -101,7 +107,7 @@ export function CheckpointScreen({
             <>
               <Text style={styles.title}>You slipped away for a bit</Text>
               <Text style={styles.body}>
-                I got a little worried. Before I tell you — how long do you think you were gone?
+                Before I tell you — how long do you think you were gone?
               </Text>
 
               <View style={styles.options}>

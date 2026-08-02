@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { companions, distractionEvents, sessions, studySpots } from "@/lib/db/schema";
 import { applySession, uid } from "@/lib/companion";
 import { ensureCompanion } from "@/lib/api/users";
+import { requireUserId } from "@/lib/api/identity";
 import {
   evaluatePledge,
   parseSessionRequest,
@@ -38,8 +39,13 @@ export async function POST(request: Request) {
   }
   const req = parsed.value;
 
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+  }
+
   try {
-    const companion = await ensureCompanion(req.user_id);
+    const companion = await ensureCompanion(userId);
 
     // The client reports *where* it was; the server decides what that is
     // worth. A device claiming "General Library" cannot invent a multiplier.
@@ -58,7 +64,7 @@ export async function POST(request: Request) {
     // rather than the result means levels can't creep up on a forfeit.
     const pledge = evaluatePledge(
       req.committed_minutes ?? 0,
-      req.verified_minutes,
+      (Date.parse(req.end_time) - Date.parse(req.start_time)) / 60_000,
       req.distraction_events,
     );
 
@@ -83,7 +89,7 @@ export async function POST(request: Request) {
       await tx.insert(sessions)
         .values({
           id: sessionId,
-          userId: req.user_id,
+          userId: userId,
           startTime: Date.parse(req.start_time),
           endTime: Date.parse(req.end_time),
           verifiedMinutes: req.verified_minutes,
@@ -103,7 +109,7 @@ export async function POST(request: Request) {
         await tx.insert(distractionEvents)
           .values({
             id: uid(),
-            userId: req.user_id,
+            userId: userId,
             sessionId,
             timestamp: Date.parse(event.timestamp),
             durationSeconds: event.duration_seconds,
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
       // caused it must land together or not at all.
       await tx.update(companions)
         .set(result.companion)
-        .where(eq(companions.userId, req.user_id))
+        .where(eq(companions.userId, userId))
         ;
     });
 

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { companions } from "@/lib/db/schema";
 import { AVATAR_EMOTIONS, PIG_ACCESSORY_VALUES, PIG_COLOR_VALUES } from "@/lib/types";
 import { ensureCompanion } from "@/lib/api/users";
+import { requireUserId } from "@/lib/api/identity";
 import { levelProgress, moodFor } from "@/lib/companion";
 
 /**
@@ -20,9 +21,9 @@ import { levelProgress, moodFor } from "@/lib/companion";
  */
 
 export async function GET(request: Request) {
-  const userId = new URL(request.url).searchParams.get("user_id");
-  if (!userId?.trim()) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   }
 
   try {
@@ -67,9 +68,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
   const b = body as Record<string, unknown> | null;
-  const userId = typeof b?.user_id === "string" ? b.user_id : "";
-  if (!userId.trim()) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   }
 
   const patch: Record<string, unknown> = {};

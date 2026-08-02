@@ -63,13 +63,3 @@ export const GRACE_MS = 5_000;
  */
 export const CHECKPOINT_MIN_MS = 1_000;
 
-/**
- * How long you can be away from a *pledged* session before it dies.
- *
- * This is the only hard rule in the app. It works because it restricts the one
- * thing we genuinely control — the session — instead of pretending to control
- * the phone. No permissions, no setup, nothing to configure.
- *
- * Open-ended sessions are unaffected: stakes are opt-in.
- */
-export const PLEDGE_ABANDON_MS = 60_000;

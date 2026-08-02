@@ -310,3 +310,31 @@ export const studySpots = pgTable(
   },
   (table) => [index("study_spots_user_idx").on(table.userId)],
 );
+
+/**
+ * Weekly recurring study blocks.
+ *
+ * The web keeps these in localStorage; this table exists so the phone has
+ * something to read, and so a block created on either device shows up on both.
+ * Times are minutes-from-midnight and `days` is a comma-separated 0-6 list,
+ * matching the `StudyBlock` shape the rest of the app already uses.
+ */
+export const studyBlocks = pgTable(
+  "study_blocks",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    course: text("course").notNull(),
+    startMin: integer("start_min").notNull(),
+    endMin: integer("end_min").notNull(),
+    /** e.g. "1,3,5" for Mon/Wed/Fri. */
+    days: text("days").notNull(),
+    source: text("source", { enum: ["manual", "canvas"] }).notNull().default("manual"),
+    externalId: text("external_id"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (table) => [index("study_blocks_user_idx").on(table.userId)],
+);

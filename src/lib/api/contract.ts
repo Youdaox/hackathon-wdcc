@@ -27,31 +27,45 @@ export type Platform = "android" | "ios" | "web";
  * The consequences differ on purpose — the point is to tell a real
  * interruption apart from a drift, which duration alone cannot do.
  */
-export type AwayReason = "emergency" | "task" | "distraction" | "ended";
+export type AwayReason = "emergency" | "task" | "offline" | "distraction" | "ended";
 
-export const AWAY_REASONS: AwayReason[] = ["emergency", "task", "distraction", "ended"];
+export const AWAY_REASONS: AwayReason[] = [
+  "emergency",
+  "task",
+  "offline",
+  "distraction",
+  "ended",
+];
 
 /**
  * Whether a pledged session was broken, and why.
  *
- * A pledge is the only thing in the app with real stakes, so the rule is
- * deliberately narrow and legible: you break it by stopping short of the time
- * you promised, or by pushing past an intercept. Being pulled away and coming
- * back does *not* break it — that's what the check-in is for.
+ * Measured against **wall-clock** time, not verified focus. That difference
+ * matters: a locked phone reads identically to an app-switch through
+ * AppState, so scoring the pledge on screen time would fail anyone who put
+ * the phone down and studied on paper — the exact behaviour the app should
+ * reward. Elapsed time is the promise; focused time is what earns XP.
  *
- * Computed server-side so a client can't quietly forgive itself.
+ * So a pledge breaks two ways, both of them choices the user made:
+ *   - stopping before the time is up
+ *   - admitting, at the check-in, that they were off being distracted
+ *
+ * Being away for an emergency, a task, or with the screen off does not break
+ * it. Computed server-side so a client can't quietly forgive itself.
  */
 export function evaluatePledge(
   committedMinutes: number,
-  verifiedMinutes: number,
+  elapsedMinutes: number,
   events: WireDistractionEvent[],
-): { voided: boolean; reason: "left-early" | "bypassed" | null } {
+): { voided: boolean; reason: "left-early" | "distracted" | null } {
   if (committedMinutes <= 0) return { voided: false, reason: null };
-  if (events.some((e) => e.bypassed === true)) return { voided: true, reason: "bypassed" };
   // A small tolerance: a pledge shouldn't fail because a tap landed a second
   // early on a timer the user can't control to the millisecond.
-  if (verifiedMinutes + 0.5 < committedMinutes) {
+  if (elapsedMinutes + 0.5 < committedMinutes) {
     return { voided: true, reason: "left-early" };
+  }
+  if (events.some((e) => e.reason === "distraction")) {
+    return { voided: true, reason: "distracted" };
   }
   return { voided: false, reason: null };
 }
@@ -77,7 +91,6 @@ export interface WireDistractionEvent {
 }
 
 export interface SessionRequest {
-  user_id: string;
   start_time: string;
   end_time: string;
   verified_minutes: number;
@@ -97,11 +110,10 @@ export interface SessionResponse {
   /** True when a pledge was broken and the session earned nothing. */
   voided: boolean;
   /** Why it was voided, for the UI to say something specific. */
-  void_reason: "left-early" | "bypassed" | null;
+  void_reason: "left-early" | "distracted" | null;
 }
 
 export interface DistractionEventRequest {
-  user_id: string;
   session_id: string | null;
   timestamp: string;
   duration_seconds: number;
@@ -221,9 +233,8 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
   }
   const b = raw as Record<string, unknown>;
 
-  if (!isNonEmptyString(b.user_id)) {
-    return { ok: false, error: "user_id is required" };
-  }
+  // No user_id: the session cookie identifies the caller. Accepting one from
+  // the body would let any client write to any account.
   const startTime = parseIso(b.start_time);
   if (startTime === null) return { ok: false, error: "start_time must be ISO8601" };
   const endTime = parseIso(b.end_time);
@@ -287,7 +298,6 @@ export function parseSessionRequest(raw: unknown): Parsed<SessionRequest> {
   return {
     ok: true,
     value: {
-      user_id: b.user_id,
       start_time: isoFrom(startTime),
       end_time: isoFrom(endTime),
       verified_minutes: b.verified_minutes,
@@ -307,7 +317,6 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
   }
   const b = raw as Record<string, unknown>;
 
-  if (!isNonEmptyString(b.user_id)) return { ok: false, error: "user_id is required" };
 
   const event = parseWireDistraction(
     {
@@ -336,7 +345,6 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
   return {
     ok: true,
     value: {
-      user_id: b.user_id,
       session_id: sessionId,
       timestamp: event.value.timestamp,
       duration_seconds: event.value.duration_seconds,

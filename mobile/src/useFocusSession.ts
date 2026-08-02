@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { CHECKPOINT_MIN_MS, GRACE_MS, PLEDGE_ABANDON_MS } from "./config";
+import { CHECKPOINT_MIN_MS, GRACE_MS } from "./config";
 import type { AwayReason, DistractionRecord } from "./api";
 
 /**
@@ -60,11 +60,6 @@ export interface FocusState {
   away: boolean;
   /** Set on return when the stretch was long enough to be worth asking about. */
   pending: PendingCheckpoint | null;
-  /**
-   * Set when a pledged session was abandoned for too long. The session is over
-   * — the UI reads this and syncs it as a forfeit.
-   */
-  abandoned: boolean;
 }
 
 export interface FinishedSession {
@@ -88,7 +83,6 @@ function idle(): FocusState {
     distractions: [],
     away: false,
     pending: null,
-    abandoned: false,
   };
 }
 
@@ -96,10 +90,9 @@ function idle(): FocusState {
  * Where the live session is parked so it survives a JS reload.
  *
  * The web app persists its active session for the same reason ("written each
- * tick so a refresh mid-session doesn't lose it"). On mobile the stakes are
- * higher: Expo Go may reload the bundle when it handles a deep link, which
- * would otherwise wipe a running session — and a Shortcuts intercept arrives
- * as exactly that kind of deep link.
+ * tick so a refresh mid-session doesn't lose it"). It matters more on a phone:
+ * a session can outlive a reload, a crash, or the app being evicted from
+ * memory while the screen is off.
  */
 const STORAGE_KEY = "incline.activeSession.v1";
 
@@ -213,24 +206,6 @@ export function useFocusSession() {
         if (last && last.durationMs === 0) {
           last.durationMs = now - last.startedAt;
 
-          // The hard rule. Only bites when stakes were taken, and it fires on
-          // return rather than on a timer, because a backgrounded RN app has
-          // no timers running to fire one.
-          if (session.pledgeMinutes > 0 && last.durationMs >= PLEDGE_ABANDON_MS) {
-            session.abandoned = true;
-            publish();
-            return;
-          }
-
-          // Only interrupt for a stretch worth explaining. Anything shorter is
-          // already forgiven and asking about it would just be nagging.
-          if (last.durationMs >= CHECKPOINT_MIN_MS) {
-            session.pending = {
-              index,
-              startedAt: last.startedAt,
-              durationMs: last.durationMs,
-            };
-          }
         }
       }
       publish();
@@ -267,34 +242,12 @@ export function useFocusSession() {
     [publish],
   );
 
-  /**
-   * Records an intercept outcome against the session.
-   *
-   * Logged as a distraction with a `bypassed` flag rather than a separate
-   * concept, so one payload carries both what happened and whether the pledge
-   * survived it. The server decides the forfeit.
-   */
   /** Adds flat XP from a correct recall answer. */
   const addBonusXp = useCallback(
     (amount: number) => {
       const session = ref.current;
       if (!session.running) return;
       session.bonusXp += amount;
-      publish();
-    },
-    [publish],
-  );
-
-  const recordIntercept = useCallback(
-    (appLabel: string | null, bypassed: boolean) => {
-      const session = ref.current;
-      if (!session.running) return;
-      session.distractions.push({
-        startedAt: Date.now(),
-        durationMs: 0,
-        appLabel,
-        bypassed,
-      });
       publish();
     },
     [publish],
@@ -345,11 +298,7 @@ export function useFocusSession() {
       bonusXp: session.bonusXp,
       // Sub-grace blips cost focus time but shouldn't reach the server as
       // penalties, matching the web app's forgiveness for a stray tap.
-      // Intercepts are kept regardless of length: a zero-duration row still
-      // carries the bypass flag the pledge rule depends on.
-      distractions: session.distractions.filter(
-        (d) => d.durationMs >= GRACE_MS || d.appLabel != null || d.bypassed === true,
-      ),
+      distractions: session.distractions.filter((d) => d.durationMs >= GRACE_MS),
     };
 
     ref.current = idle();
@@ -357,5 +306,5 @@ export function useFocusSession() {
     return finished;
   }, [flush, publish]);
 
-  return { state, start, stop, resolveCheckpoint, recordIntercept, addBonusXp };
+  return { state, start, stop, resolveCheckpoint, addBonusXp };
 }

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import * as Linking from "expo-linking";
 
 import {
   type AwayReason,
@@ -23,21 +22,21 @@ import {
 import { BottomNav, type TabName } from "./src/components/BottomNav";
 import { type SpotMatch, activeSpot, getReading, nearestSpot } from "./src/location";
 import { CheckpointScreen } from "./src/screens/CheckpointScreen";
-import { InterceptScreen } from "./src/screens/InterceptScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
-import { RanksScreen } from "./src/screens/RanksScreen";
 import { RecapScreen } from "./src/screens/RecapScreen";
+import { SessionSummary, type SessionOutcome } from "./src/components/SessionSummary";
+import { CommunityScreen } from "./src/screens/CommunityScreen";
+import { ScheduleScreen } from "./src/screens/ScheduleScreen";
+import { LoginScreen } from "./src/screens/LoginScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { type Account, currentAccount, signOut } from "./src/auth";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
 import { colors } from "./src/theme";
-import { useAppBlocker } from "./src/useAppBlocker";
 import { useFocusSession } from "./src/useFocusSession";
 import { useRecallCheck } from "./src/useRecallCheck";
 
 export default function App() {
-  const { state, start, stop, resolveCheckpoint, recordIntercept, addBonusXp } =
-    useFocusSession();
-  const blocker = useAppBlocker();
+  const { state, start, stop, resolveCheckpoint, addBonusXp } = useFocusSession();
   const [tab, setTab] = useState<TabName>("home");
   const [companion, setCompanion] = useState<Companion | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
@@ -49,6 +48,10 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [pledge, setPledge] = useState(0);
+  const [account, setAccount] = useState<Account | null>(null);
+  /** Null until the stored session has been checked, so we don't flash the login screen. */
+  const [authChecked, setAuthChecked] = useState(false);
+  const [outcome, setOutcome] = useState<SessionOutcome | null>(null);
 
   // The recall check needs a course to ask about. Until the schedule lands on
   // mobile there's no linked block, so it falls back to general study skills —
@@ -59,8 +62,6 @@ export default function App() {
     course: "your current course",
     onCorrect: addBonusXp,
   });
-  /** Set when a Shortcuts automation deep-links us mid-session. */
-  const [intercept, setIntercept] = useState<{ appLabel: string | null } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,10 +84,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Initial hydration is intentionally owned by this mount-only effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    void currentAccount()
+      .then(setAccount)
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  useEffect(() => {
+    // Only load once signed in — every endpoint resolves the user from the
+    // session cookie, so calling them first just yields 401s.
+    if (account) void load();
+  }, [account, load]);
 
   const checkIn = useCallback(async () => {
     setChecking(true);
@@ -108,69 +115,13 @@ export default function App() {
 
   const handleStart = useCallback(() => {
     start(pledge);
-    // Blocking runs for exactly as long as the session does — the watcher is
-    // never left running once focus ends.
-    blocker.beginBlocking();
     void showSessionNotification(Date.now());
-  }, [start, pledge, blocker]);
-
-  /**
-   * Handles `incline://intercept?app=Instagram`.
-   *
-   * The URL comes from a Personal Automation the user built in Shortcuts —
-   * iOS gives no way to detect another app opening, so the user has to opt
-   * into telling us. Ignored unless a session is actually running, otherwise
-   * opening the app normally would trigger the screen.
-   */
-  const handleUrl = useCallback(
-    (url: string | null) => {
-      if (!url) return;
-      const { hostname, path, queryParams } = Linking.parse(url);
-
-      // The target lands in a different field depending on how we were opened:
-      // `incline://intercept` puts it in hostname (there is no path at all),
-      // while Expo Go delivers `exp://host/--/intercept`, leaving it as the
-      // last path segment. Checking one field only works in one of the two.
-      const segments = (path ?? "").split("/").filter(Boolean);
-      const target = segments[segments.length - 1] ?? hostname;
-      if (target !== "intercept") return;
-      if (!state.running) return;
-      const raw = queryParams?.app;
-      const appLabel = typeof raw === "string" && raw.trim() ? raw.trim().slice(0, 60) : null;
-      setIntercept({ appLabel });
-    },
-    [state.running],
-  );
-
-  useEffect(() => {
-    // Cold start: the URL that launched the app isn't delivered as an event.
-    void Linking.getInitialURL().then(handleUrl);
-    const sub = Linking.addEventListener("url", ({ url }) => handleUrl(url));
-    return () => sub.remove();
-  }, [handleUrl]);
-
-  const resolveIntercept = useCallback(
-    (bypassed: boolean) => {
-      const appLabel = intercept?.appLabel ?? null;
-      setIntercept(null);
-      recordIntercept(appLabel, bypassed);
-      void logDistractionEvent({ durationMs: 0, appLabel, bypassed }).catch(() => {});
-      if (bypassed) {
-        setNotice(
-          state.pledgeMinutes > 0
-            ? "Pledge broken — this session won't earn XP."
-            : "Logged. Your companion noticed.",
-        );
-      }
-    },
-    [intercept, recordIntercept, state.pledgeMinutes],
-  );
+  }, [start, pledge]);
 
   const handleStop = useCallback(async () => {
     const finished = stop();
     if (!finished) return;
 
-    const blocked = blocker.endBlocking();
     void clearSessionNotification();
 
     setBusy(true);
@@ -183,27 +134,26 @@ export default function App() {
         locationName: insideSpot?.name ?? null,
         pledgeMinutes: finished.pledgeMinutes,
         bonusXp: finished.bonusXp,
-        // Two kinds of distraction, kept together: the Android blocker's named
-        // app-opens, and AppState's "you left Incline" for everything it
-        // can't see.
-        distractions: [...finished.distractions, ...blocked],
+        distractions: finished.distractions,
       });
-      setNotice(
-        result.voided
-          ? result.void_reason === "bypassed"
-            ? "Session forfeited — you pushed past an intercept."
-            : "Session forfeited — you left your pledge behind."
-          : result.pet_growth_delta > 0
-            ? `+${result.pet_growth_delta} XP synced.`
-            : "Session synced.",
-      );
+      setOutcome({
+        focusedMs: finished.focusedMs,
+        distractedMs: state.distractedMs,
+        breaks: finished.distractions.length,
+        xpEarned: result.pet_growth_delta,
+        voided: result.voided,
+        voidReason: result.void_reason,
+        pledgeMinutes: finished.pledgeMinutes,
+        locationName: insideSpot?.name ?? null,
+      });
+      setNotice(null);
       await load();
     } catch (error) {
       setNotice(error instanceof Error ? `Session not synced — ${error.message}` : "Session not synced.");
     } finally {
       setBusy(false);
     }
-  }, [stop, blocker, match, spots, load]);
+  }, [stop, state.distractedMs, match, spots, load]);
 
   /**
    * Resolves the return check-in.
@@ -243,21 +193,13 @@ export default function App() {
     [state.pending, resolveCheckpoint, handleStop],
   );
 
-  // Abandoning a pledged session ends it immediately. Syncing from an effect
-  // rather than inside the engine keeps the engine pure state, and the server
-  // still decides the forfeit — verified time will be short of the pledge.
-  useEffect(() => {
-    if (!state.abandoned) return;
-    void handleStop();
-  }, [state.abandoned, handleStop]);
-
   /**
    * Coat and accessory live on the server, not in local state — the web reads
    * the same row, so a pig recoloured here is recoloured there. Applied
    * optimistically so the swatch responds instantly.
    */
   const handleCustomise = useCallback(
-    (patch: { color?: PigColor; accessory?: PigAccessory }) => {
+    (patch: { color?: PigColor; accessory?: PigAccessory; name?: string }) => {
       setCompanion((current) => (current ? { ...current, ...patch } : current));
       void patchCompanion(patch)
         .then(load)
@@ -271,6 +213,17 @@ export default function App() {
     await load();
     setRefreshing(false);
   }, [load]);
+
+  if (!authChecked) return null;
+
+  if (!account) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <LoginScreen onSignedIn={setAccount} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -306,16 +259,20 @@ export default function App() {
               onRefresh={onRefresh}
             />
           )}
-          {tab === "ranks" && (
-            <RanksScreen leaderboard={leaderboard} refreshing={refreshing} onRefresh={onRefresh} />
-          )}
+          {tab === "schedule" && <ScheduleScreen />}
+          {tab === "community" && <CommunityScreen leaderboard={leaderboard} />}
           {tab === "settings" && (
             <SettingsScreen
-              blocker={blocker}
-              sessionRunning={state.running}
-              onPreviewIntercept={() =>
-                state.running && setIntercept({ appLabel: "Safari" })
-              }
+              companion={companion}
+              onRename={(name) => handleCustomise({ name })}
+              onCustomise={handleCustomise}
+              account={{ displayName: account.name }}
+              onSignOut={() => {
+                void signOut().then(() => {
+                  setAccount(null);
+                  setCompanion(null);
+                });
+              }}
             />
           )}
         </View>
@@ -323,15 +280,11 @@ export default function App() {
           <BottomNav active={tab} onChange={setTab} />
         </SafeAreaView>
 
-        {intercept && (
-          <InterceptScreen
-            appLabel={intercept.appLabel}
-            focusedMs={state.focusedMs}
-            pledgeMinutes={state.pledgeMinutes}
-            onReturn={() => resolveIntercept(false)}
-            onBypass={() => resolveIntercept(true)}
-          />
-        )}
+        <SessionSummary
+          outcome={outcome}
+          petName={companion?.name ?? "Oinky"}
+          onDismiss={() => setOutcome(null)}
+        />
 
         <CheckpointScreen
           pending={state.pending}

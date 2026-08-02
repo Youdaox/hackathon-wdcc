@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
-import { API_BASE_URL, USER_ID } from "./config";
+import { API_BASE_URL } from "./config";
+import { authHeader } from "./auth";
 
 /**
  ios | ios | web, which is what
@@ -47,10 +48,6 @@ export interface StudySpot {
 export interface DistractionRecord {
   startedAt: number;
   durationMs: number;
-  /** User-supplied app label from a Shortcuts intercept. */
-  appLabel?: string | null;
-  /** Android package name from the blocker. Null on iOS. */
-  appIdentifier?: string | null;
   /** True when the user pushed past the intercept screen. */
   bypassed?: boolean;
   /** What the user said on the return check-in. Null if they weren't asked. */
@@ -63,13 +60,13 @@ export interface DistractionRecord {
  * Why the user left. Only "distraction" costs HP — the server decides that,
  * the client just reports what was said.
  */
-export type AwayReason = "emergency" | "task" | "distraction" | "ended";
+export type AwayReason = "emergency" | "task" | "offline" | "distraction" | "ended";
 
 export interface SessionResult {
   session_id: string;
   pet_growth_delta: number;
   voided: boolean;
-  void_reason: "left-early" | "bypassed" | null;
+  void_reason: "left-early" | "distracted" | null;
 }
 
 const TIMEOUT_MS = 8_000;
@@ -85,7 +82,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       signal: controller.signal,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      // The session cookie rides on every call so the server resolves the same
+      // account the desktop app uses.
+      headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -98,12 +97,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function fetchCompanion(): Promise<Companion> {
-  return request<Companion>(`/api/companion?user_id=${encodeURIComponent(USER_ID)}`);
+  return request<Companion>("/api/companion");
 }
 
 export async function fetchStudySpots(): Promise<StudySpot[]> {
   const body = await request<{ spots: StudySpot[] }>(
-    `/api/study-spots?user_id=${encodeURIComponent(USER_ID)}`,
+    "/api/study-spots",
   );
   return body.spots;
 }
@@ -127,7 +126,6 @@ export function postSession(params: {
   return request<SessionResult>("/api/sessions", {
     method: "POST",
     body: JSON.stringify({
-      user_id: USER_ID,
       start_time: new Date(params.startedAt).toISOString(),
       end_time: new Date(params.endedAt).toISOString(),
       verified_minutes: params.focusedMs / 60_000,
@@ -139,8 +137,6 @@ export function postSession(params: {
       distraction_events: params.distractions.map((d) => ({
         timestamp: new Date(d.startedAt).toISOString(),
         duration_seconds: d.durationMs / 1000,
-        app_label: d.appLabel ?? null,
-        app_identifier: d.appIdentifier ?? null,
         bypassed: d.bypassed ?? false,
         reason: d.reason ?? null,
         guessed_seconds: d.guessedSeconds ?? null,
@@ -157,22 +153,15 @@ export function postSession(params: {
  */
 export function logDistractionEvent(event: {
   durationMs: number;
-  appLabel?: string | null;
-  appIdentifier?: string | null;
-  bypassed?: boolean;
   reason?: AwayReason | null;
   guessedSeconds?: number | null;
 }): Promise<{ event_id: string }> {
   return request<{ event_id: string }>("/api/distraction-events", {
     method: "POST",
     body: JSON.stringify({
-      user_id: USER_ID,
       session_id: null,
       timestamp: new Date().toISOString(),
       duration_seconds: event.durationMs / 1000,
-      app_label: event.appLabel ?? null,
-      app_identifier: event.appIdentifier ?? null,
-      bypassed: event.bypassed ?? false,
       reason: event.reason ?? null,
       guessed_seconds: event.guessedSeconds ?? null,
     }),
@@ -207,29 +196,12 @@ export function patchCompanion(patch: {
 }): Promise<{ ok: true }> {
   return request<{ ok: true }>("/api/companion", {
     method: "PATCH",
-    body: JSON.stringify({ user_id: USER_ID, ...patch }),
+    body: JSON.stringify(patch),
   });
-}
-
-/** The Android blocker's watch list, as package names. */
-export async function fetchDistractionList(): Promise<string[]> {
-  const body = await request<{ apps: string[] }>(
-    `/api/distraction-list?user_id=${encodeURIComponent(USER_ID)}`,
-  );
-  return body.apps;
-}
-
-/** Replaces the list wholesale — the settings screen owns the whole set. */
-export async function saveDistractionList(apps: string[]): Promise<string[]> {
-  const body = await request<{ apps: string[] }>("/api/distraction-list", {
-    method: "PUT",
-    body: JSON.stringify({ user_id: USER_ID, apps }),
-  });
-  return body.apps;
 }
 
 export function fetchRecap(): Promise<Recap> {
-  return request<Recap>(`/api/recap?user_id=${encodeURIComponent(USER_ID)}`);
+  return request<Recap>("/api/recap");
 }
 
 export interface RecallQuestion {
@@ -264,4 +236,110 @@ export interface Leaderboard {
 
 export function fetchLeaderboard(period: "week" | "month" = "week"): Promise<Leaderboard> {
   return request<Leaderboard>(`/api/leaderboards?period=${period}&limit=20`);
+}
+
+export interface Friend {
+  id: string;
+  username: string;
+  name: string;
+  initials: string;
+}
+
+export interface Encouragement {
+  id: string;
+  /** Server-side local day, e.g. "2026-08-02". Used to scope "cheered today". */
+  dayKey: string;
+  message: string;
+  senderId: string;
+  recipientId: string;
+  senderName: string;
+  recipientName?: string | null;
+  createdAt: string;
+}
+
+export interface EncouragementBalance {
+  /** Server-side local day, matching an Encouragement's dayKey. */
+  date: string;
+  available: number;
+  base: number;
+  earned: number;
+  used: number;
+  taskPoints: number;
+  maxTaskPoints: number;
+}
+
+export interface DirectoryUser {
+  id: string;
+  username: string;
+  name: string;
+  initials: string;
+}
+
+export async function fetchFriends(): Promise<Friend[]> {
+  const body = await request<{ friends: Friend[] }>("/api/friends");
+  return body.friends;
+}
+
+export function addFriend(userId: string): Promise<unknown> {
+  return request("/api/friends", { method: "POST", body: JSON.stringify({ userId }) });
+}
+
+export async function searchUsers(q: string): Promise<DirectoryUser[]> {
+  const body = await request<{ users: DirectoryUser[] }>(
+    `/api/users/search?q=${encodeURIComponent(q)}`,
+  );
+  return body.users;
+}
+
+export async function fetchEncouragements(
+  direction: "received" | "sent" = "received",
+): Promise<Encouragement[]> {
+  const body = await request<{ encouragements: Encouragement[] }>(
+    `/api/encouragements?direction=${direction}`,
+  );
+  return body.encouragements;
+}
+
+export function fetchEncouragementBalance(): Promise<EncouragementBalance> {
+  return request<EncouragementBalance>("/api/encouragements/balance");
+}
+
+/** Sends one encouragement. The daily allowance is enforced server-side. */
+export function sendEncouragement(recipientId: string, recipientName?: string): Promise<unknown> {
+  return request("/api/encouragements", {
+    method: "POST",
+    body: JSON.stringify({ recipientId, recipientName }),
+  });
+}
+
+export interface StudyBlock {
+  id: string;
+  title: string;
+  course: string;
+  start_min: number;
+  end_min: number;
+  days: number[];
+  source: "manual" | "canvas";
+}
+
+export async function fetchSchedule(): Promise<StudyBlock[]> {
+  const body = await request<{ blocks: StudyBlock[] }>("/api/schedule");
+  return body.blocks;
+}
+
+export function createBlock(block: {
+  title: string;
+  course: string;
+  start_min: number;
+  end_min: number;
+  days: number[];
+}): Promise<{ id: string }> {
+  return request<{ id: string }>("/api/schedule", {
+    method: "POST",
+    body: JSON.stringify(block),
+  });
+}
+
+export function deleteBlock(id: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/api/schedule?id=${encodeURIComponent(id)}`, { method: "DELETE" });
 }

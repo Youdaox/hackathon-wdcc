@@ -3,6 +3,7 @@ import { and, eq, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { distractionEvents, sessions } from "@/lib/db/schema";
 import { AWAY_REASONS, type AwayReason } from "@/lib/api/contract";
+import { requireUserId } from "@/lib/api/identity";
 
 /**
  * Seven-day recap: per-day totals, a study streak, and the reason breakdown.
@@ -17,9 +18,9 @@ const DAY_MS = 86_400_000;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export async function GET(request: Request) {
-  const userId = new URL(request.url).searchParams.get("user_id");
-  if (!userId?.trim()) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   }
 
   try {

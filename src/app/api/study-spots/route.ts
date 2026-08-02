@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isNull, or, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { studySpots } from "@/lib/db/schema";
+import { requireUserId } from "@/lib/api/identity";
 
 /**
  * Verified study locations for the session-start location check-in.
@@ -17,9 +18,9 @@ import { studySpots } from "@/lib/db/schema";
  */
 
 export async function GET(request: Request) {
-  const userId = new URL(request.url).searchParams.get("user_id");
-  if (!userId?.trim()) {
-    return NextResponse.json({ error: "user_id is required" }, { status: 400 });
+  const userId = await requireUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   }
 
   try {

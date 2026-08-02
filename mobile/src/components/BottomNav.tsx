@@ -1,12 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, roundedFont } from "../theme";
 
-export type TabName = "home" | "recap" | "ranks" | "settings";
+export type TabName = "home" | "schedule" | "recap" | "community" | "settings";
 
 const TABS: { key: TabName; label: string }[] = [
   { key: "home", label: "Home" },
+  { key: "schedule", label: "Schedule" },
   { key: "recap", label: "Recap" },
-  { key: "ranks", label: "Ranks" },
+  { key: "community", label: "Friends" },
   { key: "settings", label: "Settings" },
 ];
 
@@ -53,7 +54,7 @@ function NavIcon({ name, color }: { name: TabName; color: string }) {
     );
   }
 
-  if (name === "ranks") {
+  if (name === "community") {
     return (
       <View style={styles.iconBox}>
         <View style={[styles.medal, { backgroundColor: color }]} />
