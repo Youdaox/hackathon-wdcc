@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CHECKPOINT_MIN_MS, GRACE_MS, PLEDGE_ABANDON_MS } from "./config";
 import type { AwayReason, DistractionRecord } from "./api";
 
@@ -91,6 +92,17 @@ function idle(): FocusState {
   };
 }
 
+/**
+ * Where the live session is parked so it survives a JS reload.
+ *
+ * The web app persists its active session for the same reason ("written each
+ * tick so a refresh mid-session doesn't lose it"). On mobile the stakes are
+ * higher: Expo Go may reload the bundle when it handles a deep link, which
+ * would otherwise wipe a running session — and a Shortcuts intercept arrives
+ * as exactly that kind of deep link.
+ */
+const STORAGE_KEY = "incline.activeSession.v1";
+
 export function useFocusSession() {
   /**
    * The session lives in a ref, and state is a render-only mirror.
@@ -105,7 +117,61 @@ export function useFocusSession() {
   const [state, setState] = useState<FocusState>(idle);
 
   const publish = useCallback(() => {
-    setState({ ...ref.current, distractions: [...ref.current.distractions] });
+    const next = { ...ref.current, distractions: [...ref.current.distractions] };
+    setState(next);
+    // Fire-and-forget: losing one write is survivable, blocking the UI on
+    // disk every tick is not.
+    if (next.running) {
+      void AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ session: next, savedAt: Date.now() }),
+      ).catch(() => {});
+    } else {
+      void AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+    }
+  }, []);
+
+  /**
+   * Restores a session that outlived a reload.
+   *
+   * Time between the last write and now is credited as *away*, not focus —
+   * the app wasn't on screen for it. That makes a reload behave exactly like
+   * being backgrounded, including raising the check-in, which is what a deep
+   * link from Shortcuts should feel like.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(STORAGE_KEY)
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        const parsed = JSON.parse(raw) as { session: FocusState; savedAt: number };
+        if (!parsed?.session?.running) return;
+
+        const now = Date.now();
+        const gap = Math.max(0, now - parsed.savedAt);
+        const restored: FocusState = {
+          ...parsed.session,
+          away: false,
+          distractedMs: parsed.session.distractedMs + gap,
+        };
+
+        if (gap >= CHECKPOINT_MIN_MS) {
+          const index = restored.distractions.length;
+          restored.distractions = [
+            ...restored.distractions,
+            { startedAt: parsed.savedAt, durationMs: gap },
+          ];
+          restored.pending = { index, startedAt: parsed.savedAt, durationMs: gap };
+        }
+
+        markRef.current = now;
+        ref.current = restored;
+        setState({ ...restored, distractions: [...restored.distractions] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /** Moves real elapsed time since the last mark into the right bucket. */
