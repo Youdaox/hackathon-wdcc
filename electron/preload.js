@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld("statusAPI", {
     ipcRenderer.on("status:update", listener);
     return () => ipcRenderer.removeListener("status:update", listener);
   },
+  onMemoryUpdate: (handler) => {
+    const listener = (_event, state) => handler(state);
+    ipcRenderer.on("memory:update", listener);
+    return () => ipcRenderer.removeListener("memory:update", listener);
+  },
+  requestManualCapture: () => ipcRenderer.send("status:manual-capture"),
 });
 
 contextBridge.exposeInMainWorld("electronAPI", {
@@ -46,5 +52,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   studyMemory: {
     getSources: () => ipcRenderer.invoke("study-memory:sources"),
     capture: (sourceId) => ipcRenderer.invoke("study-memory:capture", sourceId),
+    setStatus: (status) => ipcRenderer.send("study-memory:status", status),
+    onManualCapture: (handler) => {
+      const listener = () => handler();
+      ipcRenderer.on("study-memory:manual-capture", listener);
+      return () => ipcRenderer.removeListener("study-memory:manual-capture", listener);
+    },
   },
 });

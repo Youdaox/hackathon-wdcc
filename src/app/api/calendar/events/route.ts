@@ -17,13 +17,13 @@ function validated(value: unknown) {
 }
 
 export async function GET(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  return Response.json({ events: db.select().from(calendarEvents).where(eq(calendarEvents.userId, user.id)).all().map(eventJson) });
+  return Response.json({ events: (await db.select().from(calendarEvents).where(eq(calendarEvents.userId, user.id))).map(eventJson) });
 }
 
 export async function POST(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const body = await request.json().catch(() => null);
   const items = Array.isArray(body) ? body : [body];
@@ -31,25 +31,25 @@ export async function POST(request: Request) {
   if (!drafts.length || drafts.some((item) => !item)) return Response.json({ error: "Check the event details and time range." }, { status: 400 });
   const now = Date.now();
   const rows = drafts.map((draft) => ({ ...draft!, id: crypto.randomUUID(), userId: user.id, createdAt: now, updatedAt: now }));
-  db.insert(calendarEvents).values(rows).run();
+  await db.insert(calendarEvents).values(rows);
   return Response.json({ events: rows.map(eventJson) }, { status: 201 });
 }
 
 export async function PUT(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const draft = validated(body);
   const id = typeof body?.id === "string" ? body.id : "";
   if (!id || !draft) return Response.json({ error: "Check the event details and time range." }, { status: 400 });
-  db.update(calendarEvents).set({ ...draft, updatedAt: Date.now() }).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).run();
+  await db.update(calendarEvents).set({ ...draft, updatedAt: Date.now() }).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id)));
   return Response.json({ ok: true });
 }
 
 export async function DELETE(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
   const id = new URL(request.url).searchParams.get("id") ?? "";
-  db.delete(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id))).run();
+  await db.delete(calendarEvents).where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, user.id)));
   return Response.json({ ok: true });
 }

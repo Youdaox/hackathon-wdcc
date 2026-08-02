@@ -1,4 +1,4 @@
-import type { BackgroundStatus } from "@/lib/backgroundStatus";
+import type { BackgroundStatus, StudyMemoryDesktopStatus } from "@/lib/backgroundStatus";
 import type { Companion } from "@/lib/types";
 
 declare global {
@@ -12,6 +12,8 @@ declare global {
       studyMemory: {
         getSources: () => Promise<Array<{ id: string; name: string }>>;
         capture: (sourceId: string) => Promise<{ sourceName: string; imageDataUrl: string } | null>;
+        setStatus: (status: StudyMemoryDesktopStatus) => void;
+        onManualCapture: (handler: () => void) => () => void;
       };
     };
     overlayAPI?: {
@@ -27,6 +29,8 @@ declare global {
     statusAPI?: {
       ready: () => void;
       onUpdate: (handler: (status: BackgroundStatus) => void) => () => void;
+      onMemoryUpdate: (handler: (status: StudyMemoryDesktopStatus) => void) => () => void;
+      requestManualCapture: () => void;
     };
     documentPictureInPicture?: {
       requestWindow: (options?: { width?: number; height?: number }) => Promise<Window>;

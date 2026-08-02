@@ -5,12 +5,12 @@ import { calendarFeedTokens } from "@/lib/db/schema";
 import { sessionFromRequest } from "@/lib/auth";
 
 export async function GET(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  let row = db.select().from(calendarFeedTokens).where(eq(calendarFeedTokens.userId, user.id)).get();
+  let [row] = await db.select().from(calendarFeedTokens).where(eq(calendarFeedTokens.userId, user.id));
   if (!row) {
     row = { userId: user.id, token: randomBytes(24).toString("base64url"), createdAt: Date.now() };
-    db.insert(calendarFeedTokens).values(row).run();
+    await db.insert(calendarFeedTokens).values(row);
   }
   return Response.json({ url: `${new URL(request.url).origin}/api/calendar/feed/${row.token}` });
 }

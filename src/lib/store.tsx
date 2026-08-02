@@ -11,15 +11,17 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import {
-  PIG_COLOR_VALUES,
+  ANIMAL_SPECIES_VALUES,
+  COMPANION_COLOR_VALUES_BY_SPECIES,
   PIG_ACCESSORY_VALUES,
   AVATAR_EMOTIONS,
+  type AnimalSpecies,
   type AvatarEmotion,
   type Companion,
+  type CompanionColor,
   type FocusSession,
   type Meal,
   type PigAccessory,
-  type PigColor,
   type StudyBlock,
 } from "./types";
 import { STORAGE_KEYS, clearAll, forUser, loadJSON, saveJSON, uid } from "./storage";
@@ -76,7 +78,8 @@ interface InclineContextValue {
   importCanvasBlocks: (incoming: CanvasImportBlock[]) => ImportResult;
   companion: Companion;
   renameCompanion: (name: string) => void;
-  setCompanionColor: (color: PigColor) => void;
+  setCompanionSpecies: (species: AnimalSpecies) => void;
+  setCompanionColor: (color: CompanionColor) => void;
   setCompanionAccessory: (accessory: PigAccessory) => void;
   checkInWithCompanion: (emotion: AvatarEmotion) => void;
   respondToMealCheck: (meal: Meal, ate: boolean) => void;
@@ -128,6 +131,7 @@ const InclineContext = createContext<InclineContextValue | null>(null);
 
 function hasAvatarCustomization(companion: Companion) {
   return companion.name !== "Oinky"
+    || companion.species !== "pig"
     || companion.color !== "pink"
     || companion.accessory !== "none"
     || companion.checkInEmotion !== null;
@@ -170,11 +174,18 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setProfileLoadedForUser(null);
     setBlocks(loadJSON<StudyBlock[]>(userKey(STORAGE_KEYS.schedule), []));
     const loadedCompanion = loadJSON<Companion>(userKey(STORAGE_KEYS.companion), createCompanion());
-    // Older saves predate coat/accessory customization, or may carry a coat
-    // color that's since been retired (grey/brown) — fall back to defaults.
+    // Older saves predate species/coat/accessory customization, or may carry
+    // a species/coat that's since been retired (grey/brown) — fall back to
+    // defaults rather than let an unrecognized value reach the sprite picker.
+    // Species is resolved first because which colors are valid depends on it.
+    const species = ANIMAL_SPECIES_VALUES.includes(loadedCompanion.species)
+      ? loadedCompanion.species
+      : "pig";
+    const validColors = COMPANION_COLOR_VALUES_BY_SPECIES[species];
     const localCompanion = applyIdleDecay({
       ...loadedCompanion,
-      color: PIG_COLOR_VALUES.includes(loadedCompanion.color) ? loadedCompanion.color : "pink",
+      species,
+      color: validColors.includes(loadedCompanion.color) ? loadedCompanion.color : validColors[0],
       accessory: PIG_ACCESSORY_VALUES.includes(loadedCompanion.accessory)
         ? loadedCompanion.accessory
         : "none",
@@ -215,6 +226,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
           ? {
               ...localCompanion,
               name: payload.companion.name,
+              species: payload.companion.species,
               color: payload.companion.color,
               accessory: payload.companion.accessory,
               checkInEmotion: payload.companion.checkInEmotion,
@@ -258,6 +270,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: companion.name,
+        species: companion.species,
         color: companion.color,
         accessory: companion.accessory,
         checkInEmotion: companion.checkInEmotion,
@@ -542,7 +555,19 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
     setCompanion((prev) => ({ ...prev, name: name.trim() || prev.name }));
   }, []);
 
-  const setCompanionColor = useCallback((color: PigColor) => {
+  const setCompanionSpecies = useCallback((species: AnimalSpecies) => {
+    setCompanion((prev) => {
+      // Each species has its own coat palette, so a color carried over from
+      // the old species (e.g. a pig's "pink") wouldn't resolve to anything —
+      // reset to that species' default whenever the current color isn't one
+      // of its options.
+      const validColors = COMPANION_COLOR_VALUES_BY_SPECIES[species];
+      const color = (validColors as string[]).includes(prev.color) ? prev.color : validColors[0];
+      return { ...prev, species, color };
+    });
+  }, []);
+
+  const setCompanionColor = useCallback((color: CompanionColor) => {
     setCompanion((prev) => ({ ...prev, color }));
   }, []);
 
@@ -623,6 +648,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       importCanvasBlocks,
       companion,
       renameCompanion,
+      setCompanionSpecies,
       setCompanionColor,
       setCompanionAccessory,
       checkInWithCompanion,
@@ -666,6 +692,7 @@ export function InclineProvider({ children }: { children: React.ReactNode }) {
       importCanvasBlocks,
       companion,
       renameCompanion,
+      setCompanionSpecies,
       setCompanionColor,
       setCompanionAccessory,
       checkInWithCompanion,

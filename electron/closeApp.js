@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron loads this CommonJS helper with require.
 const { exec } = require("node:child_process");
 
 /**

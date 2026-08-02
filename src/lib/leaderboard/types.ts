@@ -42,7 +42,7 @@ export interface LeaderboardEntry {
   displayName: string;
   score: number;
   tasksCompleted: number;
-  encouragementsReceived: number;
+  encouragementsSent: number;
 }
 
 export interface EncouragementBalance {

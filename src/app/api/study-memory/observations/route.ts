@@ -10,7 +10,7 @@ import { chunkText } from "@/lib/study-memory/retrieval";
 const MAX_IMAGE_CHARS = 5_000_000;
 
 export async function POST(request: Request) {
-  const user = sessionFromRequest(request);
+  const user = await sessionFromRequest(request);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -24,24 +24,24 @@ export async function POST(request: Request) {
   }
 
   const now = Date.now();
-  let memory = db.select().from(studyMemorySessions).where(and(
+  let [memory] = await db.select().from(studyMemorySessions).where(and(
     eq(studyMemorySessions.focusSessionId, focusSessionId),
     eq(studyMemorySessions.userId, user.id),
-  )).get();
+  ));
   if (!memory) {
     const id = crypto.randomUUID();
-    db.insert(studyMemorySessions).values({
+    await db.insert(studyMemorySessions).values({
       id, focusSessionId, userId: user.id, title, course,
       status: "capturing", consentVersion: "2026-08-02", createdAt: now,
-    }).run();
-    memory = db.select().from(studyMemorySessions).where(eq(studyMemorySessions.id, id)).get();
+    });
+    [memory] = await db.select().from(studyMemorySessions).where(eq(studyMemorySessions.id, id));
   }
   if (!memory) return NextResponse.json({ error: "could not create memory" }, { status: 500 });
 
   const imageHash = createHash("sha256").update(imageDataUrl).digest("hex");
-  const duplicate = db.select({ id: studyObservations.id }).from(studyObservations).where(and(
+  const [duplicate] = await db.select({ id: studyObservations.id }).from(studyObservations).where(and(
     eq(studyObservations.memorySessionId, memory.id), eq(studyObservations.imageHash, imageHash),
-  )).get();
+  ));
   if (duplicate) return NextResponse.json({ accepted: false, reason: "duplicate" });
 
   try {
@@ -53,16 +53,18 @@ export async function POST(request: Request) {
     if (texts.length === 0) return NextResponse.json({ accepted: false, reason: "empty" });
     const vectors = await embed(texts);
     const observationId = crypto.randomUUID();
-    db.transaction((tx) => {
-      tx.insert(studyObservations).values({
+    await db.transaction(async (tx) => {
+      await tx.insert(studyObservations).values({
         id: observationId, memorySessionId: memory.id, sourceName, capturedAt: now,
         imageHash, extractedText: extracted.extractedText, summary: extracted.summary,
         topicsJson: JSON.stringify(extracted.topics), confidence: extracted.confidence, createdAt: now,
-      }).run();
-      texts.forEach((content, index) => tx.insert(studyChunks).values({
-        id: crypto.randomUUID(), memorySessionId: memory.id, observationId, content,
-        embeddingJson: JSON.stringify(vectors[index]), embeddingModel: EMBEDDING_MODEL, createdAt: now,
-      }).run());
+      });
+      for (const [index, content] of texts.entries()) {
+        await tx.insert(studyChunks).values({
+          id: crypto.randomUUID(), memorySessionId: memory.id, observationId, content,
+          embeddingJson: JSON.stringify(vectors[index]), embeddingModel: EMBEDDING_MODEL, createdAt: now,
+        });
+      }
     });
     return NextResponse.json({ accepted: true, topics: extracted.topics });
   } catch (error) {

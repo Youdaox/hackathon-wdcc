@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { bigint, boolean, doublePrecision, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 /**
  * Server-side schema for the mobile sync contract.
@@ -18,29 +18,29 @@ import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-or
  * rows are created on first sight. That is deliberate for a hackathon demo —
  * see the note in the README before this goes anywhere real.
  */
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name").notNull(),
-  createdAt: integer("created_at").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
 /** Server-side sessions: only a hash of the browser cookie token is stored. */
-export const authSessions = sqliteTable(
+export const authSessions = pgTable(
   "auth_sessions",
   {
     id: text("id").primaryKey(),
     tokenHash: text("token_hash").notNull().unique(),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    expiresAt: integer("expires_at").notNull(),
-    createdAt: integer("created_at").notNull(),
+    expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("auth_sessions_user_idx").on(table.userId)],
 );
 
 /** Dated calendar events are server-backed so every account has a private calendar. */
-export const calendarEvents = sqliteTable(
+export const calendarEvents = pgTable(
   "calendar_events",
   {
     id: text("id").primaryKey(),
@@ -51,27 +51,27 @@ export const calendarEvents = sqliteTable(
     endTime: text("end_time").notNull(),
     description: text("description").notNull().default(""),
     location: text("location"),
-    createdAt: integer("created_at").notNull(),
-    updatedAt: integer("updated_at").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
   },
   (table) => [index("calendar_events_user_date_idx").on(table.userId, table.eventDate)],
 );
 
 /** Secret bearer token used by calendar apps, which cannot send the login cookie. */
-export const calendarFeedTokens = sqliteTable("calendar_feed_tokens", {
+export const calendarFeedTokens = pgTable("calendar_feed_tokens", {
   userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
-  createdAt: integer("created_at").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
 /** Mutual, account-backed connections used to limit encouragement sharing. */
-export const friendships = sqliteTable(
+export const friendships = pgTable(
   "friendships",
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     friendId: text("friend_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    createdAt: integer("created_at").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
     index("friendships_user_idx").on(table.userId),
@@ -87,33 +87,33 @@ export const friendships = sqliteTable(
  * Mood is absent on purpose: it is derived from `hp`, never stored, so the two
  * cannot disagree.
  */
-export const companions = sqliteTable("companions", {
+export const companions = pgTable("companions", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   species: text("species").notNull(),
-  /** Cosmetic coat color — see PigColor in src/lib/types.ts. */
+  /** Cosmetic coat color — see CompanionColor in src/lib/types.ts. Valid values depend on `species`. */
   color: text("color").notNull().default("pink"),
   /** Cosmetic worn accessory — see PigAccessory in src/lib/types.ts. */
   accessory: text("accessory").notNull().default("none"),
   checkInEmotion: text("check_in_emotion"),
-  checkInAt: integer("check_in_at"),
-  nextCheckInAt: integer("next_check_in_at"),
+  checkInAt: bigint("check_in_at", { mode: "number" }),
+  nextCheckInAt: bigint("next_check_in_at", { mode: "number" }),
   lastMeal: text("last_meal"),
-  lastMealAt: integer("last_meal_at"),
-  lastWaterAt: integer("last_water_at"),
-  nextWaterCheckAt: integer("next_water_check_at"),
-  foodBreakMissed: integer("food_break_missed", { mode: "boolean" }).notNull().default(false),
-  waterBreakMissed: integer("water_break_missed", { mode: "boolean" }).notNull().default(false),
+  lastMealAt: bigint("last_meal_at", { mode: "number" }),
+  lastWaterAt: bigint("last_water_at", { mode: "number" }),
+  nextWaterCheckAt: bigint("next_water_check_at", { mode: "number" }),
+  foodBreakMissed: boolean("food_break_missed").notNull().default(false),
+  waterBreakMissed: boolean("water_break_missed").notNull().default(false),
   level: integer("level").notNull(),
   /** XP toward the *current* level only, not lifetime. */
   xp: integer("xp").notNull(),
   /** 0-100. */
-  hp: real("hp").notNull(),
-  totalFocusedMs: integer("total_focused_ms").notNull(),
-  lastSessionAt: integer("last_session_at"),
-  createdAt: integer("created_at").notNull(),
+  hp: doublePrecision("hp").notNull(),
+  totalFocusedMs: bigint("total_focused_ms", { mode: "number" }).notNull(),
+  lastSessionAt: bigint("last_session_at", { mode: "number" }),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
 });
 
 /**
@@ -123,31 +123,31 @@ export const companions = sqliteTable("companions", {
  * schema-level accommodation for the Android/iOS asymmetry: Android reports
  * which app was opened, iOS can only report that *a* restricted app was.
  */
-export const sessions = sqliteTable(
+export const sessions = pgTable(
   "sessions",
   {
     id: text("id").primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    startTime: integer("start_time").notNull(),
-    endTime: integer("end_time").notNull(),
+    startTime: bigint("start_time", { mode: "number" }).notNull(),
+    endTime: bigint("end_time", { mode: "number" }).notNull(),
     /** Verified focused minutes as reported by the client. */
-    verifiedMinutes: real("verified_minutes").notNull(),
-    locationVerified: integer("location_verified", { mode: "boolean" }).notNull(),
+    verifiedMinutes: doublePrecision("verified_minutes").notNull(),
+    locationVerified: boolean("location_verified").notNull(),
     locationName: text("location_name"),
     platform: text("platform", { enum: ["android", "ios", "web"] }).notNull(),
     /** Growth the server computed for this session — not client-supplied. */
     xpEarned: integer("xp_earned").notNull(),
     hpDelta: integer("hp_delta").notNull(),
-    xpMultiplier: real("xp_multiplier").notNull(),
-    createdAt: integer("created_at").notNull(),
+    xpMultiplier: doublePrecision("xp_multiplier").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("sessions_user_idx").on(table.userId, table.endTime)],
 );
 
 /** Ephemeral, consented study context captured during one web focus session. */
-export const studyMemorySessions = sqliteTable(
+export const studyMemorySessions = pgTable(
   "study_memory_sessions",
   {
     id: text("id").primaryKey(),
@@ -157,8 +157,8 @@ export const studyMemorySessions = sqliteTable(
     course: text("course").notNull(),
     status: text("status", { enum: ["capturing", "ready", "submitted", "failed"] }).notNull(),
     consentVersion: text("consent_version").notNull(),
-    createdAt: integer("created_at").notNull(),
-    completedAt: integer("completed_at"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    completedAt: bigint("completed_at", { mode: "number" }),
   },
   (table) => [
     uniqueIndex("study_memory_focus_user_unique").on(table.focusSessionId, table.userId),
@@ -166,19 +166,19 @@ export const studyMemorySessions = sqliteTable(
   ],
 );
 
-export const studyObservations = sqliteTable(
+export const studyObservations = pgTable(
   "study_observations",
   {
     id: text("id").primaryKey(),
     memorySessionId: text("memory_session_id").notNull().references(() => studyMemorySessions.id, { onDelete: "cascade" }),
     sourceName: text("source_name").notNull(),
-    capturedAt: integer("captured_at").notNull(),
+    capturedAt: bigint("captured_at", { mode: "number" }).notNull(),
     imageHash: text("image_hash").notNull(),
     extractedText: text("extracted_text").notNull(),
     summary: text("summary").notNull(),
     topicsJson: text("topics_json").notNull(),
-    confidence: real("confidence").notNull(),
-    createdAt: integer("created_at").notNull(),
+    confidence: doublePrecision("confidence").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
     uniqueIndex("study_observation_hash_unique").on(table.memorySessionId, table.imageHash),
@@ -186,7 +186,7 @@ export const studyObservations = sqliteTable(
   ],
 );
 
-export const studyChunks = sqliteTable(
+export const studyChunks = pgTable(
   "study_chunks",
   {
     id: text("id").primaryKey(),
@@ -195,12 +195,12 @@ export const studyChunks = sqliteTable(
     content: text("content").notNull(),
     embeddingJson: text("embedding_json").notNull(),
     embeddingModel: text("embedding_model").notNull(),
-    createdAt: integer("created_at").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("study_chunks_session_idx").on(table.memorySessionId)],
 );
 
-export const recallChecks = sqliteTable(
+export const recallChecks = pgTable(
   "recall_checks",
   {
     id: text("id").primaryKey(),
@@ -212,8 +212,8 @@ export const recallChecks = sqliteTable(
     score: integer("score"),
     feedbackJson: text("feedback_json"),
     xpAwarded: integer("xp_awarded").notNull().default(0),
-    createdAt: integer("created_at").notNull(),
-    submittedAt: integer("submitted_at"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    submittedAt: bigint("submitted_at", { mode: "number" }),
   },
   (table) => [uniqueIndex("recall_check_memory_unique").on(table.memorySessionId)],
 );
@@ -228,7 +228,7 @@ export const recallChecks = sqliteTable(
  * `bypassed` is Android-only in practice: iOS owns the shield screen, so there
  * is no bypass button to press.
  */
-export const distractionEvents = sqliteTable(
+export const distractionEvents = pgTable(
   "distraction_events",
   {
     id: text("id").primaryKey(),
@@ -241,10 +241,10 @@ export const distractionEvents = sqliteTable(
      */
     sessionId: text("session_id").references(() => sessions.id, { onDelete: "cascade" }),
     appIdentifier: text("app_identifier"),
-    timestamp: integer("timestamp").notNull(),
-    durationSeconds: real("duration_seconds").notNull(),
-    bypassed: integer("bypassed", { mode: "boolean" }).notNull(),
-    createdAt: integer("created_at").notNull(),
+    timestamp: bigint("timestamp", { mode: "number" }).notNull(),
+    durationSeconds: doublePrecision("duration_seconds").notNull(),
+    bypassed: boolean("bypassed").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
     index("distraction_events_session_idx").on(table.sessionId),
@@ -257,7 +257,7 @@ export const distractionEvents = sqliteTable(
  * UsageStatsManager. iOS does not use this: the user picks apps through
  * Apple's own FamilyActivityPicker and we only ever hold an opaque token.
  */
-export const distractionApps = sqliteTable(
+export const distractionApps = pgTable(
   "distraction_apps",
   {
     id: text("id").primaryKey(),
@@ -265,7 +265,7 @@ export const distractionApps = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     appIdentifier: text("app_identifier").notNull(),
-    createdAt: integer("created_at").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (table) => [index("distraction_apps_user_idx").on(table.userId)],
 );
@@ -274,20 +274,20 @@ export const distractionApps = sqliteTable(
  * Verified study locations. A null `userId` marks a shared campus default that
  * every user gets; a set `userId` is that user's own spot.
  */
-export const studySpots = sqliteTable(
+export const studySpots = pgTable(
   "study_spots",
   {
     id: text("id").primaryKey(),
     userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    lat: real("lat").notNull(),
-    lng: real("lng").notNull(),
-    radiusM: real("radius_m").notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    radiusM: doublePrecision("radius_m").notNull(),
     /** XP multiplier, matching the web app's bonus zones. */
-    multiplier: real("multiplier").notNull().default(1),
-    createdAt: integer("created_at")
+    multiplier: doublePrecision("multiplier").notNull().default(1),
+    createdAt: bigint("created_at", { mode: "number" })
       .notNull()
-      .default(sql`(unixepoch() * 1000)`),
+      .default(sql`(extract(epoch from now()) * 1000)::bigint`),
   },
   (table) => [index("study_spots_user_idx").on(table.userId)],
 );

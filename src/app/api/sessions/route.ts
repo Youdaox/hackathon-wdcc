@@ -38,17 +38,17 @@ export async function POST(request: Request) {
   const req = parsed.value;
 
   try {
-    const companion = ensureCompanion(req.user_id);
+    const companion = await ensureCompanion(req.user_id);
 
     // The client reports *where* it was; the server decides what that is
     // worth. A device claiming "General Library" cannot invent a multiplier.
     let xpMultiplier = 1;
     if (req.location_verified && req.location_name) {
-      const spot = db
+      const [spot] = await db
         .select()
         .from(studySpots)
         .where(eq(studySpots.name, req.location_name))
-        .get();
+        ;
       if (spot) xpMultiplier = spot.multiplier;
     }
 
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
 
     // One transaction: a session that grows the pet but loses its own
     // distraction rows would make the growth impossible to explain afterward.
-    db.transaction((tx) => {
-      tx.insert(sessions)
+    await db.transaction(async (tx) => {
+      await tx.insert(sessions)
         .values({
           id: sessionId,
           userId: req.user_id,
@@ -80,10 +80,10 @@ export async function POST(request: Request) {
           xpMultiplier,
           createdAt: now,
         })
-        .run();
+        ;
 
       for (const event of req.distraction_events) {
-        tx.insert(distractionEvents)
+        await tx.insert(distractionEvents)
           .values({
             id: uid(),
             userId: req.user_id,
@@ -94,15 +94,15 @@ export async function POST(request: Request) {
             bypassed: event.bypassed,
             createdAt: now,
           })
-          .run();
+          ;
       }
 
       // Inside the transaction: the grown companion and the session that
       // caused it must land together or not at all.
-      tx.update(companions)
+      await tx.update(companions)
         .set(result.companion)
         .where(eq(companions.userId, req.user_id))
-        .run();
+        ;
     });
 
     return NextResponse.json<SessionResponse>({
