@@ -1,42 +1,60 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { Companion } from "../api";
 import type { PlantModeState } from "../usePlantMode";
-import { Pig } from "../components/Pig";
-import { colors, roundedFont } from "../theme";
+import { AnimalSprite } from "../components/AnimalSprite";
+import { radius, roundedFont, useTheme } from "../theme";
 
 export function PlantSetupScreen({
   state,
+  companion,
   onCancel,
   onContinueWithoutSensor,
 }: {
   state: PlantModeState;
+  companion: Companion | null;
   onCancel: () => void;
   onContinueWithoutSensor: () => void;
 }) {
+  const { colors: c } = useTheme();
   const unavailable = state.phase === "unavailable";
   const calibrating = state.phase === "calibrating";
 
   return (
-    <View style={styles.overlay} accessibilityViewIsModal>
+    <View style={[styles.overlay, { backgroundColor: c.canvas }]} accessibilityViewIsModal>
       <View style={styles.topBar}>
-        <Text style={styles.eyebrow}>PLANT-TO-FOCUS</Text>
+        <Text style={[styles.eyebrow, { color: c.moss }]}>PLANT-TO-FOCUS</Text>
         <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={12}>
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={[styles.cancelText, { color: c.muted }]}>Cancel</Text>
         </Pressable>
       </View>
 
       <View style={styles.content}>
-        <View style={[styles.plantHalo, calibrating && styles.plantHaloActive]}>
-          <Pig mood="happy" level={3} size={112} />
+        <View
+          style={[
+            styles.plantHalo,
+            { backgroundColor: c.surface, borderColor: calibrating ? c.moss : c.accentPale },
+          ]}
+        >
+          <View style={[styles.innerHalo, { backgroundColor: c.accentPale }]} />
+          <AnimalSprite
+            species={companion?.species ?? "pig"}
+            mood={companion?.mood ?? "happy"}
+            level={companion?.level ?? 3}
+            color={companion?.color ?? "pink"}
+            accessory={companion?.accessory ?? "none"}
+            hp={companion?.hp ?? 100}
+            size={126}
+          />
         </View>
 
-        <Text style={styles.title} accessibilityRole="header">
+        <Text style={[styles.title, { color: c.ink }]} accessibilityRole="header">
           {unavailable
             ? "Motion sensing unavailable"
             : calibrating
-              ? "Fern is taking root…"
+              ? "Almost planted…"
               : "Plant your phone"}
         </Text>
-        <Text style={styles.instructions} accessibilityLiveRegion="polite">
+        <Text style={[styles.instructions, { color: c.muted }]} accessibilityLiveRegion="polite">
           {unavailable
             ? state.error
             : calibrating
@@ -45,19 +63,20 @@ export function PlantSetupScreen({
         </Text>
 
         {!unavailable && (
-          <View style={styles.progressTrack}>
+          <View style={[styles.progressTrack, { backgroundColor: c.surface2 }]}>
             <View
               style={[
                 styles.progressFill,
+                { backgroundColor: c.moss },
                 { width: `${Math.max(4, Math.round(state.calibrationProgress * 100))}%` },
               ]}
             />
           </View>
         )}
 
-        <View style={styles.tipCard}>
-          <View style={styles.tipDot} />
-          <Text style={styles.tipText}>
+        <View style={[styles.tipCard, { backgroundColor: c.surface, borderColor: c.line }]}>
+          <View style={[styles.tipDot, { backgroundColor: c.amber }]} />
+          <Text style={[styles.tipText, { color: c.muted }]}>
             Incline stays open and keeps the screen awake. Expo Go can’t verify focus after the app
             is backgrounded or closed.
           </Text>
@@ -67,9 +86,13 @@ export function PlantSetupScreen({
           <Pressable
             accessibilityRole="button"
             onPress={onContinueWithoutSensor}
-            style={({ pressed }) => [styles.fallbackButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.fallbackButton,
+              { backgroundColor: c.moss },
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.fallbackButtonText}>Start regular session</Text>
+            <Text style={[styles.fallbackButtonText, { color: c.surface }]}>Start regular session</Text>
           </Pressable>
         )}
       </View>
@@ -81,35 +104,30 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 40,
-    backgroundColor: colors.bg,
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 28,
   },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   eyebrow: {
-    color: colors.accent,
     fontFamily: roundedFont,
     fontSize: 13,
     fontWeight: "900",
     letterSpacing: 1.1,
   },
-  cancelText: { color: colors.muted, fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
+  cancelText: { fontFamily: roundedFont, fontSize: 15, fontWeight: "700" },
   content: { flex: 1, alignItems: "center", justifyContent: "center" },
   plantHalo: {
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: colors.surface,
     borderWidth: 12,
-    borderColor: colors.accentPale,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 30,
   },
-  plantHaloActive: { borderColor: colors.accentSoft },
+  innerHalo: { position: "absolute", width: 144, height: 144, borderRadius: 72 },
   title: {
-    color: colors.text,
     fontFamily: roundedFont,
     fontSize: 29,
     fontWeight: "900",
@@ -117,7 +135,6 @@ const styles = StyleSheet.create({
   },
   instructions: {
     maxWidth: 340,
-    color: colors.muted,
     fontFamily: roundedFont,
     fontSize: 16,
     fontWeight: "600",
@@ -129,27 +146,23 @@ const styles = StyleSheet.create({
     width: "78%",
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#e8e2d5",
     overflow: "hidden",
     marginTop: 24,
   },
-  progressFill: { height: "100%", borderRadius: 5, backgroundColor: colors.accent },
+  progressFill: { height: "100%", borderRadius: 5 },
   tipCard: {
     width: "100%",
     maxWidth: 380,
     flexDirection: "row",
     gap: 12,
-    borderRadius: 18,
+    borderRadius: radius.control,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     padding: 16,
     marginTop: 32,
   },
-  tipDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.peach, marginTop: 5 },
+  tipDot: { width: 9, height: 9, borderRadius: 5, marginTop: 5 },
   tipText: {
     flex: 1,
-    color: colors.muted,
     fontFamily: roundedFont,
     fontSize: 13,
     fontWeight: "600",
@@ -159,14 +172,12 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 380,
     minHeight: 58,
-    borderRadius: 18,
-    backgroundColor: colors.accent,
+    borderRadius: radius.control,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 16,
   },
   fallbackButtonText: {
-    color: colors.surface,
     fontFamily: roundedFont,
     fontSize: 17,
     fontWeight: "900",

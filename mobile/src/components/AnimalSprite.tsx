@@ -5,7 +5,7 @@ import {
   PIXEL_COLS as RACCOON_COLS,
   PIXEL_ROWS as RACCOON_ROWS,
 } from "./raccoonPixels";
-import { Pig, type Mood, stageForLevel, stateForMood } from "./Pig";
+import { Pig, type Mood, type PigAccessory, stageForLevel, stateForMood } from "./Pig";
 
 /**
  * Renders whichever companion the account owns.
@@ -62,6 +62,7 @@ export function AnimalSprite({
   mood,
   level,
   color,
+  accessory = "none",
   hp,
   asleep = false,
   size = 128,
@@ -70,6 +71,7 @@ export function AnimalSprite({
   mood: Mood;
   level: number;
   color: string;
+  accessory?: PigAccessory;
   hp?: number;
   asleep?: boolean;
   size?: number;
@@ -79,7 +81,17 @@ export function AnimalSprite({
       | "pink"
       | "purple"
       | "blue";
-    return <Pig mood={mood} level={level} color={pigColor} hp={hp} asleep={asleep} size={size} />;
+    return (
+      <Pig
+        mood={mood}
+        level={level}
+        color={pigColor}
+        accessory={accessory}
+        hp={hp}
+        asleep={asleep}
+        size={size}
+      />
+    );
   }
 
   const isCow = species === "cow";

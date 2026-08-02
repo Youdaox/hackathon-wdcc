@@ -1,13 +1,14 @@
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Companion, Recap } from "../api";
 import type { PlantSessionSummary } from "../usePlantMode";
-import { colors, formatDuration, roundedFont } from "../theme";
+import { formatDuration, radius, roundedFont, useTheme } from "../theme";
 
 const GOAL_DAYS = 5;
 
 const REASON_COPY: Record<string, string> = {
   emergency: "something urgent",
   task: "needed for the task",
+  offline: "studying offline",
   distraction: "plain distraction",
 };
 
@@ -24,16 +25,14 @@ export function RecapScreen({
   refreshing: boolean;
   onRefresh: () => void;
 }) {
-  const name = companion?.name ?? "Fern";
+  const { colors: c } = useTheme();
+  const name = companion?.name ?? "Oinky";
   const week = recap?.days ?? [];
   const totalFocused = recap?.total_focused_minutes ?? 0;
   const totalDistracted = recap?.total_distracted_minutes ?? 0;
   const denominator = totalFocused + totalDistracted;
   const averageFocus = denominator === 0 ? 0 : Math.round((totalFocused / denominator) * 100);
   const studyDays = recap?.study_days ?? 0;
-
-  // The pattern line is the diagnostic payoff: a reason someone leaned on
-  // repeatedly is worth naming, and it can't be read off a duration chart.
   const topReason = recap
     ? (Object.entries(recap.reasons) as [string, number][])
         .filter(([key]) => key !== "ended")
@@ -42,66 +41,117 @@ export function RecapScreen({
 
   return (
     <ScrollView
+      style={{ backgroundColor: c.canvas }}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.moss} />
       }
     >
-      <Text style={styles.pageTitle}>Your week</Text>
+      <View style={styles.pageHeader}>
+        <Text style={[styles.eyebrow, { color: c.moss }]}>YOUR PROGRESS</Text>
+        <Text style={[styles.pageTitle, { color: c.ink }]}>A week in focus</Text>
+        <Text style={[styles.pageSubtitle, { color: c.muted }]}>Honest numbers, useful patterns.</Text>
+      </View>
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.cardTitle}>This week, honestly</Text>
-        <Text style={styles.summaryText}>
-          {denominator === 0
-            ? `No sessions logged yet. Start one and ${name} will keep track.`
-            : `${totalFocused} verified minutes in the bank, ${totalDistracted} spent away. That's normal — the point is knowing.`}
-        </Text>
-        {recap?.guess_gap_seconds != null && recap.guess_gap_seconds > 10 && (
-          <Text style={styles.summaryText}>
-            You underestimate your time away by about {Math.round(recap.guess_gap_seconds)}s each
-            time.
+      <View style={[styles.summaryCard, { backgroundColor: c.surface, borderColor: c.line }]}>
+        <View style={[styles.summaryIcon, { backgroundColor: c.accentPale }]}>
+          <Text style={[styles.summaryIconText, { color: c.moss }]}>✦</Text>
+        </View>
+        <View style={styles.summaryCopy}>
+          <Text style={[styles.cardTitle, { color: c.ink }]}>This week, honestly</Text>
+          <Text style={[styles.summaryText, { color: c.muted }]}>
+            {denominator === 0
+              ? `No sessions yet. Start one and ${name} will keep track.`
+              : `${totalFocused} verified minutes, with ${totalDistracted} minutes spent away.`}
           </Text>
-        )}
-        {topReason && topReason[1] > 0 && (
-          <Text style={styles.summaryText}>
-            Most common reason: {REASON_COPY[topReason[0]] ?? topReason[0]} ({topReason[1]}x).
-          </Text>
-        )}
+          {recap?.guess_gap_seconds != null && recap.guess_gap_seconds > 10 && (
+            <Text style={[styles.insightText, { color: c.amber }]}>
+              You underestimate time away by about {Math.round(recap.guess_gap_seconds)}s.
+            </Text>
+          )}
+          {topReason && topReason[1] > 0 && (
+            <Text style={[styles.insightText, { color: c.faint }]}>
+              Most common reason: {REASON_COPY[topReason[0]] ?? topReason[0]} · {topReason[1]}×
+            </Text>
+          )}
+        </View>
+      </View>
+
+      <View style={[styles.chartCard, { backgroundColor: c.surface, borderColor: c.line }]}>
+        <View style={styles.chartHeader}>
+          <View>
+            <Text style={[styles.cardEyebrow, { color: c.faint }]}>FOCUS QUALITY</Text>
+            <Text style={[styles.cardTitleLarge, { color: c.ink }]}>Focus vs. distracted</Text>
+          </View>
+          <View style={[styles.averageBadge, { backgroundColor: c.accentPale }]}>
+            <Text style={[styles.averageValue, { color: c.moss }]}>{averageFocus}%</Text>
+            <Text style={[styles.averageLabel, { color: c.mossDeep }]}>AVERAGE</Text>
+          </View>
+        </View>
+
+        <View style={styles.legend}>
+          <Legend color={c.moss} label="Focused" />
+          <Legend color={c.surface2} label="Distracted" outlined />
+        </View>
+
+        <View style={styles.chart}>
+          {week.map((entry) => {
+            const total = entry.focused_minutes + entry.distracted_minutes;
+            const focusPct = total === 0 ? 0 : Math.round((entry.focused_minutes / total) * 100);
+            const distractedPct = total === 0 ? 0 : 100 - focusPct;
+            return (
+              <View key={entry.date} style={styles.dayColumn}>
+                <Text style={[styles.percentLabel, { color: focusPct > 0 ? c.moss : c.faint }]}>
+                  {focusPct}%
+                </Text>
+                <View style={[styles.barTrack, { backgroundColor: c.surface2 }]}>
+                  {total > 0 && (
+                    <>
+                      <View style={{ flex: distractedPct, backgroundColor: c.surface2 }} />
+                      <View style={{ flex: focusPct, backgroundColor: c.moss }} />
+                    </>
+                  )}
+                </View>
+                <Text style={[styles.dayLabel, { color: c.faint }]}>{entry.label}</Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       {plantSummary && (
-        <View style={styles.plantCard}>
+        <View style={[styles.plantCard, { backgroundColor: c.accentPale, borderColor: c.moss }]}>
           <View style={styles.plantCardHeader}>
             <View>
-              <Text style={styles.cardTitle}>Last planted session</Text>
-              <Text style={styles.plantCardSubtitle}>Face-down focus verification</Text>
+              <Text style={[styles.cardEyebrow, { color: c.mossDeep }]}>PLANT-TO-FOCUS</Text>
+              <Text style={[styles.cardTitleLarge, { color: c.ink }]}>Last planted session</Text>
             </View>
-            <View style={styles.plantedBadge}>
-              <Text style={styles.plantedBadgeValue}>{plantSummary.plantedPercentage}%</Text>
-              <Text style={styles.plantedBadgeLabel}>planted</Text>
+            <View style={[styles.plantedBadge, { backgroundColor: c.surface }]}>
+              <Text style={[styles.plantedBadgeValue, { color: c.moss }]}>
+                {plantSummary.plantedPercentage}%
+              </Text>
+              <Text style={[styles.plantedBadgeLabel, { color: c.faint }]}>PLANTED</Text>
             </View>
           </View>
-          <View style={styles.plantMetrics}>
+          <View style={[styles.plantMetrics, { backgroundColor: c.surface }]}>
             <PlantMetric value={String(plantSummary.phonePickups)} label="Phone pickups" />
-            <View style={styles.metricDivider} />
-            <PlantMetric
-              value={formatDuration(plantSummary.longestPlantedMs)}
-              label="Longest stretch"
-            />
+            <View style={[styles.metricDivider, { backgroundColor: c.line }]} />
+            <PlantMetric value={formatDuration(plantSummary.longestPlantedMs)} label="Longest stretch" />
           </View>
         </View>
       )}
 
-      <View style={styles.goalCard}>
+      <View style={[styles.goalCard, { backgroundColor: c.surface, borderColor: c.line }]}>
         <View style={styles.goalHeader}>
           <View>
-            <Text style={styles.cardTitle}>Weekly focus goal</Text>
-            <Text style={styles.goalCount}>{studyDays} of 7 study days</Text>
+            <Text style={[styles.cardEyebrow, { color: c.faint }]}>CONSISTENCY</Text>
+            <Text style={[styles.cardTitleLarge, { color: c.ink }]}>Weekly focus goal</Text>
+            <Text style={[styles.goalCount, { color: c.moss }]}>{studyDays} of 7 study days</Text>
           </View>
-          <View style={styles.targetIcon}>
-            <View style={styles.targetMiddle}>
-              <View style={styles.targetCenter} />
+          <View style={[styles.targetIcon, { borderColor: c.accentPale }]}>
+            <View style={[styles.targetMiddle, { borderColor: c.moss }]}>
+              <View style={[styles.targetCenter, { backgroundColor: c.moss }]} />
             </View>
           </View>
         </View>
@@ -109,11 +159,14 @@ export function RecapScreen({
           {Array.from({ length: 7 }, (_, index) => (
             <View
               key={index}
-              style={[styles.goalSegment, index < studyDays && styles.goalSegmentDone]}
+              style={[
+                styles.goalSegment,
+                { backgroundColor: index < studyDays ? c.moss : c.surface2 },
+              ]}
             />
           ))}
         </View>
-        <Text style={styles.goalMessage}>
+        <Text style={[styles.goalMessage, { color: c.muted }]}>
           {studyDays >= GOAL_DAYS
             ? `Goal met — ${studyDays} study days, ${recap?.streak ?? 0} in a row.`
             : `${GOAL_DAYS - studyDays} more focused ${GOAL_DAYS - studyDays === 1 ? "day" : "days"} to complete your goal.`}
@@ -124,117 +177,78 @@ export function RecapScreen({
 }
 
 function PlantMetric({ value, label }: { value: string; label: string }) {
+  const { colors: c } = useTheme();
   return (
     <View style={styles.plantMetric}>
-      <Text style={styles.plantMetricValue}>{value}</Text>
-      <Text style={styles.plantMetricLabel}>{label}</Text>
+      <Text style={[styles.plantMetricValue, { color: c.ink }]}>{value}</Text>
+      <Text style={[styles.plantMetricLabel, { color: c.faint }]}>{label}</Text>
     </View>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+function Legend({ color, label, outlined = false }: { color: string; label: string; outlined?: boolean }) {
+  const { colors: c } = useTheme();
   return (
     <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendLabel}>{label}</Text>
+      <View style={[styles.legendDot, { backgroundColor: color }, outlined && { borderColor: c.line, borderWidth: 1 }]} />
+      <Text style={[styles.legendLabel, { color: c.muted }]}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 24, paddingTop: 28, paddingBottom: 32, gap: 20 },
-  pageTitle: { color: colors.text, fontFamily: roundedFont, fontSize: 28, fontWeight: "900", marginBottom: 6 },
-  cardTitle: { color: colors.text, fontFamily: roundedFont, fontSize: 16, fontWeight: "800" },
+  content: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 38, gap: 15 },
+  pageHeader: { marginBottom: 4 },
+  eyebrow: { fontFamily: roundedFont, fontSize: 9, fontWeight: "900", letterSpacing: 1.3 },
+  pageTitle: { fontFamily: roundedFont, fontSize: 30, fontWeight: "900", letterSpacing: -0.7, marginTop: 3 },
+  pageSubtitle: { fontFamily: roundedFont, fontSize: 13, fontWeight: "600", marginTop: 3 },
   summaryCard: {
-    minHeight: 104,
-    borderRadius: 22,
+    minHeight: 112,
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-    gap: 7,
-  },
-  summaryText: { color: colors.muted, fontFamily: roundedFont, fontSize: 15, lineHeight: 23, fontWeight: "600" },
-  plantCard: {
-    minHeight: 158,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.accentPale,
-    backgroundColor: "#f2f9f3",
-    padding: 18,
-  },
-  plantCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  plantCardSubtitle: { color: colors.muted, fontFamily: roundedFont, fontSize: 12, fontWeight: "600", marginTop: 4 },
-  plantedBadge: { alignItems: "flex-end" },
-  plantedBadgeValue: { color: colors.accent, fontFamily: roundedFont, fontSize: 22, fontWeight: "900" },
-  plantedBadgeLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
-  plantMetrics: {
+    padding: 17,
     flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    marginTop: 17,
-    paddingVertical: 12,
+    gap: 13,
   },
-  plantMetric: { flex: 1, alignItems: "center", gap: 3 },
-  plantMetricValue: { color: colors.text, fontFamily: roundedFont, fontSize: 19, fontWeight: "900" },
-  plantMetricLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
-  metricDivider: { width: 1, height: 32, backgroundColor: colors.border },
-  chartCard: {
-    minHeight: 268,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-  },
+  summaryIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  summaryIconText: { fontFamily: roundedFont, fontSize: 19, fontWeight: "900" },
+  summaryCopy: { flex: 1, gap: 5 },
+  cardTitle: { fontFamily: roundedFont, fontSize: 16, fontWeight: "900" },
+  cardTitleLarge: { fontFamily: roundedFont, fontSize: 18, fontWeight: "900", marginTop: 2 },
+  cardEyebrow: { fontFamily: roundedFont, fontSize: 8, fontWeight: "900", letterSpacing: 1.1 },
+  summaryText: { fontFamily: roundedFont, fontSize: 13, lineHeight: 19, fontWeight: "600" },
+  insightText: { fontFamily: roundedFont, fontSize: 10, lineHeight: 15, fontWeight: "700" },
+  chartCard: { minHeight: 274, borderRadius: radius.card, borderWidth: 1, padding: 17 },
   chartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  averageBadge: { alignItems: "flex-end" },
-  averageValue: { color: colors.accent, fontFamily: roundedFont, fontSize: 20, fontWeight: "900" },
-  averageLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 9, fontWeight: "700" },
-  legend: { flexDirection: "row", gap: 14, marginTop: 10 },
+  averageBadge: { minWidth: 64, borderRadius: 15, paddingHorizontal: 9, paddingVertical: 7, alignItems: "center" },
+  averageValue: { fontFamily: roundedFont, fontSize: 20, fontWeight: "900" },
+  averageLabel: { fontFamily: roundedFont, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
+  legend: { flexDirection: "row", gap: 14, marginTop: 12 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendDot: { width: 9, height: 9, borderRadius: 2 },
-  legendLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 11, fontWeight: "700" },
-  chart: { height: 164, flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 13 },
-  dayColumn: { flex: 1, alignItems: "center", gap: 8 },
-  barTrack: { height: 130, width: "100%", justifyContent: "flex-end", borderRadius: 7, overflow: "hidden" },
-  distractedBar: { width: "100%", minHeight: 12, backgroundColor: colors.sand, alignItems: "center", justifyContent: "center" },
-  focusBar: { width: "100%", backgroundColor: "#62b17a", alignItems: "center", justifyContent: "center" },
-  distractedPercent: { color: "#746b5b", fontFamily: roundedFont, fontSize: 9, fontWeight: "800" },
-  focusPercent: { color: colors.surface, fontFamily: roundedFont, fontSize: 10, fontWeight: "900" },
-  dayLabel: { color: colors.muted, fontFamily: roundedFont, fontSize: 12, fontWeight: "700" },
-  goalCard: {
-    minHeight: 164,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 18,
-  },
+  legendDot: { width: 9, height: 9, borderRadius: 3 },
+  legendLabel: { fontFamily: roundedFont, fontSize: 10, fontWeight: "700" },
+  chart: { height: 164, flexDirection: "row", alignItems: "flex-end", gap: 7, marginTop: 10 },
+  dayColumn: { flex: 1, alignItems: "center", gap: 5 },
+  percentLabel: { fontFamily: roundedFont, fontSize: 8, fontWeight: "900" },
+  barTrack: { height: 124, width: "100%", borderRadius: 7, overflow: "hidden" },
+  dayLabel: { fontFamily: roundedFont, fontSize: 10, fontWeight: "800" },
+  plantCard: { minHeight: 164, borderRadius: radius.card, borderWidth: 1, padding: 17 },
+  plantCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  plantedBadge: { borderRadius: 15, paddingHorizontal: 10, paddingVertical: 7, alignItems: "center" },
+  plantedBadgeValue: { fontFamily: roundedFont, fontSize: 19, fontWeight: "900" },
+  plantedBadgeLabel: { fontFamily: roundedFont, fontSize: 7, fontWeight: "900", letterSpacing: 0.6 },
+  plantMetrics: { flexDirection: "row", alignItems: "center", borderRadius: 17, marginTop: 17, paddingVertical: 12 },
+  plantMetric: { flex: 1, alignItems: "center", gap: 3 },
+  plantMetricValue: { fontFamily: roundedFont, fontSize: 18, fontWeight: "900" },
+  plantMetricLabel: { fontFamily: roundedFont, fontSize: 9, fontWeight: "700" },
+  metricDivider: { width: 1, height: 32 },
+  goalCard: { minHeight: 174, borderRadius: radius.card, borderWidth: 1, padding: 17 },
   goalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  goalCount: { color: colors.accent, fontFamily: roundedFont, fontSize: 18, fontWeight: "900", marginTop: 5 },
-  targetIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 4,
-    borderColor: colors.accentPale,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  targetMiddle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 4,
-    borderColor: colors.accentSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  targetCenter: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
-  goalSegments: { flexDirection: "row", gap: 6, marginTop: 18 },
-  goalSegment: { flex: 1, height: 8, borderRadius: 4, backgroundColor: "#e8e2d5" },
-  goalSegmentDone: { backgroundColor: colors.accent },
-  goalMessage: { color: colors.muted, fontFamily: roundedFont, fontSize: 13, lineHeight: 19, fontWeight: "600", marginTop: 13 },
+  goalCount: { fontFamily: roundedFont, fontSize: 14, fontWeight: "900", marginTop: 5 },
+  targetIcon: { width: 46, height: 46, borderRadius: 23, borderWidth: 5, alignItems: "center", justifyContent: "center" },
+  targetMiddle: { width: 25, height: 25, borderRadius: 13, borderWidth: 4, alignItems: "center", justifyContent: "center" },
+  targetCenter: { width: 7, height: 7, borderRadius: 4 },
+  goalSegments: { flexDirection: "row", gap: 5, marginTop: 18 },
+  goalSegment: { flex: 1, height: 8, borderRadius: 4 },
+  goalMessage: { fontFamily: roundedFont, fontSize: 12, lineHeight: 18, fontWeight: "600", marginTop: 13 },
 });

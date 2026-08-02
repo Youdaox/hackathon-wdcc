@@ -380,7 +380,12 @@ export function toWebDistraction(event: WireDistractionEvent): WebDistractionEve
   // emergency should not lose HP for it, and the whole point of asking is that
   // the answer changes the outcome — otherwise it's a guilt prompt, not a
   // diagnostic.
-  const penalized = reason !== null ? isPenalisedReason(reason) : durationMs >= RULES.graceMs;
+  // The grace window applies whatever the user said. A three-second glance is
+  // forgiven even when honestly labelled a distraction — otherwise admitting
+  // it would cost more than staying quiet, which is exactly backwards.
+  const penalized =
+    durationMs >= RULES.graceMs &&
+    (reason !== null ? isPenalisedReason(reason) : true);
 
   return { startedAt: Date.parse(event.timestamp), durationMs, penalized };
 }

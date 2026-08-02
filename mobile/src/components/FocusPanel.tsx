@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import type { FocusState } from "../useFocusSession";
-import { HP_ESCALATE_AFTER_MS, hpCostForAway } from "../config";
+import { HP_ESCALATE_AFTER_MS, HP_GRACE_MS, hpCostForAway } from "../config";
 import { colors, formatDuration, roundedFont } from "../theme";
 import { nzClock } from "../timezone";
 
@@ -32,7 +32,7 @@ export function FocusPanel({
 
   // A slow pulse on the live card while away, so the cost registers
   // peripherally rather than having to be read.
-  const pulse = useRef(new Animated.Value(0)).current;
+  const [pulse] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!state.away) {
       pulse.setValue(0);
@@ -75,7 +75,11 @@ export function FocusPanel({
           <View style={styles.liveStats}>
             <Text style={[styles.stat, state.away && styles.statAway]}>
               {formatDuration(state.distractedMs)} away
-              {state.distractedMs > 0 ? ` · −${Math.round(hpCostForAway(state.distractedMs))} HP` : ""}
+              {state.away && state.distractedMs <= HP_GRACE_MS
+                ? " · paused"
+                : hpCostForAway(state.distractedMs) > 0
+                  ? ` · −${Math.round(hpCostForAway(state.distractedMs))} HP`
+                  : ""}
               {state.away && state.distractedMs > HP_ESCALATE_AFTER_MS ? " ⚠︎" : ""}
             </Text>
             <Text style={styles.stat}>
@@ -184,7 +188,7 @@ function PlantStatus({ paused, pickups }: { paused: boolean; pickups: number }) 
         <Text style={styles.plantSubtitle}>
           {paused
             ? `Verified focus is paused · ${pickups} ${pickups === 1 ? "pickup" : "pickups"}`
-            : "Keep it still and let Fern grow"}
+            : "Keep it still and let your focus grow"}
         </Text>
       </View>
     </View>
