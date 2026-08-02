@@ -18,6 +18,7 @@ import { useDemoAuth } from "@/lib/demo-auth";
 import { useTabStatus } from "@/hooks/useTabStatus";
 import { useElectronStatus } from "@/hooks/useElectronStatus";
 import { DemoLogin } from "@/components/DemoLogin";
+import { StudyMemoryProvider } from "@/lib/study-memory/client";
 
 export default function Dashboard() {
   const { hydrated, active, companion } = useIncline();
@@ -32,6 +33,7 @@ export default function Dashboard() {
   if (!currentUser) return <DemoLogin />;
 
   return (
+    <StudyMemoryProvider>
     <main className="mx-auto min-h-screen w-full max-w-6xl px-6 py-10">
       {flashMessage !== null && (
         <button
@@ -94,6 +96,7 @@ export default function Dashboard() {
       <SessionSummary />
       <DesktopBuddy />
     </main>
+    </StudyMemoryProvider>
   );
 }
 

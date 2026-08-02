@@ -3,13 +3,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useIncline } from "@/lib/store";
 import type { GradeResult, RecallQuestion } from "./ai";
+import type { StudyMemoryDesktopPhase } from "@/lib/backgroundStatus";
 
 const CAPTURE_INTERVAL_MS = 45_000;
 const SETTINGS_KEY = "incline.studyMemory.v1";
 const SENSITIVE_TITLE = /password|1password|bitwarden|bank|wallet|login|sign in|messages?|mail|health/i;
 
 type Source = { id: string; name: string };
-type CaptureState = "off" | "capturing" | "paused" | "processing" | "ready" | "error";
+type CaptureState = StudyMemoryDesktopPhase;
+type CaptureReason = "automatic" | "manual";
 
 interface StudyMemoryContextValue {
   enabled: boolean;
@@ -38,6 +40,8 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
   const paused = useRef(false);
   const finalizedFor = useRef<string | null>(null);
   const capturedFor = useRef<string | null>(null);
+  const captureInFlight = useRef(false);
+  const feedbackTimer = useRef<number | null>(null);
   const activeId = active?.id ?? null;
   const activeTitle = active?.title ?? "";
   const activeCourse = active?.course ?? "";
@@ -69,27 +73,54 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
     setSourceIdState(next); persist(enabled, next);
   }, [enabled, persist]);
 
-  const capture = useCallback(async () => {
-    if (!activeId || !enabled || paused.current || !sourceId || !window.electronAPI) return;
+  const settleStatus = useCallback((phase: CaptureState, delay = 2_000) => {
+    setState(phase);
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = window.setTimeout(
+      () => setState(paused.current ? "paused" : "ready"),
+      delay,
+    );
+  }, []);
+
+  const capture = useCallback(async (reason: CaptureReason) => {
+    if (!activeId || !enabled || !sourceId || !window.electronAPI) return;
+    if (reason === "automatic" && paused.current) return;
+    if (captureInFlight.current) return;
     const selected = sources.find((source) => source.id === sourceId);
     if (!selected || SENSITIVE_TITLE.test(selected.name)) {
-      setState("paused");
+      settleStatus("excluded");
       return;
     }
-    const shot = await window.electronAPI.studyMemory.capture(sourceId);
-    if (!shot) return;
-    const response = await fetch("/api/study-memory/observations", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        focusSessionId: activeId, title: activeTitle, course: activeCourse,
-        sourceName: shot.sourceName, imageDataUrl: `data:image/jpeg;base64,${shot.imageDataUrl}`,
-      }),
-    });
-    if (response.ok) {
-      const result = await response.json() as { accepted?: boolean };
-      if (result.accepted) setCaptures((count) => count + 1);
+    captureInFlight.current = true;
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    setState("capturing");
+    try {
+      const shot = await window.electronAPI.studyMemory.capture(sourceId);
+      if (!shot) { settleStatus("excluded"); return; }
+      setState("processing");
+      const response = await fetch("/api/study-memory/observations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          focusSessionId: activeId, title: activeTitle, course: activeCourse,
+          sourceName: shot.sourceName, imageDataUrl: `data:image/jpeg;base64,${shot.imageDataUrl}`,
+        }),
+      });
+      const result = await response.json().catch(() => ({})) as { accepted?: boolean; reason?: string };
+      if (!response.ok) { settleStatus("error", 3_000); return; }
+      if (result.accepted) {
+        setCaptures((count) => count + 1);
+        settleStatus("accepted");
+      } else if (result.reason === "duplicate") {
+        settleStatus("duplicate");
+      } else {
+        settleStatus("excluded");
+      }
+    } catch {
+      settleStatus("error", 3_000);
+    } finally {
+      captureInFlight.current = false;
     }
-  }, [activeId, activeTitle, activeCourse, enabled, sourceId, sources]);
+  }, [activeId, activeTitle, activeCourse, enabled, sourceId, sources, settleStatus]);
 
   useEffect(() => {
     if (!activeId || !enabled || !sourceId || !window.electronAPI) {
@@ -99,12 +130,38 @@ export function StudyMemoryProvider({ children }: { children: React.ReactNode })
     capturedFor.current = activeId;
     paused.current = false;
     setCaptures(0);
-    setState("capturing");
-    const initial = window.setTimeout(() => void capture(), 1_500);
-    const interval = window.setInterval(() => void capture(), CAPTURE_INTERVAL_MS);
+    setState("ready");
+    const initial = window.setTimeout(() => void capture("automatic"), 1_500);
+    const interval = window.setInterval(() => void capture("automatic"), CAPTURE_INTERVAL_MS);
     return () => { window.clearTimeout(initial); window.clearInterval(interval); };
   }, [activeId, enabled, sourceId, capture]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => window.electronAPI?.studyMemory.onManualCapture(
+    () => void capture("manual"),
+  ), [capture]);
+
+  useEffect(() => {
+    const bridge = window.electronAPI?.studyMemory;
+    if (!bridge) return;
+    const selected = sources.find((source) => source.id === sourceId);
+    bridge.setStatus({
+      enabled: Boolean(activeId && enabled),
+      automaticPaused: paused.current,
+      phase: activeId && enabled ? state : "off",
+      acceptedCaptures: captures,
+      sourceName: selected?.name ?? null,
+      message: null,
+    });
+  }, [activeId, enabled, state, captures, sourceId, sources]);
+
+  useEffect(() => () => {
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    window.electronAPI?.studyMemory.setStatus({
+      enabled: false, automaticPaused: false, phase: "off", acceptedCaptures: 0,
+      sourceName: null, message: null,
+    });
+  }, []);
 
   useEffect(() => {
     const session = outcome?.session;

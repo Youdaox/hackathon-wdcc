@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen } = require("electron");
 const path = require("node:path");
 const { matchTargetApp, closeButtonPosition, closeTargetApp } = require("./closeApp");
 
@@ -28,6 +28,14 @@ let focusedTargetApp = null;
  * Only the renderer knows what away means, so it is the one that decides.
  */
 let status = { phase: "idle" };
+let memoryStatus = {
+  enabled: false,
+  automaticPaused: false,
+  phase: "off",
+  acceptedCaptures: 0,
+  sourceName: null,
+  message: null,
+};
 
 // get-windows ships ESM-only; dynamic import works from this CommonJS file
 // without needing to convert the whole main process to ESM.
@@ -70,8 +78,8 @@ function stopAppWatch() {
 
 function getStatusBounds() {
   const { workArea } = screen.getPrimaryDisplay();
-  const width = 300;
-  const height = 64;
+  const width = 380;
+  const height = 76;
   const margin = 16;
   return {
     x: workArea.x + workArea.width - width - margin,
@@ -117,9 +125,11 @@ function syncStatusWindow() {
 
     statusWindow.setAlwaysOnTop(true, "screen-saver");
     statusWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    statusWindow.setIgnoreMouseEvents(true, { forward: true });
+    // Interactive without taking focus away from the study material.
+    statusWindow.setIgnoreMouseEvents(false);
     statusWindow.webContents.on("did-finish-load", () => {
       statusWindow?.webContents.send("status:update", status);
+      statusWindow?.webContents.send("memory:update", memoryStatus);
     });
     statusWindow.loadURL(`${APP_URL}/status`);
     statusWindow.on("closed", () => {
@@ -263,6 +273,16 @@ ipcMain.on("status:set", (_event, next) => {
   syncStatusWindow();
 });
 
+ipcMain.on("study-memory:status", (_event, next) => {
+  if (!next || typeof next.phase !== "string") return;
+  memoryStatus = next;
+  statusWindow?.webContents.send("memory:update", memoryStatus);
+});
+
+ipcMain.on("status:manual-capture", () => {
+  dashboardWindow?.webContents.send("study-memory:manual-capture");
+});
+
 // Study Memory deliberately exposes snapshots, not an unrestricted media
 // stream. The authenticated renderer decides when a focus session is active
 // and uploads a short-lived data URL; the main process never writes images.
@@ -291,6 +311,11 @@ ipcMain.handle("study-memory:capture", async (_event, sourceId) => {
 
 app.whenReady().then(() => {
   createDashboardWindow();
+  globalShortcut.register("CommandOrControl+Shift+M", () => {
+    if (status.phase !== "idle" && memoryStatus.enabled) {
+      dashboardWindow?.webContents.send("study-memory:manual-capture");
+    }
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createDashboardWindow();
@@ -300,3 +325,5 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("will-quit", () => globalShortcut.unregisterAll());

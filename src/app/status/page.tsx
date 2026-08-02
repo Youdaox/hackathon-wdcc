@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import {
   IDLE_STATUS,
+  IDLE_MEMORY_STATUS,
   REASON_LABEL,
   coarseDuration,
   type BackgroundPhase,
   type BackgroundStatus,
+  type StudyMemoryDesktopStatus,
 } from "@/lib/backgroundStatus";
 import { RULES } from "@/lib/companion";
 
 /**
- * The always-on-top desktop pill (300×64, see `getStatusBounds` in
+ * The always-on-top desktop control (380×76, see `getStatusBounds` in
  * electron/main.js). Loaded only by the Electron shell.
  *
  * It renders the status the *renderer* derived and the main process merely
@@ -38,6 +40,7 @@ const PHASE_EYEBROW: Record<BackgroundPhase, string> = {
 
 export default function StatusPage() {
   const [status, setStatus] = useState<BackgroundStatus>(IDLE_STATUS);
+  const [memory, setMemory] = useState<StudyMemoryDesktopStatus>(IDLE_MEMORY_STATUS);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -52,6 +55,7 @@ export default function StatusPage() {
     body.style.overflow = "hidden";
 
     const unsubscribe = window.statusAPI?.onUpdate((next) => setStatus(next));
+    const unsubscribeMemory = window.statusAPI?.onMemoryUpdate((next) => setMemory(next));
     // Two frames, so the transparent background above has actually painted
     // before the main process is told it can reveal the window.
     const raf = requestAnimationFrame(() => {
@@ -61,6 +65,7 @@ export default function StatusPage() {
     return () => {
       cancelAnimationFrame(raf);
       unsubscribe?.();
+      unsubscribeMemory?.();
       html.style.background = prevHtmlBg;
       body.style.background = prevBodyBg;
       html.style.overflow = prevHtmlOverflow;
@@ -69,8 +74,8 @@ export default function StatusPage() {
   }, []);
 
   return (
-    <div className="h-full w-full overflow-hidden bg-transparent p-3">
-      <div className="flex h-full items-center gap-2.5 rounded-full border border-white/10 bg-slate-950/85 px-4 shadow-lg backdrop-blur">
+    <div className="h-full w-full overflow-hidden bg-transparent p-2.5">
+      <div className="flex h-full items-center gap-2.5 rounded-2xl border border-white/10 bg-slate-950/90 px-4 shadow-lg backdrop-blur">
         <span
           className={`h-2.5 w-2.5 shrink-0 rounded-full ${PHASE_TONE[status.phase]} ${
             status.phase === "focused" ? "animate-pulse" : ""
@@ -83,6 +88,11 @@ export default function StatusPage() {
             {status.reason ? REASON_LABEL[status.reason] : PHASE_EYEBROW[status.phase]}
           </div>
           <div className="truncate text-sm font-semibold text-ink">{headline(status)}</div>
+          {memory.enabled && (
+            <div className="mt-0.5 truncate text-[10px] font-medium text-faint">
+              {memoryLine(memory)}
+            </div>
+          )}
         </div>
 
         {/* The grace window, draining. The only stretch where coming back still
@@ -95,9 +105,47 @@ export default function StatusPage() {
             />
           </div>
         )}
+
+        <button
+          type="button"
+          disabled={!memory.enabled || memory.phase === "capturing" || memory.phase === "processing"}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => window.statusAPI?.requestManualCapture()}
+          className={`shrink-0 rounded-xl border px-3 py-2 text-[11px] font-bold transition-colors disabled:cursor-default ${captureTone(memory)}`}
+          title={memory.sourceName ? `Capture ${memory.sourceName}` : "Capture the selected study source"}
+        >
+          {captureLabel(memory)}
+        </button>
       </div>
     </div>
   );
+}
+
+function captureLabel(memory: StudyMemoryDesktopStatus): string {
+  switch (memory.phase) {
+    case "capturing": return "Capturing…";
+    case "processing": return "Processing…";
+    case "accepted": return "Saved ✓";
+    case "duplicate": return "No change";
+    case "excluded": return "Blocked";
+    case "error": return "Try again";
+    case "paused": return "📸 Capture";
+    case "ready": return "📸 Capture";
+    case "off": return "Memory off";
+  }
+}
+
+function captureTone(memory: StudyMemoryDesktopStatus): string {
+  if (!memory.enabled || memory.phase === "off") return "border-white/10 text-faint opacity-60";
+  if (memory.phase === "accepted") return "border-moss/50 bg-moss/15 text-moss";
+  if (memory.phase === "excluded" || memory.phase === "error") return "border-clay/50 bg-clay/10 text-clay";
+  return "border-citrus/40 bg-citrus/10 text-citrus hover:bg-citrus/20";
+}
+
+function memoryLine(memory: StudyMemoryDesktopStatus): string {
+  const source = memory.sourceName ? ` · ${memory.sourceName}` : "";
+  const paused = memory.automaticPaused ? "Manual only" : "Memory on";
+  return `${paused} · ${memory.acceptedCaptures} saved${source}`;
 }
 
 function headline(status: BackgroundStatus): string {
