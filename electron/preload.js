@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld("overlayAPI", {
     return () => ipcRenderer.removeListener("target-app:blur", listener);
   },
   targetAppReached: (name) => ipcRenderer.send("target-app:reached", name),
+  onCompanionUpdate: (handler) => {
+    const listener = (_event, companion) => handler(companion);
+    ipcRenderer.on("companion:update", listener);
+    return () => ipcRenderer.removeListener("companion:update", listener);
+  },
 });
 contextBridge.exposeInMainWorld("statusAPI", {
   ready: () => ipcRenderer.send("status:ready"),
@@ -28,7 +33,13 @@ contextBridge.exposeInMainWorld("statusAPI", {
 contextBridge.exposeInMainWorld("electronAPI", {
   isElectron: true,
   toggleOverlay: () => ipcRenderer.invoke("overlay:toggle"),
+  closeOverlay: () => ipcRenderer.send("overlay:close"),
   // The renderer owns the definition of "away" and pushes the derived status up;
   // the main process only relays it to the pill.
   setBackgroundStatus: (status) => ipcRenderer.send("status:set", status),
+  // The dashboard and overlay are separate windows with their own InclineProvider
+  // instances — this keeps the overlay's pet visually in sync (color, accessory,
+  // level, mood) with whatever the dashboard's is doing live, not just at the
+  // moment the overlay was opened.
+  updateCompanion: (companion) => ipcRenderer.send("companion:update", companion),
 });

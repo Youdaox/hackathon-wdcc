@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { closeActivePipWindow } from "./overlayWindow";
 
 export type DemoUser = { id: string; username: string; name: string; initials: string };
 
@@ -53,6 +54,12 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await authRequest("/api/auth/logout", {});
     setCurrentUser(null);
+    // Bring the desktop pet back in — done here, as a direct side effect of
+    // logging out, rather than reactively from DesktopBuddy: the dashboard
+    // (and DesktopBuddy along with it) unmounts the instant currentUser goes
+    // null, so nothing would survive to observe that transition from inside it.
+    closeActivePipWindow();
+    window.electronAPI?.closeOverlay();
   }, []);
 
   const value = useMemo(() => ({ currentUser, ready, login, register, logout }), [currentUser, ready, login, register, logout]);
