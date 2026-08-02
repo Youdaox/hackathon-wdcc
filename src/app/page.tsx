@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { CanvasCard } from "@/components/CanvasCard";
 import { FocusPanel } from "@/components/FocusPanel";
@@ -16,16 +16,19 @@ import { InstallAppButton } from "@/components/InstallAppButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIncline } from "@/lib/store";
 import { useDemoAuth } from "@/lib/demo-auth";
+import { useTabStatus } from "@/hooks/useTabStatus";
+import { useElectronStatus } from "@/hooks/useElectronStatus";
 import { DemoLogin } from "@/components/DemoLogin";
 
 export default function Dashboard() {
-  const { hydrated, active, eyeEnabled } = useIncline();
+  const { hydrated, active, companion } = useIncline();
   const { currentUser, logout, flashMessage, flashVisible, dismissFlashMessage } = useDemoAuth();
 
-  useEffect(() => {
-    window.electronAPI?.setBackgroundTracking(Boolean(eyeEnabled && active));
-    return () => window.electronAPI?.setBackgroundTracking(false);
-  }, [active, eyeEnabled]);
+  // Two background surfaces, one derivation. The tab title and favicon reach a
+  // hidden browser tab; the Electron pill reaches the desktop. Neither decides
+  // anything for itself.
+  useTabStatus(active, companion.name);
+  useElectronStatus(active);
 
   if (!currentUser) return <DemoLogin />;
 

@@ -8,8 +8,12 @@ import { useIncline } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
 import { findActiveBlock, findNextBlock, formatCountdown } from "@/lib/schedule";
 import { DAY_LABELS, formatClock, formatCompact, formatDuration } from "@/lib/time";
+import { awayMsPastGrace, hpLostForAwayMs } from "@/lib/companion";
 
 const QUICK_DURATIONS = [15, 25, 50];
+
+/** How long the "you were away" receipt stays up after the user returns. */
+const RECEIPT_MS = 12_000;
 
 export function FocusPanel() {
   const { blocks, active, elapsedMs, startSession, endSession, cancelSession } = useIncline();
@@ -158,7 +162,7 @@ interface LiveProps {
 }
 
 function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
-  const { currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
+  const { companion, currentZone, eyeEnabled, gazeStatus, gazeCalibration, gazeEpisodes, gazeReason } =
     useIncline();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const away = active.isHidden || active.isGazeAway;
@@ -168,6 +172,15 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
       : 1;
   const remainingMs = active.plannedMs ? Math.max(0, active.plannedMs - elapsedMs) : null;
   const penalized = active.distractions.filter((d) => d.penalized).length;
+
+  // The receipt for the lapse just ended. Shown briefly and only once the user
+  // is actually back — a permanent banner would stop being news, and one shown
+  // while still away would be competing with the surfaces that can be seen from
+  // outside the page.
+  const now = active.startedAt + elapsedMs;
+  const recent = active.distractions.at(-1);
+  const lastLapse =
+    !away && recent && now - (recent.startedAt + recent.durationMs) <= RECEIPT_MS ? recent : null;
 
   return (
     <section
@@ -306,9 +319,19 @@ function LiveSession({ active, elapsedMs, onEnd, onCancel }: LiveProps) {
         </Button>
       </div>
 
-      {active.isHidden && (
+      {/* A receipt, not a warning. The old banner here read "Tab hidden — this
+          time isn't counting", which is only ever rendered while the tab is
+          hidden and therefore could never be read while it was true. What an
+          in-page surface is actually good for is telling you what you missed —
+          the live warning now lives in the tab title and the desktop pill. */}
+      {lastLapse && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-clay/10 py-2 text-center text-xs font-semibold text-clay">
-          Tab hidden — this time isn&apos;t counting
+          You were away {formatCompact(lastLapse.durationMs)}
+          {lastLapse.penalized
+            ? ` — that cost ${companion.name} ${hpLostForAwayMs(
+                awayMsPastGrace(lastLapse.durationMs),
+              ).toFixed(1)} HP`
+            : " — inside the grace window, no harm done"}
         </div>
       )}
     </section>
