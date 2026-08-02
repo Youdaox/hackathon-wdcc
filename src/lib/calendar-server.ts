@@ -18,8 +18,8 @@ export async function toIcs(userId: string) {
   const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const body = (await calendarRows(userId)).flatMap((event) => [
     "BEGIN:VEVENT", `UID:${event.id}@incline.local`, `DTSTAMP:${now}`,
-    `DTSTART:${stamp(event.eventDate, event.startTime)}`, `DTEND:${stamp(event.eventDate, event.endTime)}`,
-    `SUMMARY:${escape(event.title)}`, `DESCRIPTION:${escape(event.description)}`,
+    `DTSTART;TZID=Pacific/Auckland:${stamp(event.eventDate, event.startTime)}`, `DTEND;TZID=Pacific/Auckland:${stamp(event.eventDate, event.endTime)}`,
+    `SUMMARY:${escape(event.title)}`, `DESCRIPTION:${escape(event.description)}`, `CATEGORIES:${event.category.toUpperCase()}`,
     ...(event.location ? [`LOCATION:${escape(event.location)}`] : []), "END:VEVENT",
   ]);
   return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Incline//Calendar//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Incline", ...body, "END:VCALENDAR", ""].join("\r\n");

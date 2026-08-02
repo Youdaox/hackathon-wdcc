@@ -49,6 +49,7 @@ export const calendarEvents = pgTable(
     eventDate: text("event_date").notNull(),
     startTime: text("start_time").notNull(),
     endTime: text("end_time").notNull(),
+    category: text("category").notNull().default("study"),
     description: text("description").notNull().default(""),
     location: text("location"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),

@@ -1,35 +1,82 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EVENT_CATEGORIES, EVENT_CATEGORY_COLOUR, type CalendarEvent, type EventCategory } from "@/lib/calendar";
 import { addNewZealandDays, nzParts, nzStartOfDay } from "@/lib/timezone";
 
-type DayActivity = {
-  study: number;
-  extracurricular: number;
-  sleep: number;
+type ChartCategory = EventCategory | "sleep";
+type DayActivity = Record<ChartCategory, number>;
+
+const CATEGORY_LABEL: Record<EventCategory, string> = {
+  study: "Study",
+  sport: "Sport",
+  executive: "Executive",
+  work: "Work",
 };
-
-// Demo activity gives the dashboard a useful shape until calendar and session
-// data are expanded to record sleep and extracurricular commitments.
-const DEMO_ACTIVITY: DayActivity[] = [
-  { study: 3.5, extracurricular: 1.5, sleep: 7 },
-  { study: 4.5, extracurricular: 2, sleep: 6.5 },
-  { study: 2.5, extracurricular: 3, sleep: 8 },
-  { study: 5, extracurricular: 1, sleep: 6 },
-  { study: 3, extracurricular: 2.5, sleep: 7.5 },
-  { study: 2, extracurricular: 4, sleep: 8 },
-  { study: 3.5, extracurricular: 2, sleep: 5 },
-];
-
+const CHART_CATEGORIES: ChartCategory[] = [...EVENT_CATEGORIES, "sleep"];
+const CATEGORY_COLOUR: Record<ChartCategory, string> = {
+  ...EVENT_CATEGORY_COLOUR,
+  sleep: "bg-indigo-300 dark:bg-indigo-400",
+};
+const SLEEP_LABEL = "Sleep (demo)";
+const DUMMY_SLEEP_HOURS = [7, 6.5, 8, 6, 7.5, 8, 5];
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_HOURS = 16;
 
+function durationHours(event: CalendarEvent): number {
+  const [startHour, startMinute] = event.startTime.split(":").map(Number);
+  const [endHour, endMinute] = event.endTime.split(":").map(Number);
+  return Math.max(0, (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60);
+}
+
 export function DailyActivityChart() {
-  const now = new Date();
-  const today = nzParts(now);
-  const monday = addNewZealandDays(nzStartOfDay(now), -((today.weekday + 6) % 7));
-  const days = DEMO_ACTIVITY.map((activity, index) => {
-    const date = addNewZealandDays(monday, index);
-    const parts = nzParts(date);
-    return { ...activity, label: DAY_NAMES[parts.weekday], isToday: parts.weekday === today.weekday };
-  });
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const load = useCallback(async () => {
+    const response = await fetch("/api/calendar/events", { credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as { events: CalendarEvent[] };
+    setEvents(data.events);
+    setLoaded(true);
+  }, []);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- the event API is the external source for this chart */
+  useEffect(() => {
+    void load();
+    const onCalendarChange = (event: Event) => {
+      const imported = (event as CustomEvent<{ events?: CalendarEvent[] }>).detail?.events;
+      if (imported?.length) {
+        setEvents((current) => {
+          const ids = new Set(imported.map((item) => item.id));
+          return [...current.filter((item) => !ids.has(item.id)), ...imported]
+            .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+        });
+        setLoaded(true);
+        return;
+      }
+      void load();
+    };
+    window.addEventListener("calendar-events-changed", onCalendarChange);
+    return () => window.removeEventListener("calendar-events-changed", onCalendarChange);
+  }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const { days, maxHours } = useMemo(() => {
+    const now = new Date();
+    const today = nzParts(now);
+    // The calendar grid starts on Sunday, so the chart uses the same week.
+    const sunday = addNewZealandDays(nzStartOfDay(now), -today.weekday);
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const date = addNewZealandDays(sunday, index);
+      const parts = nzParts(date);
+      const dateKey = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+      const activity: DayActivity = { study: 0, sport: 0, executive: 0, work: 0, sleep: parts.weekday === today.weekday ? 0 : DUMMY_SLEEP_HOURS[index] };
+      events.filter((event) => event.date === dateKey).forEach((event) => { activity[event.category] += durationHours(event); });
+      return { ...activity, label: DAY_NAMES[parts.weekday], isToday: parts.weekday === today.weekday };
+    });
+    const largestDay = Math.max(...days.map((day) => CHART_CATEGORIES.reduce((sum, category) => sum + day[category], 0)));
+    return { days, maxHours: Math.max(MAX_HOURS, Math.ceil(largestDay / 4) * 4) };
+  }, [events]);
 
   return (
     <section className="card p-6" aria-labelledby="daily-activity-title">
@@ -37,33 +84,27 @@ export function DailyActivityChart() {
         <div>
           <p className="eyebrow">This week</p>
           <h2 id="daily-activity-title" className="mt-1 text-lg font-bold">Daily rhythm</h2>
-          <p className="mt-0.5 text-sm text-muted">A demo view of how your hours are spent.</p>
+          <p className="mt-0.5 text-sm text-muted">Hours from your categorised calendar events.</p>
         </div>
         <span className="rounded-full bg-surface-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-faint">Hours</span>
       </div>
 
-      <div className="mt-5 flex h-44 items-end gap-2 border-b border-line-soft pb-1" role="img" aria-label="Weekly chart showing daily study, extracurricular, and sleep hours">
-        {days.map((day) => {
-          const total = day.study + day.extracurricular + day.sleep;
-          return (
-            <div key={day.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
-              <div className="flex h-32 w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-lg bg-surface-2" title={`${day.label}: ${day.study}h study, ${day.extracurricular}h extracurricular, ${day.sleep}h sleep`}>
-                <div className="bg-moss" style={{ height: `${(day.study / MAX_HOURS) * 100}%` }} />
-                <div className="bg-citrus" style={{ height: `${(day.extracurricular / MAX_HOURS) * 100}%` }} />
-                <div className="bg-indigo-300 dark:bg-indigo-400" style={{ height: `${(day.sleep / MAX_HOURS) * 100}%` }} />
-              </div>
-              <span className={`text-[10px] font-bold ${day.isToday ? "text-moss" : "text-faint"}`}>{day.label}</span>
-              <span className="sr-only">{total} total hours</span>
+      <div className="mt-5 flex h-44 items-end gap-2 border-b border-line-soft pb-1" role="img" aria-label="Weekly chart showing daily study, sport, executive, work, and demo sleep hours">
+        {days.map((day) => (
+          <div key={day.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
+            <div className="flex h-32 w-full max-w-8 flex-col-reverse overflow-hidden rounded-t-lg bg-surface-2" title={`${day.label}: ${CHART_CATEGORIES.map((category) => `${day[category]}h ${category === "sleep" ? "sleep" : CATEGORY_LABEL[category].toLowerCase()}`).join(", ")}`}>
+              {CHART_CATEGORIES.map((category) => <div key={category} className={CATEGORY_COLOUR[category]} style={{ height: `${(day[category] / maxHours) * 100}%` }} />)}
             </div>
-          );
-        })}
+            <span className={`text-[10px] font-bold ${day.isToday ? "text-moss" : "text-faint"}`}>{day.label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
-        <Legend color="bg-moss" label="Study" />
-        <Legend color="bg-citrus" label="Extra-curricular" />
-        <Legend color="bg-indigo-300 dark:bg-indigo-400" label="Sleep (4–8h)" />
+        {EVENT_CATEGORIES.map((category) => <Legend key={category} color={CATEGORY_COLOUR[category]} label={CATEGORY_LABEL[category]} />)}
+        <Legend color={CATEGORY_COLOUR.sleep} label={SLEEP_LABEL} />
       </div>
+      {loaded && events.length === 0 && <p className="mt-4 text-xs text-faint">Add categorised events to see your week take shape.</p>}
     </section>
   );
 }

@@ -1,25 +1,30 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { calendarEvents } from "@/lib/db/schema";
 import { sessionFromRequest } from "@/lib/auth";
+import { EVENT_CATEGORIES, type EventCategory } from "@/lib/calendar";
 
 function eventJson(row: typeof calendarEvents.$inferSelect) {
-  return { id: row.id, title: row.title, date: row.eventDate, startTime: row.startTime, endTime: row.endTime, description: row.description, location: row.location ?? "" };
+  return { id: row.id, title: row.title, date: row.eventDate, startTime: row.startTime, endTime: row.endTime, category: row.category as EventCategory, description: row.description, location: row.location ?? "" };
 }
 
 function validated(value: unknown) {
   if (!value || typeof value !== "object") return null;
   const item = value as Record<string, unknown>;
   const text = (key: string) => typeof item[key] === "string" ? item[key] as string : "";
-  const result = { title: text("title").trim(), eventDate: text("date"), startTime: text("startTime"), endTime: text("endTime"), description: text("description").trim(), location: text("location").trim() || null };
-  if (!result.title || !/^\d{4}-\d{2}-\d{2}$/.test(result.eventDate) || !/^\d{2}:\d{2}$/.test(result.startTime) || !/^\d{2}:\d{2}$/.test(result.endTime) || result.endTime <= result.startTime) return null;
-  return result;
+  const category = text("category");
+  const result = { title: text("title").trim(), eventDate: text("date"), startTime: text("startTime"), endTime: text("endTime"), category, description: text("description").trim(), location: text("location").trim() || null };
+  if (!result.title || !EVENT_CATEGORIES.includes(category as EventCategory) || !/^\d{4}-\d{2}-\d{2}$/.test(result.eventDate) || !/^\d{2}:\d{2}$/.test(result.startTime) || !/^\d{2}:\d{2}$/.test(result.endTime) || result.endTime <= result.startTime) return null;
+  return { ...result, category: category as EventCategory };
 }
 
 export async function GET(request: Request) {
   const user = await sessionFromRequest(request);
   if (!user) return Response.json({ error: "Sign in required." }, { status: 401 });
-  return Response.json({ events: (await db.select().from(calendarEvents).where(eq(calendarEvents.userId, user.id))).map(eventJson) });
+  return Response.json(
+    { events: (await db.select().from(calendarEvents).where(eq(calendarEvents.userId, user.id)).orderBy(asc(calendarEvents.eventDate), asc(calendarEvents.startTime))).map(eventJson) },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
