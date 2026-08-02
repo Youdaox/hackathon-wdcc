@@ -108,6 +108,7 @@ export async function POST(request: Request) {
             timestamp: Date.parse(event.timestamp),
             durationSeconds: event.duration_seconds,
             appLabel: event.app_label ?? null,
+            appIdentifier: event.app_identifier ?? null,
             bypassed: event.bypassed === true,
             reason: event.reason ?? null,
             guessedSeconds: event.guessed_seconds ?? null,

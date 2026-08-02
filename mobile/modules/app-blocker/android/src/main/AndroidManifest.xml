@@ -1,0 +1,37 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+    Usage access and overlay are "special" permissions: they are never granted
+    by a runtime dialog, only by the user toggling this app in a Settings
+    screen. The module deep-links there rather than requesting them.
+  -->
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+    tools:ignore="ProtectedPermissions" xmlns:tools="http://schemas.android.com/tools" />
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!--
+    Android 11+ hides the installed-app list unless a package declares what it
+    needs to see. Without this, PackageManager returns only this app and the
+    picker comes up empty.
+  -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.LAUNCHER" />
+    </intent>
+  </queries>
+
+  <application>
+    <service
+      android:name=".BlockerService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Blocks distracting apps during an active study session." />
+    </service>
+  </application>
+</manifest>

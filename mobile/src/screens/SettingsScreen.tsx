@@ -1,4 +1,7 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { InstalledApp } from "../../modules/app-blocker";
+import type { BlockerPermissions } from "../useAppBlocker";
 import { CHECKPOINT_MIN_MS, GRACE_MS } from "../config";
 import { colors, roundedFont } from "../theme";
 
@@ -14,7 +17,34 @@ const INTERCEPT_URL = "incline://intercept?app=Instagram";
  * the user builds themselves, so the setup steps live here rather than in a
  * control that would only pretend to block something.
  */
-export function SettingsScreen() {
+export function SettingsScreen({
+  blocker,
+}: {
+  blocker: {
+    supported: boolean;
+    ready: boolean;
+    permissions: BlockerPermissions;
+    installed: InstalledApp[];
+    selected: string[];
+    toggle: (packageName: string, value: boolean) => void;
+    requestUsageAccess: () => void;
+    requestOverlay: () => void;
+  };
+}) {
+  const [query, setQuery] = useState("");
+
+  const apps = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return blocker.installed
+      .filter((a) => !a.isSystem || blocker.selected.includes(a.packageName))
+      .filter((a) => a.label.toLowerCase().includes(q) || a.packageName.includes(q))
+      .sort((a, b) => {
+        const aOn = blocker.selected.includes(a.packageName) ? 0 : 1;
+        const bOn = blocker.selected.includes(b.packageName) ? 0 : 1;
+        return aOn - bOn || a.label.localeCompare(b.label);
+      });
+  }, [blocker.installed, blocker.selected, query]);
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.pageTitle}>How it works</Text>
@@ -52,7 +82,89 @@ export function SettingsScreen() {
         </Text>
       </Card>
 
-      <Card title="Intercepts (optional setup)">
+      {blocker.supported && (
+        <Card title="Blocked apps">
+          <Text style={styles.body}>
+            Android can tell Incline which app came to the foreground, so these are blocked
+            outright during a session — a full-screen cover appears over them.
+          </Text>
+
+          {!blocker.ready && (
+            <>
+              <Text style={styles.caveat}>
+                Both permissions are granted from Settings rather than a popup, so each button
+                opens the screen where you switch Incline on.
+              </Text>
+              {!blocker.permissions.usageAccess && (
+                <Pressable
+                  onPress={blocker.requestUsageAccess}
+                  style={({ pressed }) => [styles.permButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.permButtonText}>Grant usage access</Text>
+                </Pressable>
+              )}
+              {!blocker.permissions.overlay && (
+                <Pressable
+                  onPress={blocker.requestOverlay}
+                  style={({ pressed }) => [styles.permButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.permButtonText}>Allow display over apps</Text>
+                </Pressable>
+              )}
+            </>
+          )}
+
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search apps"
+            placeholderTextColor={colors.nav}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.search}
+          />
+
+          <View style={styles.list}>
+            {apps.map((app, i) => (
+              <View
+                key={app.packageName}
+                style={[styles.row, i < apps.length - 1 && styles.divider]}
+              >
+                <View style={styles.labels}>
+                  <Text style={styles.appName} numberOfLines={1}>
+                    {app.label}
+                  </Text>
+                  <Text style={styles.appPackage} numberOfLines={1}>
+                    {app.packageName}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: blocker.selected.includes(app.packageName) }}
+                  onPress={() =>
+                    blocker.toggle(app.packageName, !blocker.selected.includes(app.packageName))
+                  }
+                  style={({ pressed }) => [
+                    styles.toggle,
+                    blocker.selected.includes(app.packageName) && styles.toggleOn,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.thumb,
+                      blocker.selected.includes(app.packageName) && styles.thumbOn,
+                    ]}
+                  />
+                </Pressable>
+              </View>
+            ))}
+            {apps.length === 0 && <Text style={styles.empty}>No apps found.</Text>}
+          </View>
+        </Card>
+      )}
+
+      <Card title={blocker.supported ? "Intercepts on iOS" : "Intercepts (optional setup)"}>
         <Text style={styles.body}>
           iOS won&apos;t let an app detect or block another app. It will, however, run an
           automation you build yourself — so you can point one back at Incline.
@@ -136,6 +248,39 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 4,
   },
+  permButton: {
+    marginTop: 4,
+    minHeight: 46,
+    borderRadius: 14,
+    backgroundColor: colors.moss,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  permButtonText: { color: colors.surface, fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
+  search: {
+    height: 48,
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    color: colors.ink,
+    fontFamily: roundedFont,
+    fontSize: 15,
+  },
+  list: { marginTop: 10, borderRadius: 16, borderWidth: 1, borderColor: colors.line, overflow: "hidden" },
+  row: { minHeight: 62, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, gap: 12 },
+  divider: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  labels: { flex: 1, gap: 1 },
+  appName: { color: colors.ink, fontFamily: roundedFont, fontSize: 15, fontWeight: "800" },
+  appPackage: { color: colors.faint, fontFamily: roundedFont, fontSize: 11 },
+  toggle: { width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: "center", backgroundColor: colors.surface2 },
+  toggleOn: { backgroundColor: colors.moss },
+  thumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surface },
+  thumbOn: { alignSelf: "flex-end" },
+  empty: { color: colors.muted, fontFamily: roundedFont, fontSize: 14, textAlign: "center", padding: 22 },
+  pressed: { opacity: 0.7 },
   step: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   stepBadge: {
     width: 22,

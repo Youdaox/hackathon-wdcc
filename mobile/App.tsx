@@ -30,12 +30,14 @@ import { RecapScreen } from "./src/screens/RecapScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { clearSessionNotification, showSessionNotification } from "./src/sessionNotification";
 import { colors } from "./src/theme";
+import { useAppBlocker } from "./src/useAppBlocker";
 import { useFocusSession } from "./src/useFocusSession";
 import { useRecallCheck } from "./src/useRecallCheck";
 
 export default function App() {
   const { state, start, stop, resolveCheckpoint, recordIntercept, addBonusXp } =
     useFocusSession();
+  const blocker = useAppBlocker();
   const [tab, setTab] = useState<TabName>("home");
   const [companion, setCompanion] = useState<Companion | null>(null);
   const [recap, setRecap] = useState<Recap | null>(null);
@@ -106,8 +108,11 @@ export default function App() {
 
   const handleStart = useCallback(() => {
     start(pledge);
+    // Blocking runs for exactly as long as the session does — the watcher is
+    // never left running once focus ends.
+    blocker.beginBlocking();
     void showSessionNotification(Date.now());
-  }, [start, pledge]);
+  }, [start, pledge, blocker]);
 
   /**
    * Handles `incline://intercept?app=Instagram`.
@@ -165,6 +170,7 @@ export default function App() {
     const finished = stop();
     if (!finished) return;
 
+    const blocked = blocker.endBlocking();
     void clearSessionNotification();
 
     setBusy(true);
@@ -177,7 +183,10 @@ export default function App() {
         locationName: insideSpot?.name ?? null,
         pledgeMinutes: finished.pledgeMinutes,
         bonusXp: finished.bonusXp,
-        distractions: finished.distractions,
+        // Two kinds of distraction, kept together: the Android blocker's named
+        // app-opens, and AppState's "you left Incline" for everything it
+        // can't see.
+        distractions: [...finished.distractions, ...blocked],
       });
       setNotice(
         result.voided
@@ -194,7 +203,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [stop, match, spots, load]);
+  }, [stop, blocker, match, spots, load]);
 
   /**
    * Resolves the return check-in.
@@ -300,7 +309,7 @@ export default function App() {
           {tab === "ranks" && (
             <RanksScreen leaderboard={leaderboard} refreshing={refreshing} onRefresh={onRefresh} />
           )}
-          {tab === "settings" && <SettingsScreen />}
+          {tab === "settings" && <SettingsScreen blocker={blocker} />}
         </View>
         <SafeAreaView edges={["bottom"]} style={styles.navSafe}>
           <BottomNav active={tab} onChange={setTab} />

@@ -7,7 +7,10 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "platforms": ["ios"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "splash": {
       "backgroundColor": "#fbf7f0"
     },
@@ -25,6 +28,29 @@
     "extra": {
       "//": "Point this at the machine running `pnpm dev` in the repo root. Read at runtime via expo-constants, so changing it is a reload, not a rebuild.",
       "apiBaseUrl": "http://192.168.1.14:3000"
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "android": {
+      "package": "nz.ac.auckland.incline",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "SYSTEM_ALERT_WINDOW",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_SPECIAL_USE",
+        "POST_NOTIFICATIONS"
+      ]
     }
   }
 }

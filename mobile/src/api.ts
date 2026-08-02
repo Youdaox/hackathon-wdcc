@@ -49,6 +49,8 @@ export interface DistractionRecord {
   durationMs: number;
   /** User-supplied app label from a Shortcuts intercept. */
   appLabel?: string | null;
+  /** Android package name from the blocker. Null on iOS. */
+  appIdentifier?: string | null;
   /** True when the user pushed past the intercept screen. */
   bypassed?: boolean;
   /** What the user said on the return check-in. Null if they weren't asked. */
@@ -138,6 +140,7 @@ export function postSession(params: {
         timestamp: new Date(d.startedAt).toISOString(),
         duration_seconds: d.durationMs / 1000,
         app_label: d.appLabel ?? null,
+        app_identifier: d.appIdentifier ?? null,
         bypassed: d.bypassed ?? false,
         reason: d.reason ?? null,
         guessed_seconds: d.guessedSeconds ?? null,
@@ -155,6 +158,7 @@ export function postSession(params: {
 export function logDistractionEvent(event: {
   durationMs: number;
   appLabel?: string | null;
+  appIdentifier?: string | null;
   bypassed?: boolean;
   reason?: AwayReason | null;
   guessedSeconds?: number | null;
@@ -167,6 +171,7 @@ export function logDistractionEvent(event: {
       timestamp: new Date().toISOString(),
       duration_seconds: event.durationMs / 1000,
       app_label: event.appLabel ?? null,
+      app_identifier: event.appIdentifier ?? null,
       bypassed: event.bypassed ?? false,
       reason: event.reason ?? null,
       guessed_seconds: event.guessedSeconds ?? null,
@@ -204,6 +209,23 @@ export function patchCompanion(patch: {
     method: "PATCH",
     body: JSON.stringify({ user_id: USER_ID, ...patch }),
   });
+}
+
+/** The Android blocker's watch list, as package names. */
+export async function fetchDistractionList(): Promise<string[]> {
+  const body = await request<{ apps: string[] }>(
+    `/api/distraction-list?user_id=${encodeURIComponent(USER_ID)}`,
+  );
+  return body.apps;
+}
+
+/** Replaces the list wholesale — the settings screen owns the whole set. */
+export async function saveDistractionList(apps: string[]): Promise<string[]> {
+  const body = await request<{ apps: string[] }>("/api/distraction-list", {
+    method: "PUT",
+    body: JSON.stringify({ user_id: USER_ID, apps }),
+  });
+  return body.apps;
 }
 
 export function fetchRecap(): Promise<Recap> {

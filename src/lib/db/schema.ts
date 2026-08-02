@@ -101,7 +101,7 @@ export const sessions = sqliteTable(
     verifiedMinutes: real("verified_minutes").notNull(),
     locationVerified: integer("location_verified", { mode: "boolean" }).notNull(),
     locationName: text("location_name"),
-    platform: text("platform", { enum: ["ios", "web"] }).notNull(),
+    platform: text("platform", { enum: ["android", "ios", "web"] }).notNull(),
     /** Growth the server computed for this session — not client-supplied. */
     xpEarned: integer("xp_earned").notNull(),
     hpDelta: integer("hp_delta").notNull(),
@@ -143,6 +143,11 @@ export const distractionEvents = sqliteTable(
     sessionId: text("session_id").references(() => sessions.id, { onDelete: "cascade" }),
     timestamp: integer("timestamp").notNull(),
     durationSeconds: real("duration_seconds").notNull(),
+    /**
+     * Android package name, reported by the blocker's usage-access watcher.
+     * Null everywhere else — iOS never discloses the foregrounded app.
+     */
+    appIdentifier: text("app_identifier"),
     /**
      * Which app pulled them away, when known.
      *
@@ -200,4 +205,24 @@ export const studySpots = sqliteTable(
       .default(sql`(unixepoch() * 1000)`),
   },
   (table) => [index("study_spots_user_idx").on(table.userId)],
+);
+
+/**
+ * The Android blocker's watch list — package names to look for via
+ * UsageStatsManager.
+ *
+ * iOS has no equivalent and never will: the OS does not tell a third-party app
+ * what is on screen, so there is nothing to match a list against.
+ */
+export const distractionApps = sqliteTable(
+  "distraction_apps",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    appIdentifier: text("app_identifier").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("distraction_apps_user_idx").on(table.userId)],
 );

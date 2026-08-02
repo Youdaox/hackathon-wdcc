@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         timestamp: Date.parse(req.timestamp),
         durationSeconds: req.duration_seconds,
         appLabel: req.app_label,
+        appIdentifier: req.app_identifier,
         bypassed: req.bypassed,
         reason: req.reason,
         guessedSeconds: req.guessed_seconds,

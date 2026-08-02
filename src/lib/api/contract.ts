@@ -19,7 +19,7 @@ import { RULES } from "@/lib/companion";
  * rather than pulling in a schema library for four endpoints.
  */
 
-export type Platform = "ios" | "web";
+export type Platform = "android" | "ios" | "web";
 
 /**
  * Why the user left, as reported by the return check-in.
@@ -66,6 +66,8 @@ export interface WireDistractionEvent {
   duration_seconds: number;
   /** User-supplied app label from a Shortcuts intercept. Null otherwise. */
   app_label?: string | null;
+  /** Android package name from the blocker. Null on iOS. */
+  app_identifier?: string | null;
   /** True when the user pushed past the intercept screen. */
   bypassed?: boolean;
   /** Null when the stretch was too short to ask about. */
@@ -104,6 +106,7 @@ export interface DistractionEventRequest {
   timestamp: string;
   duration_seconds: number;
   app_label: string | null;
+  app_identifier: string | null;
   bypassed: boolean;
   reason: AwayReason | null;
   guessed_seconds: number | null;
@@ -112,7 +115,7 @@ export interface DistractionEventRequest {
 /** Result of validating an untrusted body: either a value or a reason. */
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
-const PLATFORMS: Platform[] = ["ios", "web"];
+const PLATFORMS: Platform[] = ["android", "ios", "web"];
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -149,6 +152,17 @@ function parseWireDistraction(raw: unknown, index: number): Parsed<WireDistracti
       error: `distraction_events[${index}].duration_seconds must be a number >= 0`,
     };
   }
+  let appIdentifier: string | null = null;
+  if (e.app_identifier !== undefined && e.app_identifier !== null) {
+    if (typeof e.app_identifier !== "string") {
+      return {
+        ok: false,
+        error: `distraction_events[${index}].app_identifier must be a string or null`,
+      };
+    }
+    appIdentifier = e.app_identifier;
+  }
+
   let appLabel: string | null = null;
   if (e.app_label !== undefined && e.app_label !== null) {
     if (typeof e.app_label !== "string") {
@@ -193,6 +207,7 @@ function parseWireDistraction(raw: unknown, index: number): Parsed<WireDistracti
       timestamp: isoFrom(timestamp),
       duration_seconds: e.duration_seconds,
       app_label: appLabel,
+      app_identifier: appIdentifier,
       bypassed: e.bypassed === true,
       reason,
       guessed_seconds: guessedSeconds,
@@ -299,6 +314,7 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
       timestamp: b.timestamp,
       duration_seconds: b.duration_seconds,
       app_label: b.app_label ?? null,
+      app_identifier: b.app_identifier ?? null,
       bypassed: b.bypassed ?? false,
       reason: b.reason ?? null,
       guessed_seconds: b.guessed_seconds ?? null,
@@ -325,6 +341,7 @@ export function parseDistractionEventRequest(raw: unknown): Parsed<DistractionEv
       timestamp: event.value.timestamp,
       duration_seconds: event.value.duration_seconds,
       app_label: event.value.app_label ?? null,
+      app_identifier: event.value.app_identifier ?? null,
       bypassed: event.value.bypassed === true,
       reason: event.value.reason ?? null,
       guessed_seconds: event.value.guessed_seconds ?? null,
