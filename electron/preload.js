@@ -4,17 +4,17 @@ contextBridge.exposeInMainWorld("overlayAPI", {
   setIgnoreMouseEvents: (ignore, options) =>
     ipcRenderer.send("overlay:set-ignore-mouse-events", ignore, options),
   ready: () => ipcRenderer.send("overlay:ready"),
-  onDiscordTarget: (handler) => {
-    const listener = (_event, position) => handler(position);
-    ipcRenderer.on("discord:target", listener);
-    return () => ipcRenderer.removeListener("discord:target", listener);
+  onTargetAppFocus: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("target-app:focus", listener);
+    return () => ipcRenderer.removeListener("target-app:focus", listener);
   },
-  onDiscordBlurred: (handler) => {
-    const listener = () => handler();
-    ipcRenderer.on("discord:blurred", listener);
-    return () => ipcRenderer.removeListener("discord:blurred", listener);
+  onTargetAppBlur: (handler) => {
+    const listener = (_event, payload) => handler(payload);
+    ipcRenderer.on("target-app:blur", listener);
+    return () => ipcRenderer.removeListener("target-app:blur", listener);
   },
-  discordReached: () => ipcRenderer.send("discord:reached"),
+  targetAppReached: (name) => ipcRenderer.send("target-app:reached", name),
 });
 contextBridge.exposeInMainWorld("statusAPI", {
   ready: () => ipcRenderer.send("status:ready"),

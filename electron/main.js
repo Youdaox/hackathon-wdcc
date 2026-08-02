@@ -1,17 +1,21 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, ipcMain, screen } = require("electron");
 const path = require("node:path");
-const { isDiscord, closeButtonPosition, closeDiscord } = require("./closeApp");
+const { matchTargetApp, closeButtonPosition, closeTargetApp } = require("./closeApp");
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
-const DISCORD_POLL_MS = 500;
+const APP_WATCH_POLL_MS = 500;
+const REACHED_RESET_DELAY_MS = 2000;
 
 let dashboardWindow = null;
 let overlayWindow = null;
 let statusWindow = null;
 let trackingActive = false;
-let discordWatchTimer = null;
-let discordWasFocused = false;
+let appWatchTimer = null;
+// Name of whichever target app (see closeApp.js's TARGET_APPS) was focused
+// on the last poll tick, or null — used to edge-detect focus/blur so each
+// only fires once per transition, not every tick while it stays focused.
+let focusedTargetApp = null;
 
 // get-windows ships ESM-only; dynamic import works from this CommonJS file
 // without needing to convert the whole main process to ESM.
@@ -21,34 +25,34 @@ function getActiveWindow() {
   return activeWindowPromise.then((mod) => mod.activeWindow());
 }
 
-function startDiscordWatch() {
-  // Reset so a window that's already focused when the pet comes out still
+function startAppWatch() {
+  // Reset so an app that's already focused when the pet comes out still
   // counts as a fresh "just focused" trigger, not something already seen.
-  discordWasFocused = false;
-  if (discordWatchTimer) return;
-  discordWatchTimer = setInterval(async () => {
+  focusedTargetApp = null;
+  if (appWatchTimer) return;
+  appWatchTimer = setInterval(async () => {
     if (!overlayWindow) return;
     try {
       const win = await getActiveWindow();
-      const focused = Boolean(win && isDiscord(win.owner?.name));
-      if (focused && !discordWasFocused) {
-        overlayWindow.webContents.send("discord:target", closeButtonPosition(win.bounds));
-      } else if (!focused && discordWasFocused) {
+      const name = win ? matchTargetApp(win.owner?.name) : null;
+      if (name && name !== focusedTargetApp) {
+        overlayWindow.webContents.send("target-app:focus", { name, position: closeButtonPosition(win.bounds) });
+      } else if (!name && focusedTargetApp) {
         // Tabbed away before the pet reached it — call off the pursuit.
-        overlayWindow.webContents.send("discord:blurred");
+        overlayWindow.webContents.send("target-app:blur", { name: focusedTargetApp });
       }
-      discordWasFocused = focused;
+      focusedTargetApp = name;
     } catch {
       // Most likely macOS Accessibility permission hasn't been granted yet —
       // just skip this tick rather than crashing the watch loop.
     }
-  }, DISCORD_POLL_MS);
+  }, APP_WATCH_POLL_MS);
 }
 
-function stopDiscordWatch() {
-  if (discordWatchTimer) {
-    clearInterval(discordWatchTimer);
-    discordWatchTimer = null;
+function stopAppWatch() {
+  if (appWatchTimer) {
+    clearInterval(appWatchTimer);
+    appWatchTimer = null;
   }
 }
 
@@ -187,7 +191,7 @@ function createOverlayWindow() {
   overlayWindow.loadURL(`${APP_URL}/overlay`);
   overlayWindow.on("closed", () => {
     overlayWindow = null;
-    stopDiscordWatch();
+    stopAppWatch();
   });
 }
 
@@ -197,26 +201,32 @@ ipcMain.handle("overlay:toggle", () => {
   if (overlayWindow) {
     overlayWindow.close();
     overlayWindow = null;
-    stopDiscordWatch();
+    stopAppWatch();
     return false;
   }
   createOverlayWindow();
-  startDiscordWatch();
+  startAppWatch();
   return true;
 });
 
-// The overlay page sends this once the pet has walked up to Discord's close
-// button — see closeApp.js for why this runs the real quit command rather
-// than simulating an actual OS-level mouse click.
+// The overlay page sends this once the pet has walked up to a target app's
+// close button — see closeApp.js for why this runs the real quit command
+// rather than simulating an actual OS-level mouse click.
 //
-// Deliberately not resetting discordWasFocused here: the quit can take a
-// moment, and if the next poll tick still sees Discord focused while this
-// flag were reset to false, it would misread that as a brand new focus event
-// and send the pet running at it again mid-quit. Leaving it true means the
-// eventual real blur (once Discord actually closes) is what fires next, and
-// by then the pet's already back to idle, so it's a harmless no-op.
-ipcMain.on("discord:reached", () => {
-  closeDiscord();
+// Not resetting focusedTargetApp immediately: the quit can take a moment,
+// and if the very next poll tick still saw the app focused right after an
+// immediate reset, it would misread that as a brand new focus event and
+// send the pet running at it again mid-quit. The natural blur (once the app
+// actually closes) normally clears it — this bounded fallback reset is a
+// safety net in case that blur is ever missed, so a target app can never get
+// permanently stuck and ignored for the rest of the session. Guarded so it
+// only clears the slot if nothing else (a real blur, or a newer app) already
+// has by the time it fires.
+ipcMain.on("target-app:reached", (_event, name) => {
+  closeTargetApp(name);
+  setTimeout(() => {
+    if (focusedTargetApp === name) focusedTargetApp = null;
+  }, REACHED_RESET_DELAY_MS);
 });
 
 ipcMain.on("overlay:set-ignore-mouse-events", (event, ignore, options) => {

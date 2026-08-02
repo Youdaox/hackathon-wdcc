@@ -181,7 +181,13 @@ export function useWander(
       el.releasePointerCapture(e.pointerId);
       el.style.cursor = "grab";
       onDragStateChangeRef.current?.(false);
-      enterIdle(performance.now());
+      // A goTo() called while the pet was held (e.g. a target app finished
+      // launching mid-drag) sets the mode/target, but the whole movement
+      // block in tick() is skipped while dragging, so it just sits frozen
+      // until now — don't wipe it out with a normal idle reset here.
+      if (!targetRef.current) {
+        enterIdle(performance.now());
+      }
     }
 
     el.addEventListener("pointerdown", handlePointerDown);

@@ -13,9 +13,11 @@ declare global {
     overlayAPI?: {
       setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void;
       ready: () => void;
-      onDiscordTarget: (handler: (position: { x: number; y: number }) => void) => () => void;
-      onDiscordBlurred: (handler: () => void) => () => void;
-      discordReached: () => void;
+      onTargetAppFocus: (
+        handler: (payload: { name: string; position: { x: number; y: number } }) => void,
+      ) => () => void;
+      onTargetAppBlur: (handler: (payload: { name: string }) => void) => () => void;
+      targetAppReached: (name: string) => void;
     };
   }
 }
@@ -115,12 +117,12 @@ export default function OverlayPage() {
     bubbleRef,
   );
 
-  // The main process watches for Discord becoming the focused app and sends
-  // its close button's screen position — wind up (shake + "LOCK IN"), then
-  // walk the pet's center there, then let main run the actual quit once it
-  // arrives (see electron/closeApp.js).
+  // The main process watches for a target app (Discord, Steam, Snapchat — see
+  // electron/closeApp.js) becoming focused and sends its close button's screen
+  // position — wind up (shake + "LOCK IN"), then walk the pet's center there,
+  // then let main run the actual quit once it arrives.
   useEffect(() => {
-    return window.overlayAPI?.onDiscordTarget((position) => {
+    return window.overlayAPI?.onTargetAppFocus(({ name, position }) => {
       clearTimeout(speechTimeoutRef.current);
       clearTimeout(dragSpeechTimeoutRef.current);
       clearTimeout(lockInTimeoutRef.current);
@@ -129,7 +131,7 @@ export default function OverlayPage() {
       goTo(
         position.x - PET_SIZE / 2,
         position.y - PET_SIZE / 2,
-        () => window.overlayAPI?.discordReached(),
+        () => window.overlayAPI?.targetAppReached(name),
         LOCK_IN_WINDUP_MS,
       );
     });
@@ -138,7 +140,7 @@ export default function OverlayPage() {
   // Tabbed away before the pet reached it — call off the whole pursuit and
   // drop straight back to normal idle/wandering, without closing anything.
   useEffect(() => {
-    return window.overlayAPI?.onDiscordBlurred(() => {
+    return window.overlayAPI?.onTargetAppBlur(() => {
       clearTimeout(lockInTimeoutRef.current);
       setBubbleText(null);
       cancel();
