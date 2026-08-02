@@ -7,6 +7,7 @@ import { FocusPanel } from "@/components/FocusPanel";
 import { CompanionCard } from "@/components/CompanionCard";
 import { DesktopBuddy } from "@/components/DesktopBuddy";
 import { LocationCard } from "@/components/LocationCard";
+import { DailyActivityChart } from "@/components/DailyActivityChart";
 import { SchedulePanel } from "@/components/SchedulePanel";
 import { SessionSummary } from "@/components/SessionSummary";
 import { TodaySummary } from "@/components/TodaySummary";
@@ -88,6 +89,7 @@ export default function Dashboard() {
             <GrowthTimeline />
             <TodaySummary />
             <LocationCard />
+            <DailyActivityChart />
           </div>
         </div>
       )}
